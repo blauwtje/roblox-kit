@@ -25,3 +25,8 @@ Task 10 47fbc8c: counter left as the existing generator for the shop room
 Task 11 36f3ad2: set pieces per room type: lab lab-bench, cell-block cell-bars, bridge control-console, cargo-bay crate-stack, shop counter, home fireplace (one each, per plan Assumptions).
 Task 11 36f3ad2: sign labels LABORATORY, CELL BLOCK, BRIDGE, CARGO BAY, SHOP, HOME.
 Task 11 36f3ad2: propKit left unchanged (train-station's already omits its set pieces).
+Task 12 d553024: subagent answers `genre` from the closed list of the four preset names plus `unknown`, `room` free text; the judge compares against `style.preset` and `roomType`.
+Task 12 d553024: `unknown` or any differing value counts as a mismatch.
+Task 12 d553024: one place-check subagent per typed room zone, skipped when the intent names no genre.
+Task 12 d553024: finding `specField` is `rooms[<index>].roomType`, or `style` for a style-less map; `evidence.visible` carries the subagent's `clues`.
+Task 12 d553024: room comparison is exact string match against the spec's `roomType` (e.g. "platform" vs "platform"); free-text room naming may need a synonym rule if it proves too strict.
