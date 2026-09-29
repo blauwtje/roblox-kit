@@ -14,6 +14,7 @@ import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
+import { placeSetPieces } from "./set-piece-placement.ts";
 import { buildRoomDetails, type DetailPart } from "./room-details.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
@@ -221,6 +222,19 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
   }
 }
 
+/**
+ * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type,
+ * which would collide with random kit props.
+ */
+function propsOf(spec: MapSpec, style: Preset): PropRecord[] {
+  const seed = spec.seed ?? config.defaultSeed;
+  const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
+  return [
+    ...placeProps(plainSpec, style.propKit, seed),
+    ...placeSetPieces(spec, style.roomTypes, style.palette.accent, seed),
+  ];
+}
+
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
   name: "build_map",
   title: "Build map",
@@ -248,8 +262,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
     const details: DetailPart[] =
       style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
-    const props: PropRecord[] =
-      style === undefined ? [] : placeProps(spec, style.propKit, spec.seed ?? config.defaultSeed);
+    const props: PropRecord[] = style === undefined ? [] : propsOf(spec, style);
     const generators = await generatorsOf(props);
     const variants = variantsOf(style);
     const lights = lightRecordsOf(spec, layout.parts, style);
