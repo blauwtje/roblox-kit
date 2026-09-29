@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { config } from "../config.ts";
 import { mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
 
 const room = { name: "hall", x: 0, z: 0, width: 20, depth: 20 };
@@ -86,4 +87,48 @@ await test("relation specs keep room names unique, and the placed-only schema re
   });
   assert.equal(duplicate.success, false);
   assert.equal(mapSpecSchema.safeParse({ mapId: "m", rooms: [relatedRoom] }).success, false);
+});
+
+await test("a spec without objectives keeps them absent and gets the config performance budget", () => {
+  const spec = mapSpecSchema.parse(minimalSpec);
+  assert.equal(spec.objectives, undefined);
+  assert.deepEqual(spec.performanceBudget, {
+    maxDrawCalls: config.maxDrawCalls,
+    maxTriangles: config.maxTriangles,
+  });
+  assert.equal(config.maxDrawCalls, 1000);
+  assert.equal(config.maxTriangles, 1_000_000);
+});
+
+await test("a spec keeps its objectives and a partial performance budget fills from config", () => {
+  const objectives = [{ name: "flag", x: 1, y: 2, z: 3 }];
+  const spec = relationMapSpecSchema.parse({
+    ...minimalSpec,
+    objectives,
+    performanceBudget: { maxDrawCalls: 500 },
+  });
+  assert.deepEqual(spec.objectives, objectives);
+  assert.deepEqual(spec.performanceBudget, {
+    maxDrawCalls: 500,
+    maxTriangles: config.maxTriangles,
+  });
+});
+
+await test("objectives and the performance budget reject bad shapes", () => {
+  const badObjectives = [
+    [{ name: "", x: 0, y: 0, z: 0 }],
+    [{ name: "a", x: 0, y: 0 }],
+    [{ name: "a", x: 0, y: 0, z: 0, extra: 1 }],
+  ];
+  for (const objectives of badObjectives) {
+    assert.throws(() => mapSpecSchema.parse({ ...minimalSpec, objectives }));
+  }
+  for (const performanceBudget of [
+    { maxDrawCalls: 0 },
+    { maxTriangles: -1 },
+    { maxDrawCalls: 1.5 },
+    { extra: 1 },
+  ]) {
+    assert.throws(() => mapSpecSchema.parse({ ...minimalSpec, performanceBudget }));
+  }
 });

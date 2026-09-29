@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { config } from "../config.ts";
 import { presetOverridesSchema } from "../style/preset-schema.ts";
 
 const stud = z.number();
@@ -73,6 +74,20 @@ const styleSchema = z.strictObject({
   overrides: presetOverridesSchema.optional(),
 });
 
+/** A named point that check_map's reachability pass reaches from every spawn. */
+const objectiveSchema = z.strictObject({
+  name: z.string().min(1),
+  x: stud,
+  y: stud,
+  z: stud,
+});
+
+/** Scene limits per zone camera that check_map reports against; unset ones fall back to `config`. */
+const performanceBudgetSchema = z.strictObject({
+  maxDrawCalls: z.int().positive().default(config.maxDrawCalls),
+  maxTriangles: z.int().positive().default(config.maxTriangles),
+});
+
 /** The data spec of one map built from the given room schema: rooms, base terrain fills and style. */
 function mapSpecOf<Room extends z.ZodType<{ name: string }>>(roomSchema: Room) {
   return z
@@ -85,6 +100,8 @@ function mapSpecOf<Room extends z.ZodType<{ name: string }>>(roomSchema: Room) {
       style: styleSchema.optional(),
       /** Seeds every random variation of the build; absent uses `config.defaultSeed`. */
       seed: z.int().nonnegative().optional(),
+      objectives: z.array(objectiveSchema).optional(),
+      performanceBudget: performanceBudgetSchema.default(() => performanceBudgetSchema.parse({})),
       ...roomStyle,
     })
     .superRefine((spec, context) => {
@@ -110,6 +127,8 @@ export const relationMapSpecSchema = mapSpecOf(z.union([placedRoomSchema, relate
 
 export type MapSpec = z.output<typeof mapSpecSchema>;
 export type RoomSpec = MapSpec["rooms"][number];
+export type Objective = z.output<typeof objectiveSchema>;
+export type PerformanceBudget = z.output<typeof performanceBudgetSchema>;
 export type TerrainFill = MapSpec["terrain"][number];
 export type RelationMapSpec = z.output<typeof relationMapSpecSchema>;
 export type RelationRoomSpec = RelationMapSpec["rooms"][number];

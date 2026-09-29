@@ -52,6 +52,10 @@ export const config = Object.freeze({
   /** Issues check_map keeps per kind in the full report; counts stay exact. */
   maxIssuesPerKind: 100,
 
+  /** Scene limits per zone camera of a spec that sets no performance budget. */
+  maxDrawCalls: 1000,
+  maxTriangles: 1_000_000,
+
   /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
   cameraCoordinateDecimals: 2,
   zoneShotPitchDegrees: 55,
