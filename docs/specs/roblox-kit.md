@@ -79,7 +79,7 @@ Depends on: 2 | Files: `src/studio/studio-connection.ts`, `src/studio/studio-mcp
 ### Task 4: feat(luau): run bundled Luau files with JSON arguments and typed JSON results
 Depends on: 3 | Files: `src/luau/run-luau-file.ts`, `src/luau/run-luau-file.test.ts`, `luau/ping.luau` | Data: a source string of file body plus a long-bracket JSON argument literal, result parsed by a Zod schema | Proof: npm run check
 ### Task 5: feat(server): add tool registry, result and error helpers and stdio entry
-Depends on: 4 | Files: `src/server/main.ts`, `src/server/tool-definition.ts`, `src/server/tool-result.ts`, `src/server/tool-error.ts`, `src/server/tool-result.test.ts`, `src/server/main.test.ts` | Data: an ordered array of tool definitions registered in array order | Proof: npm run check
+Depends on: 4 | Files: `src/server/main.ts`, `src/server/tool-definition.ts`, `src/server/tool-result.ts`, `src/server/tool-error.ts`, `src/server/tool-result.test.ts`, `src/server/main.test.ts`, `src/config.ts`, `.mcp.json` | Data: an ordered array of tool definitions registered in array order | Proof: npm run check
 ### Task 6: test(studio): probe execute_luau capabilities live through smoke:studio
 Depends on: 5 | Files: `scripts/smoke-studio.ts`, `luau/probe-capabilities.luau`, `package.json` | Data: a `{ capability, ok, detail }` array printed as JSON | Proof: npm run smoke:studio
 ### Task 7: ci: run npm run check on push and pull request
