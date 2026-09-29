@@ -593,8 +593,23 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
   expectEqual("check_map issues + omitted", output.issues.length + output.issuesOmitted, counted);
   expectEqual("check_map passed", output.passed, counted === 0);
   // A clean map: any issue here is a finding, not something to tolerate.
-  expectEqual("check_map counts", output.counts, { overlapping: 0, floating: 0, unreachable: 0 });
-  return `passed=${String(output.passed)} counts=${JSON.stringify(output.counts)}`;
+  expectEqual("check_map counts", output.counts, {
+    overlapping: 0,
+    floating: 0,
+    unreachable: 0,
+    sizeRule: 0,
+  });
+  expectEqual(
+    "check_map sceneStats zones",
+    output.sceneStats.map((sample) => sample.zone).sort(),
+    smokeMapSpec.rooms.map((room) => room.name).sort(),
+  );
+  for (const sample of output.sceneStats) {
+    // A zone camera looks at the room's floor and walls: both counts are above zero.
+    expectEqual(`check_map sceneStats ${sample.zone} drawCalls > 0`, sample.drawCalls > 0, true);
+    expectEqual(`check_map sceneStats ${sample.zone} triangles > 0`, sample.triangles > 0, true);
+  }
+  return `passed=${String(output.passed)} counts=${JSON.stringify(output.counts)} sceneStats=${JSON.stringify(output.sceneStats)}`;
 }
 
 async function probeCaptureZones(connection: StudioConnection): Promise<string> {

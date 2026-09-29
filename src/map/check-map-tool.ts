@@ -3,7 +3,7 @@ import { config } from "../config.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
-import { selectStudio } from "../studio/studio-connection.ts";
+import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import {
@@ -14,6 +14,7 @@ import {
 } from "./check-report-store.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
 import { findSizeRuleIssues } from "./size-rules.ts";
+import { zoneShot } from "./zone-cameras.ts";
 
 const presets = await loadPresets();
 
@@ -44,6 +45,14 @@ const checkMapInput = z.strictObject({
   studioId: z.string().min(1).optional(),
 });
 
+const sceneStatSampleSchema = z.strictObject({
+  zone: z.string(),
+  drawCalls: z.number().int(),
+  triangles: z.number().int(),
+});
+
+export type SceneStatSample = z.infer<typeof sceneStatSampleSchema>;
+
 const checkMapOutput = z.strictObject({
   reportId: z.string(),
   reportUri: z.string(),
@@ -55,6 +64,8 @@ const checkMapOutput = z.strictObject({
   reachabilityChecked: z.boolean(),
   /** Exact number of issues found per kind. */
   counts: issueCountsSchema,
+  /** Scene draw calls and triangles seen from each zone's camera, in zone order. */
+  sceneStats: z.array(sceneStatSampleSchema),
   issues: z.array(checkIssueSchema),
   /** Issues in the full report that are not listed inline. */
   issuesOmitted: z.number().int(),
@@ -72,6 +83,48 @@ const checkedMapSchema = z.strictObject({
     unreachable: z.array(checkIssueSchema),
   }),
 });
+
+const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
+
+/** What `read-map-zones.luau` reports: each zone with the studs bounds of its parts. */
+const mapZonesSchema = z.strictObject({
+  zones: z.array(z.strictObject({ name: z.string(), min: vectorSchema, max: vectorSchema })),
+});
+
+/** Draw calls and triangles per zone camera: the cameras are framed here, the counts read in Studio. */
+async function sampleSceneStats(
+  connection: StudioConnection,
+  studioId: string,
+  mapId: string,
+): Promise<SceneStatSample[]> {
+  const mapZones = await runLuauFile({
+    connection,
+    studioId,
+    fileName: "read-map-zones.luau",
+    datamodelType: "Edit",
+    arguments: {
+      mapId,
+      mapsFolderName: config.mapsFolderName,
+      floorNameSuffix: config.floorNameSuffix,
+      spawnNameSuffix: config.spawnNameSuffix,
+      wallNameInfix: config.wallNameInfix,
+    },
+    resultSchema: mapZonesSchema,
+  });
+  const shots = mapZones.zones.map((zone) =>
+    zoneShot({ name: zone.name, bounds: { min: zone.min, max: zone.max } }),
+  );
+  const sampled = await runLuauFile({
+    connection,
+    studioId,
+    fileName: "sample-scene-stats.luau",
+    datamodelType: "Edit",
+    arguments: { shots, statsSettleSeconds: config.statsSettleSeconds },
+    resultSchema: z.strictObject({ samples: z.array(sceneStatSampleSchema) }),
+    timeoutMs: (shots.length * config.statsSettleSeconds + config.statsCallMarginSeconds) * 1000,
+  });
+  return sampled.samples;
+}
 
 /** The named preset; an unknown name is an error, no name is none. */
 function presetNamed(presetName: string | undefined): Preset | undefined {
@@ -109,7 +162,7 @@ export function createCheckMapTool(
       `Optional objectives [{ name, x, y, z }] add targets and an optional preset (a build_map style preset name) sets the agent size from its size rules. ` +
       `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, issues, issuesOmitted }: counts are exact, issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
+      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling (the samples are reported, not judged against a budget), issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
       `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
     inputSchema: checkMapInput,
     outputSchema: checkMapOutput,
@@ -146,6 +199,7 @@ export function createCheckMapTool(
         },
         resultSchema: checkedMapSchema,
       });
+      const sceneStats = await sampleSceneStats(context.studio, studioId, input.mapId);
       const issues: CheckIssue[] = [
         ...checked.issues.overlapping,
         ...checked.issues.floating,
@@ -168,6 +222,7 @@ export function createCheckMapTool(
           zoneCount: checked.zoneCount,
           reachabilityChecked: checked.reachabilityChecked,
           counts,
+          sceneStats,
           issues: inlineIssues,
           issuesOmitted: totalIssues - inlineIssues.length,
         },

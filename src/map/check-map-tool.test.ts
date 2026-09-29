@@ -32,9 +32,32 @@ function checkedMap(overrides: object = {}): string {
   });
 }
 
+const zonesReply = JSON.stringify({
+  zones: [
+    { name: "start", min: { x: 0, y: 0, z: 0 }, max: { x: 40, y: 12, z: 40 } },
+    { name: "vault", min: { x: 40, y: 0, z: 0 }, max: { x: 80, y: 12, z: 40 } },
+  ],
+});
+
+const samplesReply = JSON.stringify({
+  samples: [
+    { zone: "start", drawCalls: 12, triangles: 3400 },
+    { zone: "vault", drawCalls: 30, triangles: 9000 },
+  ],
+});
+
+/** Answers the check with `text`, and the zone read and the stats sampling that follow it with fixed replies. */
 function studioReturning(text: string, isError = false) {
   return new FakeStudioConnection(studios, {
-    execute_luau: () => ({ content: [{ type: "text", text }], isError }),
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      const reply = code.includes("SceneDrawcallCount")
+        ? samplesReply
+        : code.includes('"spawnNameSuffix"')
+          ? zonesReply
+          : text;
+      return { content: [{ type: "text", text: reply }], isError };
+    },
   });
 }
 
@@ -209,6 +232,23 @@ await test("check-map.luau reports a part as floating when none of five downward
   assert.ok(floatingSource.includes("params.RespectCanCollide = true"));
   assert.ok(floatingSource.includes("if not part.CanCollide or isGround(box) then"));
   assert.ok(floatingSource.includes('kind = "floating"'));
+});
+
+await test("check_map samples the scene from each zone's camera after the settle time", async () => {
+  const studio = studioReturning(checkedMap());
+  const result = await setup(studio).run({ mapId: "arena" });
+
+  const structured = result.structuredContent as { passed: boolean; sceneStats: unknown[] };
+  assert.deepEqual(structured.sceneStats, [
+    { zone: "start", drawCalls: 12, triangles: 3400 },
+    { zone: "vault", drawCalls: 30, triangles: 9000 },
+  ]);
+  assert.equal(structured.passed, true);
+  const [, , sampling] = studio.requests;
+  const code = String(sampling?.arguments["code"]);
+  assert.ok(code.includes(`"statsSettleSeconds":${String(config.statsSettleSeconds)}`));
+  assert.ok(code.includes('"zone":"start"') && code.includes('"zone":"vault"'));
+  assert.ok(code.includes('"cameraPosition":['));
 });
 
 await test("objectives and a preset's agent size are sent to Studio, defaults otherwise", async () => {

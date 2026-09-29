@@ -55,6 +55,10 @@ export const config = Object.freeze({
   /** Scene limits per zone camera of a spec that sets no performance budget. */
   maxDrawCalls: 1000,
   maxTriangles: 1_000_000,
+  /** Seconds the camera rests before its scene stats are read; a shorter wait reads the previous camera's numbers. */
+  statsSettleSeconds: 1,
+  /** Seconds one stats sampling call may take beyond the settle time of its cameras. */
+  statsCallMarginSeconds: 10,
 
   /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
   cameraCoordinateDecimals: 2,
