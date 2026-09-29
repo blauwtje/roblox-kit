@@ -43,6 +43,21 @@ const failTool: ToolDefinition<typeof failInput, typeof failInput> = {
   },
 };
 
+const progressInput = z.strictObject({});
+const progressTool: ToolDefinition<typeof progressInput, typeof progressInput> = {
+  name: "progress",
+  title: "Progress",
+  description: "Reports two progress steps.",
+  inputSchema: progressInput,
+  outputSchema: progressInput,
+  annotations: { readOnlyHint: true },
+  async handler(_input, context) {
+    await context.reportProgress?.(1, 2, "first");
+    await context.reportProgress?.(2, 2, "second");
+    return toolResult({});
+  },
+};
+
 async function connectClient(
   toolList: readonly ToolDefinition[],
   serve: "createServer" | "serveOverStdio",
@@ -101,6 +116,28 @@ await test("a throwing handler becomes an isError result with its message", asyn
   assert.deepEqual(result.content, [
     { type: "text", text: "Nothing to fail on. Pass a valid mapId." },
   ]);
+  await close();
+});
+
+await test("reportProgress sends progress notifications when the call has a progressToken", async () => {
+  const { client, close } = await connectClient([progressTool], "createServer");
+  const received: unknown[] = [];
+  const result = await client.callTool(
+    { name: "progress", arguments: {} },
+    { onprogress: (progress) => received.push(progress) },
+  );
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(received, [
+    { progress: 1, total: 2, message: "first" },
+    { progress: 2, total: 2, message: "second" },
+  ]);
+  await close();
+});
+
+await test("reportProgress does nothing when the call has no progressToken", async () => {
+  const { client, close } = await connectClient([progressTool], "createServer");
+  const result = await client.callTool({ name: "progress", arguments: {} });
+  assert.notEqual(result.isError, true);
   await close();
 });
 
