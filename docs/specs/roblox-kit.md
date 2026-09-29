@@ -81,7 +81,7 @@ Depends on: 3 | Files: `src/luau/run-luau-file.ts`, `src/luau/run-luau-file.test
 ### Task 5: feat(server): add tool registry, result and error helpers and stdio entry
 Depends on: 4 | Files: `src/server/main.ts`, `src/server/tool-definition.ts`, `src/server/tool-result.ts`, `src/server/tool-error.ts`, `src/server/tool-result.test.ts`, `src/server/main.test.ts`, `src/config.ts`, `.mcp.json` | Data: an ordered array of tool definitions registered in array order | Proof: npm run check
 ### Task 6: test(studio): probe execute_luau capabilities live through smoke:studio
-Depends on: 5 | Files: `scripts/smoke-studio.ts`, `luau/probe-capabilities.luau`, `package.json` | Data: a `{ capability, ok, detail }` array printed as JSON | Proof: npm run smoke:studio
+Depends on: 5 | Files: `scripts/smoke-studio.ts`, `luau/probe-capabilities.luau`, `package.json`, `src/studio/studio-mcp-client.ts`, `src/studio/studio-mcp-client.test.ts`, `src/config.ts` | Data: a `{ capability, ok, detail }` array printed as JSON | Proof: npm run smoke:studio
 ### Task 7: ci: run npm run check on push and pull request
 Depends on: 1 | Files: `.github/workflows/check.yml` | Data: one job on ubuntu-latest | Proof: npm run check
 ### Task 8: feat(map): define the map spec and lay it out deterministically
