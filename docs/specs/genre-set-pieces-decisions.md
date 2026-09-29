@@ -14,3 +14,7 @@ Task 8 477e8f2: "entry door" = the room's first door; a piece other than track b
 Task 8 477e8f2: any setPieces kind that is a propKind but not track-bed/platform-edge/sign follows the counter rule (so Task 10/11 kinds place without edits); "sign" in setPieces is ignored since signs come from doors; unknown kind throws.
 Task 8 477e8f2: signs hang just inside the doorway under the arch lintel (door gaps are full wall height, so there is no wall above), facing into the room.
 Task 8 477e8f2: track bed and platform edge span the wall minus corner-pillar reach; a room with a door in every wall, or too small for a piece, throws a named error instead of dropping it.
+Task 9 9788a92: concourse gets set piece "bench", signLabels CONCOURSE / PLATFORM 1 / TICKETS.
+Task 9 9788a92: smoke room mapping hall=concourse, vault=ticket-hall, yard=platform.
+Task 9 9788a92: Luau treats an attribute whose name ends in "Color" as a hex color (Color3), others as strings.
+Task 9 9788a92: smoke duplicates build-map-tool's private propsOf split (plain rooms get kit props, typed rooms set pieces) because build-map-tool.ts is not in Task 9 Files.
