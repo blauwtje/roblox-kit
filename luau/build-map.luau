@@ -1,7 +1,9 @@
 --!strict
 -- Builds one map as a Model named after its id under a Workspace folder, replacing the Model of
 -- the same id and the terrain it filled. Each light record becomes a PointLight under an Attachment
--- under the floor part of its zone. Reports the number of parts built.
+-- under the floor part of its zone. Ceilings are tagged and decorative, as are the detail parts. Each prop
+-- becomes a ProceduralModel running the ModuleScript of its kind under the Model, generated before the
+-- build returns. Reports the number of parts built: the BaseParts that are children of the Model.
 type Vector = { x: number, y: number, z: number }
 
 type PartRecord = {
@@ -12,6 +14,15 @@ type PartRecord = {
 	role: string,
 	color: string,
 	material: string,
+	-- Present and false on a decorative detail part.
+	canCollide: boolean?,
+}
+
+type PropRecord = {
+	kind: string,
+	pivot: Vector,
+	size: Vector,
+	seed: number,
 }
 
 type Variant = {
@@ -42,6 +53,11 @@ type Arguments = {
 	mapId: string,
 	mapsFolderName: string,
 	parts: { PartRecord },
+	details: { PartRecord },
+	props: { PropRecord },
+	-- Source text of the generator of each prop kind.
+	generators: { [string]: string },
+	ceilingTag: string,
 	terrainFills: { TerrainFill },
 	-- Flat MaterialVariant of each surface role that has one.
 	variants: { [string]: Variant },
@@ -55,6 +71,7 @@ local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
 
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
+local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local MaterialService = game:GetService("MaterialService")
 
@@ -71,6 +88,9 @@ local function assertMaterialsExist()
 		end
 	end
 	for _, part in arguments.parts do
+		check(part.material)
+	end
+	for _, part in arguments.details do
 		check(part.material)
 	end
 	for _, fill in arguments.terrainFills do
@@ -154,7 +174,72 @@ local function newPart(record: PartRecord): BasePart
 	part.Material = materialNamed(record.material)
 	part.Color = Color3.fromHex(record.color)
 	applyVariant(part, record)
+	if record.kind == "ceiling" then
+		CollectionService:AddTag(part, arguments.ceilingTag)
+	end
+	if record.kind == "ceiling" or record.canCollide == false then
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+	end
 	return part
+end
+
+-- One ModuleScript per prop kind in use, each holding the generator source of its kind.
+local function addGenerators(model: Model): { [string]: ModuleScript }
+	local modules: { [string]: ModuleScript } = {}
+	for kind, source in arguments.generators do
+		local generator = Instance.new("ModuleScript")
+		generator.Name = `{kind}-generator`
+		generator.Source = source
+		generator.Parent = model
+		modules[kind] = generator
+	end
+	return modules
+end
+
+-- The ProceduralModels of the props, named "<kind>-<n>" in placement order, sharing their kind's generator.
+local function addProps(model: Model, generators: { [string]: ModuleScript }): { ProceduralModel }
+	local proceduralModels: { ProceduralModel } = {}
+	local countByKind: { [string]: number } = {}
+	for _, record in arguments.props do
+		local generator = generators[record.kind]
+		if not generator then
+			error(`Prop kind "{record.kind}" has no generator source.`, 0)
+		end
+		local count = (countByKind[record.kind] or 0) + 1
+		countByKind[record.kind] = count
+		local proceduralModel = Instance.new("ProceduralModel")
+		proceduralModel.Name = `{record.kind}-{count}`
+		proceduralModel.Generator = generator
+		proceduralModel.Size = toVector3(record.size)
+		proceduralModel:SetAttribute("Seed", record.seed)
+		proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)))
+		proceduralModel.Parent = model
+		table.insert(proceduralModels, proceduralModel)
+	end
+	return proceduralModels
+end
+
+-- Generation runs once the model is in the place; a generator error fails the build.
+local function waitForGeneration(proceduralModels: { ProceduralModel })
+	for _, proceduralModel in proceduralModels do
+		proceduralModel:WaitForGenerationAsync()
+		local generationError = proceduralModel.GenerationError
+		if generationError ~= "" then
+			error(`Prop "{proceduralModel.Name}" failed to generate: {generationError}`, 0)
+		end
+	end
+end
+
+local function countPartChildren(model: Model): number
+	local count = 0
+	for _, child in model:GetChildren() do
+		if child:IsA("BasePart") then
+			count += 1
+		end
+	end
+	return count
 end
 
 -- A light hangs from an Attachment on its zone's floor part, so it adds no part to the map.
@@ -195,6 +280,10 @@ local function build(): (boolean, number)
 	for _, record in arguments.parts do
 		newPart(record).Parent = model
 	end
+	for _, record in arguments.details do
+		newPart(record).Parent = model
+	end
+	local proceduralModels = addProps(model, addGenerators(model))
 	for _, record in arguments.lights do
 		addLight(model, record)
 	end
@@ -203,7 +292,8 @@ local function build(): (boolean, number)
 	end
 	model:SetAttribute(TERRAIN_ATTRIBUTE_NAME, HttpService:JSONEncode(arguments.terrainFills))
 	model.Parent = folder
-	return oldModel ~= nil, #model:GetChildren()
+	waitForGeneration(proceduralModels)
+	return oldModel ~= nil, countPartChildren(model)
 end
 
 assertMaterialsExist()

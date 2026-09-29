@@ -198,6 +198,61 @@ await test("without a style no lights are sent and Lighting is left alone", asyn
   assert.ok(String(connection.requests[0]?.arguments["code"]).includes('"lights":[]'));
 });
 
+/** The arguments JSON a build request carries to build-map.luau. */
+function buildArguments(connection: FakeStudioConnection) {
+  const build = String(connection.requests[0]?.arguments["code"]);
+  const argumentsJson = /JSONDecode\(\[=*\[(.*)\]=*\]\)/s.exec(build)?.[1];
+  assert.ok(argumentsJson, "the build request carries its arguments");
+  return JSON.parse(argumentsJson) as {
+    parts: { kind: string }[];
+    details: { name: string; canCollide: boolean }[];
+    props: { kind: string; seed: number }[];
+    generators: Record<string, string>;
+    ceilingTag: string;
+  };
+}
+
+await test("a style sends ceilings, details, props and one generator source per prop kind", async () => {
+  const connection = styledStudio();
+  const result = await run(connection, {
+    mapId: "two-rooms",
+    seed: 3,
+    style: { preset: "train-station" },
+    rooms: [
+      { name: "start", x: 0, z: 0, width: 40, depth: 40, spawn: true, doors: [{ side: "east" }] },
+      { name: "hall", x: 40, z: 0, width: 40, depth: 40, doors: [{ side: "west" }] },
+    ],
+  });
+  const sent = buildArguments(connection);
+
+  assert.equal(sent.ceilingTag, config.ceilingTag);
+  assert.equal(sent.parts.filter((part) => part.kind === "ceiling").length, 2);
+  assert.ok(sent.details.length > 0);
+  assert.ok(sent.details.every((detail) => !detail.canCollide));
+  assert.ok(sent.props.length > 0);
+  assert.ok(sent.props.every((prop) => Number.isInteger(prop.seed)));
+  const kinds = [...new Set(sent.props.map((prop) => prop.kind))].sort();
+  assert.deepEqual(Object.keys(sent.generators).sort(), kinds);
+  for (const source of Object.values(sent.generators)) {
+    assert.ok(source.length > 0);
+  }
+
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  const zonedParts = structured.zones.reduce((sum, zone) => sum + zone.partCount, 0);
+  assert.equal(zonedParts, sent.parts.length + sent.details.length);
+});
+
+await test("without a style no ceilings, details, props or generators are sent", async () => {
+  const connection = studioReturning('{"partCount":14,"replaced":false}');
+  await run(connection, twoRoomSpec);
+  const sent = buildArguments(connection);
+
+  assert.equal(sent.parts.filter((part) => part.kind === "ceiling").length, 0);
+  assert.deepEqual(sent.details, []);
+  assert.deepEqual(sent.props, []);
+  assert.deepEqual(sent.generators, {});
+});
+
 await test("an unknown preset fails naming the known ones before Studio is asked", async () => {
   const studio = studioReturning("{}");
   await assert.rejects(

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { config } from "../config.ts";
 import { applyLighting } from "../lighting/apply-lighting.ts";
@@ -11,9 +12,13 @@ import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
+import { placeProps, type PropRecord } from "./prop-placement.ts";
+import { buildRoomDetails, type DetailPart } from "./room-details.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
 const presets = await loadPresets();
+
+const propGeneratorDirectory = new URL("../../luau/props/", import.meta.url);
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
@@ -75,7 +80,10 @@ function unionOf(boundsList: Bounds[]): Bounds {
   );
 }
 
-function zonesOf(parts: PartRecord[]): z.infer<typeof buildMapOutput>["zones"] {
+/** A part of a room: a layout part or a decorative detail. */
+type RoomPart = Pick<PartRecord, "room" | "position" | "size">;
+
+function zonesOf(parts: RoomPart[]): z.infer<typeof buildMapOutput>["zones"] {
   const partsByRoom = Map.groupBy(parts, (part) => part.room);
   return [...partsByRoom].map(([name, roomParts]) => ({
     name,
@@ -93,6 +101,15 @@ function variantsOf(style: Preset | undefined): Record<string, Variant> {
     }
   }
   return variants;
+}
+
+/** The generator source of each prop kind in use, read from `luau/props/<kind>.luau`. */
+async function generatorsOf(props: PropRecord[]): Promise<Record<string, string>> {
+  const generators: Record<string, string> = {};
+  for (const kind of new Set(props.map((prop) => prop.kind))) {
+    generators[kind] = await readFile(new URL(`${kind}.luau`, propGeneratorDirectory), "utf8");
+  }
+  return generators;
 }
 
 /** One light for `build-map.luau`: hung at `position`, parented under the floor part of its zone. */
@@ -139,7 +156,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor, applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor, applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
@@ -156,7 +173,13 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     // Resolving relations and the style and laying out first keep a spec that cannot be built from touching Studio.
     const spec = resolveRelations(input);
     const style = spec.style === undefined ? undefined : resolveStyle(presets, spec.style);
-    const layout = layoutMap(spec, style?.surfaces);
+    // A style is the switch for the decor: ceilings, trim details and props come with a preset, never without.
+    const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
+    const details: DetailPart[] =
+      style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
+    const props: PropRecord[] =
+      style === undefined ? [] : placeProps(spec, style.propKit, spec.seed ?? config.defaultSeed);
+    const generators = await generatorsOf(props);
     const studioId = await selectStudio(context.studio, input.studioId);
     const built = await runLuauFile({
       connection: context.studio,
@@ -167,6 +190,10 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
         mapId: input.mapId,
         mapsFolderName: config.mapsFolderName,
         parts: layout.parts,
+        details,
+        props,
+        generators,
+        ceilingTag: config.ceilingTag,
         terrainFills: layout.terrainFills,
         variants: variantsOf(style),
         lights: lightRecordsOf(spec, layout.parts, style),
@@ -183,14 +210,14 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
       });
     }
     const bounds = unionOf([
-      ...layout.parts.map((part) => boundsOfBox(part.position, part.size)),
+      ...[...layout.parts, ...details].map((part) => boundsOfBox(part.position, part.size)),
       ...layout.terrainFills.map(boundsOfFill),
     ]);
     return toolResult({
       mapId: input.mapId,
       partCount: built.partCount,
       bounds,
-      zones: zonesOf(layout.parts),
+      zones: zonesOf([...layout.parts, ...details]),
     });
   },
 };

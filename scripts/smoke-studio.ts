@@ -8,6 +8,8 @@ import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
+import { placeProps } from "../src/map/prop-placement.ts";
+import { buildRoomDetails } from "../src/map/room-details.ts";
 import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
 import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
@@ -297,11 +299,24 @@ async function callRealTool<Input extends z.ZodObject, Output extends z.ZodObjec
   return { output, content: result.content };
 }
 
+/** What build_map sends for the styled smoke map: layout with ceilings, trim details and preset props. */
+function styledSmokeMap() {
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
+  const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
+  const props = placeProps(smokeMapSpec, preset.propKit, smokeMapSpec.seed ?? config.defaultSeed);
+  return { layout, details, props };
+}
+
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
-  const layout = layoutMap(smokeMapSpec);
+  const { layout, details } = styledSmokeMap();
+  const expectedPartCount = layout.parts.length + details.length;
   const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
-  expectEqual("build_map partCount", output.partCount, layout.parts.length);
+  expectEqual("build_map partCount", output.partCount, expectedPartCount);
   expectEqual(
     "build_map zones",
     output.zones.map((zone) => zone.name),
@@ -310,9 +325,101 @@ async function probeBuildMap(connection: StudioConnection): Promise<string> {
   expectEqual(
     "build_map zone part counts sum",
     output.zones.reduce((sum, zone) => sum + zone.partCount, 0),
-    layout.parts.length,
+    expectedPartCount,
   );
   return `${String(output.partCount)} parts in ${String(output.zones.length)} zones`;
+}
+
+/** The ceilings, generator ModuleScripts and ProceduralModels of the built map, and every BasePart under it. */
+const mapDecorLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local ceilings = {}
+for _, tagged in game:GetService("CollectionService"):GetTagged("${config.ceilingTag}") do
+  if tagged:IsDescendantOf(model) and tagged:IsA("BasePart") then
+    table.insert(ceilings, { name = tagged.Name, canCollide = tagged.CanCollide })
+  end
+end
+local generators, proceduralModels, baseParts = {}, {}, 0
+for _, descendant in model:GetDescendants() do
+  if descendant:IsA("BasePart") then baseParts += 1 end
+  if descendant:IsA("ModuleScript") then table.insert(generators, descendant.Name) end
+  if descendant:IsA("ProceduralModel") then
+    local generated = 0
+    for _, inner in descendant:GetDescendants() do
+      if inner:IsA("BasePart") then generated += 1 end
+    end
+    table.insert(proceduralModels, {
+      name = descendant.Name, generationError = descendant.GenerationError, generator = if descendant.Generator then descendant.Generator.Name else "", generatedParts = generated,
+    })
+  end
+end
+table.sort(generators)
+table.sort(ceilings, function(first, second) return first.name < second.name end)
+table.sort(proceduralModels, function(first, second) return first.name < second.name end)
+return game:GetService("HttpService"):JSONEncode({ ceilings = ceilings, generators = generators, proceduralModels = proceduralModels, baseParts = baseParts })`;
+
+const mapDecorSchema = z.object({
+  ceilings: z.array(z.object({ name: z.string(), canCollide: z.boolean() })),
+  generators: z.array(z.string()),
+  proceduralModels: z.array(
+    z.object({
+      name: z.string(),
+      generationError: z.string(),
+      generator: z.string(),
+      generatedParts: z.number(),
+    }),
+  ),
+  baseParts: z.number(),
+});
+
+async function readMapDecor(connection: StudioConnection) {
+  const studioId = await selectStudio(connection, undefined);
+  return mapDecorSchema.parse(JSON.parse(await executeLuau(connection, studioId, mapDecorLuau)));
+}
+
+/** Proves ceilings carry the tag, one generator per prop kind exists and every prop generated parts without error. */
+async function probeMapDecor(connection: StudioConnection): Promise<string> {
+  const { layout, props } = styledSmokeMap();
+  const decor = await readMapDecor(connection);
+  expectEqual(
+    "ceiling names tagged",
+    decor.ceilings.map((ceiling) => ceiling.name),
+    layout.parts
+      .filter((part) => part.kind === "ceiling")
+      .map((part) => part.name)
+      .sort(),
+  );
+  expectEqual(
+    "ceilings collide",
+    decor.ceilings.some((ceiling) => ceiling.canCollide),
+    false,
+  );
+  expectEqual(
+    "generator ModuleScripts",
+    decor.generators,
+    [...new Set(props.map((prop) => `${prop.kind}-generator`))].sort(),
+  );
+  const countByKind = new Map<string, number>();
+  const expectedNames = props.map((prop) => {
+    const count = (countByKind.get(prop.kind) ?? 0) + 1;
+    countByKind.set(prop.kind, count);
+    return `${prop.kind}-${String(count)}`;
+  });
+  expectEqual(
+    "ProceduralModel names",
+    decor.proceduralModels.map((model) => model.name),
+    expectedNames.sort(),
+  );
+  for (const model of decor.proceduralModels) {
+    expectEqual(`${model.name} GenerationError`, model.generationError, "");
+    expectEqual(
+      `${model.name} generator`,
+      model.generator,
+      `${model.name.replace(/-\d+$/, "")}-generator`,
+    );
+    expectEqual(`${model.name} generated parts`, model.generatedParts > 0, true);
+  }
+  return `${String(decor.ceilings.length)} ceilings tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
 }
 
 /** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */
@@ -363,12 +470,12 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
   return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
 }
 
-/** The lights the built map holds: each PointLight with its Attachment, the part above it and its world position. */
+/** The lights the built map holds (not those inside generated props): each PointLight with its Attachment, the part above it and its world position. */
 const mapLightsLuau = `
 local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
 local lights = {}
 for _, descendant in model:GetDescendants() do
-  if descendant:IsA("PointLight") then
+  if descendant:IsA("PointLight") and not descendant:FindFirstAncestorOfClass("ProceduralModel") then
     local attachment = descendant.Parent :: Attachment
     local position = attachment.WorldPosition
     table.insert(lights, {
@@ -473,7 +580,8 @@ async function probeLighting(connection: StudioConnection): Promise<string> {
 async function probeCheckMap(connection: StudioConnection): Promise<string> {
   const tool = createCheckMapTool(new CheckReportStore());
   const { output, content } = await callRealTool(tool, { mapId: smokeMapSpec.mapId }, connection);
-  expectEqual("check_map partCount", output.partCount, layoutMap(smokeMapSpec).parts.length);
+  // check_map boxes every BasePart under the Model, including the parts the props generated.
+  expectEqual("check_map partCount", output.partCount, (await readMapDecor(connection)).baseParts);
   expectEqual("check_map zoneCount", output.zoneCount, smokeMapSpec.rooms.length);
   expectEqual("check_map reachabilityChecked", output.reachabilityChecked, true);
   expectEqual(
@@ -542,6 +650,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
     const steps: [string, () => Promise<string>][] = [
       ["build_map", () => probeBuildMap(connection)],
       ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
+      ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],

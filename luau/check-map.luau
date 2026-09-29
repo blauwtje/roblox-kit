@@ -142,7 +142,9 @@ local function findOverlapsAndContacts(boxes: { Box }): { { number } }
 				table.insert(contacts[firstIndex], secondIndex)
 				table.insert(contacts[secondIndex], firstIndex)
 			end
-			if depth > tolerance then
+			-- Decorative parts (CanCollide false) may sit inside others; they still count as contacts above. This
+			-- box test stands in for GetPartsInPart with OverlapParams.RespectCanCollide until Task 45 replaces it.
+			if depth > tolerance and first.part.CanCollide and second.part.CanCollide then
 				local center = Vector3.new(
 					math.max(first.min.X, second.min.X) + overlap.X / 2,
 					math.max(first.min.Y, second.min.Y) + overlap.Y / 2,
