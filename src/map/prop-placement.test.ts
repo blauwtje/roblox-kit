@@ -8,7 +8,17 @@ import { placeProps, propKinds } from "./prop-placement.ts";
 import type { PropRecord } from "./prop-placement.ts";
 
 const kit = ["bench", "lamp", "pillar", "stairs", "rail"];
-const setPieceKit = ["track-bed", "platform-edge", "counter", "sign"];
+const setPieceKit = [
+  "track-bed",
+  "platform-edge",
+  "counter",
+  "sign",
+  "lab-bench",
+  "cell-bars",
+  "control-console",
+  "crate-stack",
+  "fireplace",
+];
 
 const hallSpec = mapSpecSchema.parse({
   mapId: "props",
