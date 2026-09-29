@@ -88,6 +88,9 @@ const performanceBudgetSchema = z.strictObject({
   maxTriangles: z.int().positive().default(config.maxTriangles),
 });
 
+/** The budget of a spec that sets none: the `config` limits. */
+export const defaultPerformanceBudget = performanceBudgetSchema.parse({});
+
 /** The data spec of one map built from the given room schema: rooms, base terrain fills and style. */
 function mapSpecOf<Room extends z.ZodType<{ name: string }>>(roomSchema: Room) {
   return z
@@ -101,7 +104,7 @@ function mapSpecOf<Room extends z.ZodType<{ name: string }>>(roomSchema: Room) {
       /** Seeds every random variation of the build; absent uses `config.defaultSeed`. */
       seed: z.int().nonnegative().optional(),
       objectives: z.array(objectiveSchema).optional(),
-      performanceBudget: performanceBudgetSchema.default(() => performanceBudgetSchema.parse({})),
+      performanceBudget: performanceBudgetSchema.default(() => defaultPerformanceBudget),
       ...roomStyle,
     })
     .superRefine((spec, context) => {

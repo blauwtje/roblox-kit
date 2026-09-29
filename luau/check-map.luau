@@ -1,6 +1,7 @@
 --!strict
 -- Checks one built map for overlapping parts, floating parts and zones or objectives a spawn cannot reach.
--- Returns counts plus capped issue lists, kept short because execute_luau cuts long results.
+-- Returns counts plus capped issue lists, kept short because execute_luau cuts long results, and a warning per
+-- instance outside the map that stands in the way of a failed walk.
 type Arguments = {
 	mapId: string,
 	mapsFolderName: string,
@@ -197,36 +198,67 @@ local function rayOrigins(box: Box): { Vector3 }
 	}
 end
 
--- A collidable part is supported when any of its five downward rays hits another collidable part or Terrain within
--- the tolerance below its bottom face, or the part is ground. Decorative parts (CanCollide false, CanQuery false)
--- hang on walls instead of resting on the ground, so they are neither checked nor hit. A part resting only on a part
--- that itself floats counts as supported; lift this by grounding hits recursively.
-local function findFloating(boxes: { Box })
+-- A collidable part is supported when one of its five downward rays hits Terrain, a part outside the map, or a map
+-- part that is itself grounded, within the tolerance below its bottom face; ground parts are grounded. Grounding
+-- spreads upward from the ground through the parts the rays hit, so a stack resting on a floating part floats too.
+-- Decorative parts (CanCollide false, CanQuery false) hang on walls instead of resting on the ground, so they are
+-- neither checked nor hit.
+local function findFloating(model: Model, boxes: { Box })
 	local tolerance = arguments.overlapToleranceStuds
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.RespectCanCollide = true
 	params.IgnoreWater = true
 	local reach = Vector3.new(0, -2 * tolerance, 0)
+	local grounded: { [BasePart]: boolean } = {}
+	local pending: { BasePart } = {}
+	-- For each map part a ray hit, the parts resting on it.
+	local restingOn: { [BasePart]: { BasePart } } = {}
+	local checked: { Box } = {}
 	for _, box in boxes do
 		local part = box.part
-		if not part.CanCollide or isGround(box) then
+		if not part.CanCollide then
 			continue
 		end
+		if isGround(box) then
+			grounded[part] = true
+			table.insert(pending, part)
+			continue
+		end
+		table.insert(checked, box)
 		params.FilterDescendantsInstances = { part }
-		local supported = false
 		for _, origin in rayOrigins(box) do
-			if workspace:Raycast(origin, reach, params) then
-				supported = true
-				break
+			local hit = workspace:Raycast(origin, reach, params)
+			if hit == nil then
+				continue
+			end
+			local support = hit.Instance
+			if support:IsA("BasePart") and support:IsDescendantOf(model) then
+				restingOn[support] = restingOn[support] or {}
+				table.insert(restingOn[support], part)
+			elseif not grounded[part] then
+				grounded[part] = true
+				table.insert(pending, part)
 			end
 		end
-		if not supported then
+	end
+	while #pending > 0 do
+		local support = table.remove(pending) :: BasePart
+		for _, resting in restingOn[support] or {} do
+			if not grounded[resting] then
+				grounded[resting] = true
+				table.insert(pending, resting)
+			end
+		end
+	end
+	for _, box in checked do
+		local part = box.part
+		if not grounded[part] then
 			addIssue({
 				kind = "floating",
 				parts = { part:GetFullName() },
 				position = toPosition(part.Position),
-				detail = `no part or terrain within {tolerance} studs below its center or footprint corners`,
+				detail = `no part or terrain within {tolerance} studs below its center or footprint corners leads down to the ground`,
 			})
 		end
 	end
@@ -304,9 +336,76 @@ local function pathFailure(path: Path, start: Vector3, target: Vector3): string?
 	return nil
 end
 
+-- Most instances outside the map that one failed walk names as blockers.
+local MAX_BLOCKERS_PER_WALK = 5
+
+-- The instance outside the map that owns a hit part: its ancestor directly under Workspace or under the maps folder,
+-- so another map is named by its Model.
+local function ownerOf(part: Instance, mapsFolder: Instance?): Instance
+	local owner = part
+	while owner.Parent and owner.Parent ~= workspace and owner.Parent ~= mapsFolder do
+		owner = owner.Parent
+	end
+	return owner
+end
+
+-- The instances outside the map whose collidable parts cross the straight line from start to target at half the
+-- agent's height, nearest first. Terrain is left out: it is part of the place, not another model.
+local function blockersBetween(model: Model, start: Vector3, target: Vector3): { Instance }
+	local lift = Vector3.new(0, arguments.agentHeightStuds / 2, 0)
+	local origin, direction = start + lift, (target + lift) - (start + lift)
+	local mapsFolder = model.Parent
+	local excluded: { Instance } = { model, workspace.Terrain }
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	params.IgnoreWater = true
+	local blockers: { Instance } = {}
+	while #blockers < MAX_BLOCKERS_PER_WALK do
+		params.FilterDescendantsInstances = excluded
+		local hit = workspace:Raycast(origin, direction, params)
+		if hit == nil then
+			break
+		end
+		local owner = ownerOf(hit.Instance, mapsFolder)
+		table.insert(blockers, owner)
+		table.insert(excluded, owner)
+	end
+	return blockers
+end
+
+-- Per instance outside the map, how many failed walks it blocks and the first of them.
+type Blocking = { walks: number, firstWalk: string }
+local blocking: { [Instance]: Blocking } = {}
+local blockingOrder: { Instance } = {}
+
+local function noteBlockers(model: Model, start: Vector3, target: Vector3, walk: string)
+	for _, blocker in blockersBetween(model, start, target) do
+		local entry = blocking[blocker]
+		if entry == nil then
+			blocking[blocker] = { walks = 1, firstWalk = walk }
+			table.insert(blockingOrder, blocker)
+		else
+			entry.walks += 1
+		end
+	end
+end
+
+local function blockerWarnings(): { string }
+	local warnings: { string } = {}
+	for _, blocker in blockingOrder do
+		local entry = blocking[blocker]
+		table.insert(
+			warnings,
+			`{blocker:GetFullName()} is not part of this map and blocks {entry.walks} failed walk(s), first {entry.firstWalk}; move it or build the map elsewhere`
+		)
+	end
+	return warnings
+end
+
 -- Checks one { spawn, target } pair per spawn and target. A pair further apart than the straight-line limit is
 -- reported as tooFar without asking the pathfinder, which does not plan over such distances.
-local function findUnreachableTargets(spawns: { BasePart }, targets: { Target })
+local function findUnreachableTargets(model: Model, spawns: { BasePart }, targets: { Target })
 	local path = PathfindingService:CreatePath({
 		AgentRadius = arguments.agentRadiusStuds,
 		AgentHeight = arguments.agentHeightStuds,
@@ -325,6 +424,9 @@ local function findUnreachableTargets(spawns: { BasePart }, targets: { Target })
 					`tooFar: {string.format("%.0f", distance)} studs apart, over the {arguments.maxPathStuds} stud limit`
 			else
 				failure = pathFailure(path, start, target.point)
+				if failure then
+					noteBlockers(model, start, target.point, `from {spawnPart:GetFullName()} to {target.description}`)
+				end
 			end
 			if failure then
 				local parts = { spawnPart:GetFullName() }
@@ -345,9 +447,9 @@ end
 local model = findMapModel()
 local boxes = collectBoxes(model)
 findOverlaps(model, boxes)
-findFloating(boxes)
+findFloating(model, boxes)
 local spawns, floors = collectSpawnsAndFloors(boxes)
-findUnreachableTargets(spawns, collectTargets(floors))
+findUnreachableTargets(model, spawns, collectTargets(floors))
 
 return HttpService:JSONEncode({
 	partCount = #boxes,
@@ -355,4 +457,5 @@ return HttpService:JSONEncode({
 	reachabilityChecked = #spawns > 0,
 	counts = issueCounts,
 	issues = issues,
+	warnings = blockerWarnings(),
 })

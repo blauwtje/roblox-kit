@@ -12,7 +12,11 @@ import {
   type CheckIssue,
   type CheckReportStore,
 } from "./check-report-store.ts";
-import { relationMapSpecSchema } from "./map-spec.ts";
+import {
+  defaultPerformanceBudget,
+  relationMapSpecSchema,
+  type PerformanceBudget,
+} from "./map-spec.ts";
 import { findSizeRuleIssues } from "./size-rules.ts";
 import { zoneShot } from "./zone-cameras.ts";
 
@@ -66,6 +70,12 @@ const checkMapOutput = z.strictObject({
   counts: issueCountsSchema,
   /** Scene draw calls and triangles seen from each zone's camera, in zone order. */
   sceneStats: z.array(sceneStatSampleSchema),
+  /** The limits each sample is compared to: the spec's performanceBudget, else the config defaults. */
+  budget: z.strictObject({ maxDrawCalls: z.number().int(), maxTriangles: z.number().int() }),
+  /** False when any zone camera sees more draw calls or triangles than the budget allows. */
+  withinBudget: z.boolean(),
+  /** One line per zone camera over the budget and per instance outside the map that blocks a failed walk. */
+  warnings: z.array(z.string()),
   issues: z.array(checkIssueSchema),
   /** Issues in the full report that are not listed inline. */
   issuesOmitted: z.number().int(),
@@ -82,6 +92,7 @@ const checkedMapSchema = z.strictObject({
     floating: z.array(checkIssueSchema),
     unreachable: z.array(checkIssueSchema),
   }),
+  warnings: z.array(z.string()),
 });
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
@@ -126,6 +137,24 @@ async function sampleSceneStats(
   return sampled.samples;
 }
 
+/** One warning per zone camera sample over either limit of the budget. */
+function overBudgetWarnings(samples: SceneStatSample[], budget: PerformanceBudget): string[] {
+  const warnings: string[] = [];
+  for (const sample of samples) {
+    if (sample.drawCalls > budget.maxDrawCalls) {
+      warnings.push(
+        `Zone "${sample.zone}" camera sees ${String(sample.drawCalls)} draw calls, over the budget of ${String(budget.maxDrawCalls)}.`,
+      );
+    }
+    if (sample.triangles > budget.maxTriangles) {
+      warnings.push(
+        `Zone "${sample.zone}" camera sees ${String(sample.triangles)} triangles, over the budget of ${String(budget.maxTriangles)}.`,
+      );
+    }
+  }
+  return warnings;
+}
+
 /** The named preset; an unknown name is an error, no name is none. */
 function presetNamed(presetName: string | undefined): Preset | undefined {
   if (presetName === undefined) {
@@ -162,7 +191,7 @@ export function createCheckMapTool(
       `Optional objectives [{ name, x, y, z }] add targets and an optional preset (a build_map style preset name) sets the agent size from its size rules. ` +
       `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling (the samples are reported, not judged against a budget), issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
+      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles): withinBudget is false and warnings name each zone over a limit, without failing passed; warnings also name any model outside the map that stands between a spawn and a target it cannot reach; issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
       `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
     inputSchema: checkMapInput,
     outputSchema: checkMapOutput,
@@ -200,6 +229,8 @@ export function createCheckMapTool(
         resultSchema: checkedMapSchema,
       });
       const sceneStats = await sampleSceneStats(context.studio, studioId, input.mapId);
+      const budget = input.spec?.performanceBudget ?? defaultPerformanceBudget;
+      const budgetWarnings = overBudgetWarnings(sceneStats, budget);
       const issues: CheckIssue[] = [
         ...checked.issues.overlapping,
         ...checked.issues.floating,
@@ -223,6 +254,9 @@ export function createCheckMapTool(
           reachabilityChecked: checked.reachabilityChecked,
           counts,
           sceneStats,
+          budget,
+          withinBudget: budgetWarnings.length === 0,
+          warnings: [...budgetWarnings, ...checked.warnings],
           issues: inlineIssues,
           issuesOmitted: totalIssues - inlineIssues.length,
         },

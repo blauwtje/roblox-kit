@@ -105,26 +105,29 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
   style: { preset: "train-station" },
   seed: 1,
+  // At the train-station size rules, so check_map with the preset reports no sizeRule issue.
+  wallHeight: 16,
+  doorWidth: 10,
   rooms: [
     { name: "hall", x: 2000, z: 2000, width: 20, depth: 20, spawn: true },
     {
       name: "vault",
       width: 20,
       depth: 20,
-      relation: { to: "hall", direction: "east", hallwayLength: 10, hallwayWidth: 8 },
+      relation: { to: "hall", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
     },
     {
       name: "yard",
       width: 20,
       depth: 20,
-      relation: { to: "vault", direction: "east", hallwayLength: 10, hallwayWidth: 8 },
+      relation: { to: "vault", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
     },
   ],
   terrain: [
     {
       shape: "block",
-      center: { x: 2030, y: -12, z: 2000 },
-      size: { x: 80, y: 8, z: 20 },
+      center: { x: 2035, y: -12, z: 2000 },
+      size: { x: 90, y: 8, z: 20 },
       material: "Grass",
     },
   ],
@@ -134,7 +137,7 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
 const smokeMapSpec = resolveRelations(smokeRelationSpec);
 
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
-const smokeRegion = { min: [1960, -30, 1960], max: [2080, 30, 2040] };
+const smokeRegion = { min: [1960, -30, 1960], max: [2100, 30, 2040] };
 
 /** What must remain in Workspace once the smoke is done. */
 const placeWorkspaceChildren = ["Terrain", "Baseplate", "SpawnLocation", "Camera"];
@@ -579,7 +582,11 @@ async function probeLighting(connection: StudioConnection): Promise<string> {
 
 async function probeCheckMap(connection: StudioConnection): Promise<string> {
   const tool = createCheckMapTool(new CheckReportStore());
-  const { output, content } = await callRealTool(tool, { mapId: smokeMapSpec.mapId }, connection);
+  const { output, content } = await callRealTool(
+    tool,
+    { mapId: smokeMapSpec.mapId, preset: smokeRelationSpec.style?.preset, spec: smokeRelationSpec },
+    connection,
+  );
   // check_map boxes every BasePart under the Model, including the parts the props generated.
   expectEqual("check_map partCount", output.partCount, (await readMapDecor(connection)).baseParts);
   expectEqual("check_map zoneCount", output.zoneCount, smokeMapSpec.rooms.length);
@@ -589,7 +596,11 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     content.some((block) => block.type === "resource_link"),
     true,
   );
-  const counted = output.counts.overlapping + output.counts.floating + output.counts.unreachable;
+  const counted =
+    output.counts.overlapping +
+    output.counts.floating +
+    output.counts.unreachable +
+    output.counts.sizeRule;
   expectEqual("check_map issues + omitted", output.issues.length + output.issuesOmitted, counted);
   expectEqual("check_map passed", output.passed, counted === 0);
   // A clean map: any issue here is a finding, not something to tolerate.
@@ -609,7 +620,64 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     expectEqual(`check_map sceneStats ${sample.zone} drawCalls > 0`, sample.drawCalls > 0, true);
     expectEqual(`check_map sceneStats ${sample.zone} triangles > 0`, sample.triangles > 0, true);
   }
+  expectEqual("check_map budget", output.budget, smokeRelationSpec.performanceBudget);
+  // The smoke map is small and nothing else stands in the smoke region: no zone is over budget, no walk blocked.
+  expectEqual("check_map withinBudget", output.withinBudget, true);
+  expectEqual("check_map warnings", output.warnings, []);
   return `passed=${String(output.passed)} counts=${JSON.stringify(output.counts)} sceneStats=${JSON.stringify(output.sceneStats)}`;
+}
+
+/** Name of the Model the blocker probe puts beside the smoke map; the maps folder cleanup removes it. */
+const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
+
+/** Walls off the hallway between the hall and the vault with a Model outside the smoke map. */
+function blockerLuau(): string {
+  const roomNamed = (name: string) => {
+    const room = smokeMapSpec.rooms.find((candidate) => candidate.name === name);
+    if (room === undefined) throw new Error(`The smoke map has no room "${name}".`);
+    return room;
+  };
+  const hall = roomNamed("hall");
+  const vault = roomNamed("vault");
+  const hallwayMiddleX = (hall.x + hall.width / 2 + vault.x - vault.width / 2) / 2;
+  return `
+local model = Instance.new("Model")
+model.Name = "${blockerModelName}"
+local wall = Instance.new("Part")
+wall.Name = "Wall"
+wall.Anchored = true
+wall.Size = Vector3.new(2, 40, ${String(hall.depth + 10)})
+wall.Position = Vector3.new(${String(hallwayMiddleX)}, 20, ${String(hall.z)})
+wall.Parent = model
+model.Parent = workspace:FindFirstChild("${config.mapsFolderName}")
+return "placed"`;
+}
+
+/** Proves check_map names a Model outside the map that walls off a walk, then removes that Model. */
+async function probeBlockingModel(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  await executeLuau(connection, studioId, blockerLuau());
+  try {
+    const tool = createCheckMapTool(new CheckReportStore());
+    const { output } = await callRealTool(tool, { mapId: smokeMapSpec.mapId }, connection);
+    const blockerPath = `Workspace.${config.mapsFolderName}.${blockerModelName}`;
+    expectEqual("check_map unreachable > 0 with the blocker", output.counts.unreachable > 0, true);
+    expectEqual(
+      "check_map warnings naming the blocker",
+      output.warnings.filter((warning) => warning.startsWith(`${blockerPath} `)).length,
+      1,
+    );
+    return output.warnings.join(" | ");
+  } finally {
+    await executeLuau(
+      connection,
+      studioId,
+      `local folder = workspace:FindFirstChild("${config.mapsFolderName}")
+local model = if folder then folder:FindFirstChild("${blockerModelName}") else nil
+if model then model:Destroy() end
+return "removed"`,
+    );
+  }
 }
 
 async function probeCaptureZones(connection: StudioConnection): Promise<string> {
@@ -673,6 +741,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
+      ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],
       [
         "run_playtest play with a server and a client check",

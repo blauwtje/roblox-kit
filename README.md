@@ -64,17 +64,18 @@ Returns `{ mapId, partCount, phases, bounds, zones }`. `phases` lists the six ph
 
 Read-only. Checks a built map for overlapping parts, floating parts (not connected to the ground or terrain) and zones and objective points that a walk from any `SpawnLocation` cannot reach (Studio pathfinding). Rotated parts are checked by their world bounding box. A missing Model is an error.
 
-| Input        | Type             | Meaning                                                                                                              |
-| ------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `mapId`      | string, required | The `mapId` that `build_map` returned.                                                                               |
-| `objectives` | array, optional  | Points `{ name, x, y, z }` in studs that every spawn must be able to walk to.                                        |
-| `preset`     | string, optional | The preset the map was built with. Its size rules set the pathfinding agent's size.                                  |
-| `spec`       | object, optional | The `build_map` spec. With `preset`, doorways, hallways and walls smaller than the preset's size rules are reported. |
+| Input        | Type             | Meaning                                                                                                                                                             |
+| ------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mapId`      | string, required | The `mapId` that `build_map` returned.                                                                                                                              |
+| `objectives` | array, optional  | Points `{ name, x, y, z }` in studs that every spawn must be able to walk to.                                                                                       |
+| `preset`     | string, optional | The preset the map was built with. Its size rules set the pathfinding agent's size.                                                                                 |
+| `spec`       | object, optional | The `build_map` spec. With `preset`, doorways, hallways and walls smaller than the preset's size rules are reported. Its `performanceBudget` sets the scene limits. |
 
-Returns `{ reportId, reportUri, mapId, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, issues, issuesOmitted }`.
+Returns `{ reportId, reportUri, mapId, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }`.
 
 - `counts` holds the exact number of `overlapping`, `floating`, `unreachable` and `sizeRule` issues. `sizeRule` is 0 unless both `preset` and `spec` are given.
-- `sceneStats` has one `{ zone, drawCalls, triangles }` sample per zone, read from that zone's camera. It is reported, not judged: it does not affect `passed`.
+- `sceneStats` has one `{ zone, drawCalls, triangles }` sample per zone, read from that zone's camera. Each sample is compared to `budget`: the spec's `performanceBudget`, or 1,000 draw calls and 1,000,000 triangles without a spec. `withinBudget` is false when any zone is over a limit. It does not affect `passed`.
+- `warnings` has one line per zone over a budget limit and one per model outside the map that stands on the straight line of a failed walk, such as another map built in the same place.
 - `reachabilityChecked` is false when the map has no `SpawnLocation`, because no path can start.
 - `issues` lists the first 20 issues with part paths and stud positions. `issuesOmitted` counts the rest.
 - The full report holds up to 100 issues per kind. It is served at `roblox-kit://check-reports/{reportId}` and stays available only while the server process runs.

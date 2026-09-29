@@ -76,8 +76,12 @@ await test("capture_zones has a strict schema, read-only annotations and the map
   assert.throws(() => captureZonesTool.inputSchema.parse({ mapId: "arena", zones: [] }));
 });
 
+/** The viewport-sized PNG header followed by the capture id, so each image block shows which capture it came from. */
+const imageOf = (captureId: string): string =>
+  Buffer.concat([Buffer.from(viewportImage, "base64"), Buffer.from(captureId)]).toString("base64");
+
 await test("the top-down cutaway comes first, then views a and b of each zone, each with its computed camera as an image block", async () => {
-  const studio = studioWith(() => okImage());
+  const studio = studioWith((captureId) => okImage(imageOf(captureId)));
   const result = await run(studio, { mapId: "arena" });
 
   const luauRequests = studio.requests.filter((request) => request.name === "execute_luau");
@@ -128,7 +132,7 @@ await test("the top-down cutaway comes first, then views a and b of each zone, e
   assert.deepEqual(JSON.parse(text?.type === "text" ? text.text : ""), structured);
   assert.deepEqual(
     images.map((block) => (block.type === "image" ? block.data : block.type)),
-    Array.from({ length: 5 }, () => viewportImage),
+    captureRequests.map((request) => imageOf(String(request.arguments["capture_id"]))),
   );
 });
 

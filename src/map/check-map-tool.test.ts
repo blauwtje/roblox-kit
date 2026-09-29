@@ -28,6 +28,7 @@ function checkedMap(overrides: object = {}): string {
     reachabilityChecked: true,
     counts: { overlapping: 0, floating: 0, unreachable: 0 },
     issues: { overlapping: [], floating: [], unreachable: [] },
+    warnings: [],
     ...overrides,
   });
 }
@@ -230,7 +231,11 @@ await test("check-map.luau reports a part as floating when none of five downward
   assert.ok(floatingSource.includes("params.FilterDescendantsInstances = { part }"));
   assert.ok(floatingSource.includes("params.FilterType = Enum.RaycastFilterType.Exclude"));
   assert.ok(floatingSource.includes("params.RespectCanCollide = true"));
-  assert.ok(floatingSource.includes("if not part.CanCollide or isGround(box) then"));
+  assert.ok(floatingSource.includes("if not part.CanCollide then"));
+  // A map part only supports what rests on it once it is grounded itself, so a stack on a floating part floats.
+  assert.ok(floatingSource.includes("support:IsDescendantOf(model)"));
+  assert.ok(floatingSource.includes("for _, resting in restingOn[support]"));
+  assert.ok(floatingSource.includes("if not grounded[part] then"));
   assert.ok(floatingSource.includes('kind = "floating"'));
 });
 
@@ -249,6 +254,72 @@ await test("check_map samples the scene from each zone's camera after the settle
   assert.ok(code.includes(`"statsSettleSeconds":${String(config.statsSettleSeconds)}`));
   assert.ok(code.includes('"zone":"start"') && code.includes('"zone":"vault"'));
   assert.ok(code.includes('"cameraPosition":['));
+});
+
+await test("scene stats within the config budget add no warning when the spec sets no budget", async () => {
+  const structured = (await setup(studioReturning(checkedMap())).run({ mapId: "arena" }))
+    .structuredContent as { budget: object; withinBudget: boolean; warnings: string[] };
+  assert.deepEqual(structured.budget, {
+    maxDrawCalls: config.maxDrawCalls,
+    maxTriangles: config.maxTriangles,
+  });
+  assert.equal(structured.withinBudget, true);
+  assert.deepEqual(structured.warnings, []);
+});
+
+await test("a zone camera over the spec's performanceBudget is warned about without failing the check", async () => {
+  const spec = {
+    mapId: "arena",
+    rooms: [{ name: "start", x: 0, z: 0, width: 30, depth: 30 }],
+    performanceBudget: { maxDrawCalls: 20, maxTriangles: 5000 },
+  };
+  const { tool, run } = setup(studioReturning(checkedMap()));
+  const structured = tool.outputSchema.parse(
+    (await run({ mapId: "arena", spec })).structuredContent,
+  );
+  assert.deepEqual(structured.budget, { maxDrawCalls: 20, maxTriangles: 5000 });
+  assert.equal(structured.withinBudget, false);
+  assert.equal(structured.passed, true);
+  assert.deepEqual(structured.warnings, [
+    'Zone "vault" camera sees 30 draw calls, over the budget of 20.',
+    'Zone "vault" camera sees 9000 triangles, over the budget of 5000.',
+  ]);
+});
+
+await test("a warning from Studio naming a model outside the map is passed on", async () => {
+  const blocked = "Workspace.RobloxKitMaps.other blocks 1 failed walk(s)";
+  const { tool, run } = setup(
+    studioReturning(
+      checkedMap({
+        counts: { overlapping: 0, floating: 0, unreachable: 1 },
+        issues: {
+          overlapping: [],
+          floating: [],
+          unreachable: [issueOf("unreachable", "vault-floor")],
+        },
+        warnings: [blocked],
+      }),
+    ),
+  );
+  const structured = tool.outputSchema.parse((await run({ mapId: "arena" })).structuredContent);
+  assert.deepEqual(structured.warnings, [blocked]);
+  assert.equal(structured.withinBudget, true);
+});
+
+await test("check-map.luau names the instances outside the map on the line of a failed walk", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const blockerSource = source.slice(
+    source.indexOf("local function ownerOf("),
+    source.indexOf("local function findUnreachableTargets("),
+  );
+  // The map itself and Terrain are excluded, and each hit's owner is excluded before the next cast.
+  assert.ok(blockerSource.includes("{ model, workspace.Terrain }"));
+  assert.ok(blockerSource.includes("table.insert(excluded, owner)"));
+  assert.ok(blockerSource.includes("owner.Parent ~= mapsFolder"));
+  assert.ok(blockerSource.includes("blocker:GetFullName()"));
+  const reachSource = source.slice(source.indexOf("local function findUnreachableTargets("));
+  assert.ok(reachSource.includes("noteBlockers(model, start, target.point"));
+  assert.ok(source.includes("warnings = blockerWarnings()"));
 });
 
 await test("objectives and a preset's agent size are sent to Studio, defaults otherwise", async () => {
