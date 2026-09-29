@@ -360,6 +360,34 @@ await test("an unknown preset fails naming the known ones before Studio is asked
   assert.equal(studio.requests.length, 0);
 });
 
+await test("a room type the style lacks fails naming the room before Studio is asked", async () => {
+  const studio = studioReturning("{}");
+  const typedRooms = twoRoomSpec.rooms.map((room, index) =>
+    index === 0 ? { ...room, roomType: "platform" } : room,
+  );
+  const styled = { ...twoRoomSpec, rooms: typedRooms, style: { preset: "cozy-town" } };
+  await assert.rejects(
+    run(studio, styled),
+    /Room "start" has room type "platform".*declared room types/,
+  );
+  const unstyled = { ...twoRoomSpec, rooms: typedRooms };
+  await assert.rejects(run(studio, unstyled), /Room "start" has room type "platform".*none/);
+  assert.equal(studio.requests.length, 0);
+});
+
+await test("a room type the style declares builds", async () => {
+  const studio = phaseStudio();
+  const typedRooms = twoRoomSpec.rooms.map((room, index) =>
+    index === 0 ? { ...room, roomType: "platform" } : room,
+  );
+  const overrides = {
+    roomTypes: { platform: { setPieces: ["track-bed"], signLabel: "PLATFORM 1" } },
+  };
+  const spec = { ...twoRoomSpec, rooms: typedRooms, style: { preset: "cozy-town", overrides } };
+  await run(studio, spec);
+  assert.ok(studio.requests.length > 0);
+});
+
 await test("passes Studio's error text on, such as an unknown material", async () => {
   const message = "Unknown Roblox material name(s): Marbel. Use names from Enum.Material.";
   await assert.rejects(

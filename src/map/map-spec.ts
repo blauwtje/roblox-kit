@@ -33,6 +33,8 @@ const roomShape = {
   doors: z.array(doorSchema).default([]),
   /** Adds a SpawnLocation at the room center. */
   spawn: z.boolean().default(false),
+  /** A key of the style preset's `roomTypes`; absent keeps the room a plain one. */
+  roomType: z.string().min(1).optional(),
   ...roomStyle,
 };
 

@@ -132,3 +132,13 @@ await test("objectives and the performance budget reject bad shapes", () => {
     assert.throws(() => mapSpecSchema.parse({ ...minimalSpec, performanceBudget }));
   }
 });
+
+await test("a room keeps an optional room type, and an empty one is rejected", () => {
+  assert.equal(mapSpecSchema.parse(minimalSpec).rooms[0]?.roomType, undefined);
+  const typed = mapSpecSchema.parse({ mapId: "m", rooms: [{ ...room, roomType: "platform" }] });
+  assert.equal(typed.rooms[0]?.roomType, "platform");
+  assert.equal(
+    mapSpecSchema.safeParse({ mapId: "m", rooms: [{ ...room, roomType: "" }] }).success,
+    false,
+  );
+});

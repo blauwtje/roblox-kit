@@ -207,6 +207,20 @@ function materialsOf(
   ];
 }
 
+/** Throws naming the first room whose type the style lacks; a room type needs a style that declares it. */
+function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void {
+  const known = Object.keys(style?.roomTypes ?? {});
+  for (const room of spec.rooms) {
+    if (room.roomType === undefined || known.includes(room.roomType)) {
+      continue;
+    }
+    const declared = known.length === 0 ? "none" : known.join(", ");
+    throw new Error(
+      `Room "${room.name}" has room type "${room.roomType}", which the style does not declare; declared room types: ${declared}`,
+    );
+  }
+}
+
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
   name: "build_map",
   title: "Build map",
@@ -229,6 +243,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     // Resolving relations and the style and laying out first keep a spec that cannot be built from touching Studio.
     const spec = resolveRelations(input);
     const style = spec.style === undefined ? undefined : resolveStyle(presets, spec.style);
+    rejectUnknownRoomTypes(spec, style);
     // A style is the switch for the decor: ceilings, trim details and props come with a preset, never without.
     const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
     const details: DetailPart[] =
