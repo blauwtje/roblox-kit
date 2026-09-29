@@ -39,6 +39,8 @@ const buildMapOutput = z.strictObject({
   zones: z.array(
     z.strictObject({ name: z.string(), partCount: z.number().int(), bounds: boundsSchema }),
   ),
+  /** One line per set piece skipped because its room has no space for it. */
+  warnings: z.array(z.string()),
 });
 
 /** What `build-map.luau` reports after a phase: the parts in the Model; the shell phase also says whether it replaced a map. */
@@ -224,15 +226,16 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
 
 /**
  * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type,
- * which would collide with random kit props.
+ * which would collide with random kit props; warnings name each set piece skipped for lack of space.
  */
-export function propsOf(spec: MapSpec, style: Preset): PropRecord[] {
+export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; warnings: string[] } {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
-  return [
-    ...placeProps(plainSpec, style.propKit, seed),
-    ...placeSetPieces(spec, style.roomTypes, style.palette.accent, seed),
-  ];
+  const setPieces = placeSetPieces(spec, style.roomTypes, style.palette.accent, seed);
+  return {
+    props: [...placeProps(plainSpec, style.propKit, seed), ...setPieces.pieces],
+    warnings: setPieces.warnings,
+  };
 }
 
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
@@ -244,7 +247,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
     `The build runs in six phases (shell, floors and ceilings, openings, surfaces, props, lighting), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
-    `Returns { mapId, partCount, phases, bounds, zones }: the parts per phase, and the studs bounds of the whole map and of each room (zone).`,
+    `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), and one warning per set piece skipped because its room has no space for it.`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
   annotations: {
@@ -262,7 +265,8 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
     const details: DetailPart[] =
       style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
-    const props: PropRecord[] = style === undefined ? [] : propsOf(spec, style);
+    const { props, warnings } =
+      style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
     const generators = await generatorsOf(props);
     const variants = variantsOf(style);
     const lights = lightRecordsOf(spec, layout.parts, style);
@@ -316,6 +320,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
       phases: phases.map((phase) => ({ name: phase.name, partCount: phase.parts.length })),
       bounds,
       zones: zonesOf([...layout.parts, ...details]),
+      warnings,
     });
   },
 };

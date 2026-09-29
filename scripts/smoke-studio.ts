@@ -323,7 +323,7 @@ function styledSmokeMap() {
   }
   const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
   const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
-  const props = propsOf(smokeMapSpec, preset);
+  const { props } = propsOf(smokeMapSpec, preset);
   return { layout, details, props };
 }
 

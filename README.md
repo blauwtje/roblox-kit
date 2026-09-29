@@ -58,7 +58,7 @@ A terrain fill is either `{ shape: "block", center, size, material }` or `{ shap
 
 A room placed by `relation` gets a hallway room named `<to>-<room>-hallway`, which is one more zone. The solver adds doors to both rooms and to both ends of the hallway. A room gives either `x` and `z` or a `relation`, never both.
 
-Returns `{ mapId, partCount, phases, bounds, zones }`. `phases` lists the six phases in the order they ran, each with `name` and `partCount`. `bounds` is `{ min, max }` for the whole map, and each entry of `zones` has `name`, `partCount` and its own `bounds`.
+Returns `{ mapId, partCount, phases, bounds, zones, warnings }`. `phases` lists the six phases in the order they ran, each with `name` and `partCount`. `bounds` is `{ min, max }` for the whole map, and each entry of `zones` has `name`, `partCount` and its own `bounds`. `warnings` has one line per set piece that was skipped because its room has no space for it.
 
 ### check_map
 

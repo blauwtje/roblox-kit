@@ -25,6 +25,15 @@ export interface SetPieceRecord extends PropRecord {
   attributes: Record<string, string>;
 }
 
+/** Set pieces placed, and one warning per piece skipped because its room has no space for it. */
+export interface SetPiecePlacement {
+  pieces: SetPieceRecord[];
+  warnings: string[];
+}
+
+/** A set piece that does not fit its room: the room keeps its other pieces and this one is skipped. */
+class SetPieceMisfit extends Error {}
+
 /** The yaw that turns a piece's -Z face toward each side of the room. */
 const yawFacing: Record<Side, number> = { north: 0, west: 90, south: 180, east: 270 };
 
@@ -92,7 +101,7 @@ function longestDoorlessWall(room: RoomSpec, interior: RoomBounds, kind: PropKin
     undefined,
   );
   if (longest === undefined) {
-    throw new Error(
+    throw new SetPieceMisfit(
       `Room "${room.name}" has a door in every wall, so ${kind} has no wall to run along.`,
     );
   }
@@ -101,7 +110,7 @@ function longestDoorlessWall(room: RoomSpec, interior: RoomBounds, kind: PropKin
 
 function assertFits(room: RoomSpec, kind: PropKind, free: number): void {
   if (free < 0) {
-    throw new Error(
+    throw new SetPieceMisfit(
       `Room "${room.name}" is too small for its set piece ${kind}; enlarge the room.`,
     );
   }
@@ -156,7 +165,7 @@ function placed(
 
 /**
  * The position along a wall nearest `preferred` where a piece of `length` stays out of every doorway on
- * that wall and inside +-`reach`; throws when the doorways leave no room.
+ * that wall and inside +-`reach`; throws a SetPieceMisfit when the doorways leave no room.
  */
 function alongClearOfDoors(
   room: RoomSpec,
@@ -177,7 +186,9 @@ function alongClearOfDoors(
     .sort((first, second) => Math.abs(first - preferred) - Math.abs(second - preferred));
   const [nearest] = candidates;
   if (nearest === undefined) {
-    throw new Error(`Room "${room.name}" has no space on its ${side} wall clear of the doorways.`);
+    throw new SetPieceMisfit(
+      `Room "${room.name}" has no space on its ${side} wall clear of the doorways.`,
+    );
   }
   return nearest;
 }
@@ -230,39 +241,52 @@ function setPiecesOfRoom(
   roomTypes: NonNullable<Preset["roomTypes"]>,
   accent: string,
   seed: number,
-): SetPieceRecord[] {
+): SetPiecePlacement {
   const roomType = room.roomType === undefined ? undefined : roomTypes[room.roomType];
   if (roomType === undefined) {
-    return [];
+    return { pieces: [], warnings: [] };
   }
   const interior = roomBounds(spec, room);
-  const pieces = roomType.setPieces
-    .filter((name) => name !== "sign")
-    .map((name) => {
-      const kind = setPieceKind(room, name);
-      return kind === "track-bed" || kind === "platform-edge"
-        ? trackPiece(room, interior, kind, seed)
-        : pieceFacingEntry(room, interior, kind, seed);
-    });
+  const pieces: SetPieceRecord[] = [];
+  const warnings: string[] = [];
+  for (const name of roomType.setPieces.filter((setPiece) => setPiece !== "sign")) {
+    const kind = setPieceKind(room, name);
+    try {
+      pieces.push(
+        kind === "track-bed" || kind === "platform-edge"
+          ? trackPiece(room, interior, kind, seed)
+          : pieceFacingEntry(room, interior, kind, seed),
+      );
+    } catch (error) {
+      if (!(error instanceof SetPieceMisfit)) {
+        throw error;
+      }
+      warnings.push(`${error.message} The ${kind} is skipped.`);
+    }
+  }
   const signAttributes = { Label: roomType.signLabel, AccentColor: accent };
   const signs = room.doors.map((door) => signOverDoor(room, interior, door, signAttributes, seed));
-  return [...pieces, ...signs];
+  return { pieces: [...pieces, ...signs], warnings };
 }
 
 /**
  * The set pieces that say which place a typed room is: track bed and platform edge run along the longest
  * wall without a door, other pieces stand against the wall opposite the entry door (the room's first door)
  * looking at it, and every typed room gets a sign under the lintel of each door. Rooms without a type get none.
- * Throws on a piece with no generator or a room too small to hold one.
+ * A piece its room has no space for is skipped with a warning; a piece with no generator throws.
  */
 export function placeSetPieces(
   spec: MapSpec,
   roomTypes: Preset["roomTypes"],
   accent: string,
   seed: number,
-): SetPieceRecord[] {
+): SetPiecePlacement {
   if (roomTypes === undefined) {
-    return [];
+    return { pieces: [], warnings: [] };
   }
-  return spec.rooms.flatMap((room) => setPiecesOfRoom(spec, room, roomTypes, accent, seed));
+  const placements = spec.rooms.map((room) => setPiecesOfRoom(spec, room, roomTypes, accent, seed));
+  return {
+    pieces: placements.flatMap((placement) => placement.pieces),
+    warnings: placements.flatMap((placement) => placement.warnings),
+  };
 }
