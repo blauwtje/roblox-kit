@@ -190,3 +190,25 @@ await test("the schema rejects unknown keys, duplicate room names and empty maps
     false,
   );
 });
+
+await test("each part carries a surface role and the shipped default color when there is no style", () => {
+  const { parts } = layoutOf(threeRoomInput);
+  for (const part of parts) {
+    assert.match(part.color, /^#[0-9a-f]{6}$/);
+  }
+  const floor = partNamed(parts, "start-floor");
+  const wall = partNamed(parts, "start-wall-north-1");
+  const spawn = partNamed(parts, "start-spawn");
+  assert.equal(floor.role, "floor");
+  assert.equal(wall.role, "wall");
+  assert.equal(spawn.role, "floor");
+  assert.notEqual(floor.color, wall.color);
+});
+
+await test("a style's surface colors replace the defaults by role", () => {
+  const surfaces = { floor: { color: "#112233" }, wall: { color: "#445566" } };
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
+  assert.equal(partNamed(parts, "hall-floor").color, "#112233");
+  assert.equal(partNamed(parts, "start-spawn").color, "#112233");
+  assert.equal(partNamed(parts, "hall-wall-north-1").color, "#445566");
+});

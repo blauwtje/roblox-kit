@@ -1,4 +1,5 @@
 import { config } from "../config.ts";
+import type { Preset } from "../style/preset-schema.ts";
 import type { MapSpec, RoomSpec, TerrainFill } from "./map-spec.ts";
 
 export interface Vector {
@@ -14,10 +15,26 @@ export interface PartRecord {
   /** The zone (room name) the part belongs to. */
   room: string;
   kind: "floor" | "wall" | "spawn";
+  /** The style surface the part is painted from. */
+  role: SurfaceRole;
+  /** A #rrggbb color: the style's color for `role`, or the shipped default without a style. */
+  color: string;
   position: Vector;
   size: Vector;
   material: string;
 }
+
+/** The surface roles a part is painted from; each names a `surfaces` entry of a preset. */
+export type SurfaceRole = keyof Preset["surfaces"];
+
+/** The colors of the surface roles a part can take; a preset's `surfaces` fits this shape. */
+export type SurfaceColors = Record<"floor" | "wall", { color: string }>;
+
+/** Neutral grays used when the map spec has no style. */
+const defaultSurfaceColors: SurfaceColors = {
+  floor: { color: "#8a8a8a" },
+  wall: { color: "#b8b8b8" },
+};
 
 export interface MapLayout {
   parts: PartRecord[];
@@ -32,6 +49,8 @@ interface RoomStyle {
   wallHeight: number;
   wallThickness: number;
   doorWidth: number;
+  floorColor: string;
+  wallColor: string;
 }
 
 /** A stretch of wall, measured along the wall from its center. */
@@ -43,13 +62,15 @@ interface Interval {
 const sides: Side[] = ["north", "south", "east", "west"];
 
 /** Room settings win over map settings, which win over the config defaults. */
-function resolveStyle(spec: MapSpec, room: RoomSpec): RoomStyle {
+function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): RoomStyle {
   return {
     floorMaterial: room.floorMaterial ?? spec.floorMaterial ?? config.defaultFloorMaterial,
     wallMaterial: room.wallMaterial ?? spec.wallMaterial ?? config.defaultWallMaterial,
     wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
     wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
     doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
+    floorColor: surfaces.floor.color,
+    wallColor: surfaces.wall.color,
   };
 }
 
@@ -105,6 +126,8 @@ function wallParts(room: RoomSpec, style: RoomStyle): PartRecord[] {
         name: `${room.name}${config.wallNameInfix}${side}-${String(index + 1)}`,
         room: room.name,
         kind: "wall",
+        role: "wall",
+        color: style.wallColor,
         position: {
           x: room.x + (runsAlongX ? alongCenter : acrossOffset),
           y: style.wallHeight / 2,
@@ -127,6 +150,8 @@ function floorPart(room: RoomSpec, style: RoomStyle): PartRecord {
     name: `${room.name}${config.floorNameSuffix}`,
     room: room.name,
     kind: "floor",
+    role: "floor",
+    color: style.floorColor,
     position: { x: room.x, y: -style.wallThickness / 2, z: room.z },
     size: { x: room.width, y: style.wallThickness, z: room.depth },
     material: style.floorMaterial,
@@ -139,6 +164,8 @@ function spawnPart(room: RoomSpec, style: RoomStyle): PartRecord {
     name: `${room.name}${config.spawnNameSuffix}`,
     room: room.name,
     kind: "spawn",
+    role: "floor",
+    color: style.floorColor,
     position: { x: room.x, y: style.wallThickness / 2, z: room.z },
     size: { x: style.doorWidth, y: style.wallThickness, z: style.doorWidth },
     material: style.floorMaterial,
@@ -154,11 +181,14 @@ function assertRoomFits(room: RoomSpec, style: RoomStyle): void {
   }
 }
 
-/** Turns a map spec into parts and terrain fills; the same spec always yields the same layout. */
-export function layoutMap(spec: MapSpec): MapLayout {
+/** Turns a map spec into parts and terrain fills; the same spec and surfaces always yield the same layout. */
+export function layoutMap(
+  spec: MapSpec,
+  surfaces: SurfaceColors = defaultSurfaceColors,
+): MapLayout {
   const parts: PartRecord[] = [];
   for (const room of spec.rooms) {
-    const style = resolveStyle(spec, room);
+    const style = resolveStyle(spec, room, surfaces);
     assertRoomFits(room, style);
     parts.push(floorPart(room, style), ...wallParts(room, style));
     if (room.spawn) {
