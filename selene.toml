@@ -1,1 +1,2 @@
 std = "roblox"
+exclude = ["docs/research-parts/*"]
