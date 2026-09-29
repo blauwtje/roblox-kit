@@ -167,3 +167,41 @@ await test("check-map.luau is strict, caps its issue lists and reads the map fro
   assert.ok(source.includes("CreatePath"));
   assert.ok(source.includes("Call build_map with this mapId first"));
 });
+
+await test("check-map.luau counts an overlap only between two collidable parts, in a broad then a narrow pass", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const overlapSource = source.slice(
+    source.indexOf("local function findOverlaps("),
+    source.indexOf("local function rayOrigins("),
+  );
+  const broadPass = overlapSource.indexOf("GetPartBoundsInBox");
+  const narrowPass = overlapSource.indexOf("GetPartsInPart");
+  assert.ok(broadPass !== -1 && narrowPass > broadPass);
+  assert.ok(overlapSource.includes("params.RespectCanCollide = true"));
+  // A non-colliding part is skipped as the queried part; RespectCanCollide drops it from the results.
+  assert.ok(overlapSource.includes("if not part.CanCollide then"));
+  assert.ok(!source.includes("findContacts"));
+});
+
+await test("check-map.luau reports a part as floating when none of five downward rays hits support", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const floatingSource = source.slice(
+    source.indexOf("local function rayOrigins("),
+    source.indexOf("local function isWithinFootprint("),
+  );
+  // One origin at the bottom face center and one per footprint corner.
+  const originBlock = floatingSource.slice(
+    floatingSource.indexOf("return {"),
+    floatingSource.indexOf("\nend"),
+  );
+  assert.equal(originBlock.match(/Vector3\.new\(/g)?.length, 5);
+  assert.ok(floatingSource.includes("box.part.Position.X"));
+  assert.ok(floatingSource.includes("workspace:Raycast(origin, reach, params)"));
+  assert.ok(floatingSource.includes("Vector3.new(0, -2 * tolerance, 0)"));
+  // The part's own body is excluded from its rays, and non-colliding parts are neither cast from nor hit.
+  assert.ok(floatingSource.includes("params.FilterDescendantsInstances = { part }"));
+  assert.ok(floatingSource.includes("params.FilterType = Enum.RaycastFilterType.Exclude"));
+  assert.ok(floatingSource.includes("params.RespectCanCollide = true"));
+  assert.ok(floatingSource.includes("if not part.CanCollide or isGround(box) then"));
+  assert.ok(floatingSource.includes('kind = "floating"'));
+});

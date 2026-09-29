@@ -119,75 +119,112 @@ local function addIssue(issue: Issue)
 	end
 end
 
--- Finds overlaps and the contact graph in one sweep over the boxes sorted by their lowest X.
-local function findOverlapsAndContacts(boxes: { Box }): { { number } }
-	local tolerance = arguments.overlapToleranceStuds
-	local contacts: { { number } } = {}
-	for index = 1, #boxes do
-		contacts[index] = {}
-	end
-	for firstIndex, first in boxes do
-		for secondIndex = firstIndex + 1, #boxes do
-			local second = boxes[secondIndex]
-			if second.min.X > first.max.X + tolerance then
-				break
-			end
-			local overlap = Vector3.new(
-				math.min(first.max.X, second.max.X) - math.max(first.min.X, second.min.X),
-				math.min(first.max.Y, second.max.Y) - math.max(first.min.Y, second.min.Y),
-				math.min(first.max.Z, second.max.Z) - math.max(first.min.Z, second.min.Z)
-			)
-			local depth = math.min(overlap.X, overlap.Y, overlap.Z)
-			if depth >= -tolerance then
-				table.insert(contacts[firstIndex], secondIndex)
-				table.insert(contacts[secondIndex], firstIndex)
-			end
-			-- Decorative parts (CanCollide false) may sit inside others; they still count as contacts above. This
-			-- box test stands in for GetPartsInPart with OverlapParams.RespectCanCollide until Task 45 replaces it.
-			if depth > tolerance and first.part.CanCollide and second.part.CanCollide then
-				local center = Vector3.new(
-					math.max(first.min.X, second.min.X) + overlap.X / 2,
-					math.max(first.min.Y, second.min.Y) + overlap.Y / 2,
-					math.max(first.min.Z, second.min.Z) + overlap.Z / 2
-				)
-				addIssue({
-					kind = "overlapping",
-					parts = { first.part:GetFullName(), second.part:GetFullName() },
-					position = toPosition(center),
-					detail = `interpenetrate by {string.format("%.2f", depth)} studs`,
-				})
-			end
-		end
-	end
-	return contacts
+-- How far two boxes interpenetrate along each axis; negative on an axis where they are apart.
+local function overlapExtent(first: Box, second: Box): Vector3
+	return Vector3.new(
+		math.min(first.max.X, second.max.X) - math.max(first.min.X, second.min.X),
+		math.min(first.max.Y, second.max.Y) - math.max(first.min.Y, second.min.Y),
+		math.min(first.max.Z, second.max.Z) - math.max(first.min.Z, second.min.Z)
+	)
 end
 
--- Marks every box connected to the ground through contacts, then reports the boxes left unmarked.
-local function findFloating(boxes: { Box }, contacts: { { number } })
-	local grounded: { [number]: boolean } = {}
-	local pending: { number } = {}
-	for index, box in boxes do
-		if isGround(box) then
-			grounded[index] = true
-			table.insert(pending, index)
+-- Two passes per collidable part: GetPartBoundsInBox on the box shrunk by the tolerance cheaply drops parts that
+-- only touch, then GetPartsInPart confirms the survivors against the exact shape. OverlapParams.RespectCanCollide
+-- leaves decorative parts out of both results. The reported depth comes from the axis-aligned boxes, which is
+-- exact for the unrotated parts build_map makes.
+local function findOverlaps(model: Model, boxes: { Box })
+	local tolerance = arguments.overlapToleranceStuds
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { model }
+	params.RespectCanCollide = true
+	local boxOfPart: { [BasePart]: Box } = {}
+	for _, box in boxes do
+		boxOfPart[box.part] = box
+	end
+	local reported: { [BasePart]: boolean } = {}
+	for _, first in boxes do
+		local part = first.part
+		if not part.CanCollide then
+			continue
+		end
+		local broadSize = part.Size - Vector3.new(2, 2, 2) * tolerance
+		if broadSize.X <= 0 or broadSize.Y <= 0 or broadSize.Z <= 0 then
+			continue
+		end
+		local broad: { [BasePart]: boolean } = {}
+		for _, candidate in workspace:GetPartBoundsInBox(part.CFrame, broadSize, params) do
+			broad[candidate] = true
+		end
+		-- Each pair is reported from the part processed first, so a part already handled is skipped.
+		reported[part] = true
+		for _, other in workspace:GetPartsInPart(part, params) do
+			if other == part or reported[other] or not broad[other] then
+				continue
+			end
+			local second = boxOfPart[other]
+			local extent = overlapExtent(first, second)
+			local center = Vector3.new(
+				math.max(first.min.X, second.min.X) + extent.X / 2,
+				math.max(first.min.Y, second.min.Y) + extent.Y / 2,
+				math.max(first.min.Z, second.min.Z) + extent.Z / 2
+			)
+			addIssue({
+				kind = "overlapping",
+				parts = { part:GetFullName(), other:GetFullName() },
+				position = toPosition(center),
+				detail = `interpenetrate by {string.format("%.2f", math.min(extent.X, extent.Y, extent.Z))} studs`,
+			})
 		end
 	end
-	while #pending > 0 do
-		local index = table.remove(pending) :: number
-		for _, neighbour in contacts[index] do
-			if not grounded[neighbour] then
-				grounded[neighbour] = true
-				table.insert(pending, neighbour)
+end
+
+-- The five points a floating part is cast from: the middle of its bottom face and its four footprint corners,
+-- each pulled in by the tolerance so a corner ray does not slip past the edge of the part below.
+local function rayOrigins(box: Box): { Vector3 }
+	local inset = arguments.overlapToleranceStuds
+	local originY = box.min.Y + inset
+	local minX, maxX = box.min.X + inset, box.max.X - inset
+	local minZ, maxZ = box.min.Z + inset, box.max.Z - inset
+	return {
+		Vector3.new(box.part.Position.X, originY, box.part.Position.Z),
+		Vector3.new(minX, originY, minZ),
+		Vector3.new(minX, originY, maxZ),
+		Vector3.new(maxX, originY, minZ),
+		Vector3.new(maxX, originY, maxZ),
+	}
+end
+
+-- A collidable part is supported when any of its five downward rays hits another collidable part or Terrain within
+-- the tolerance below its bottom face, or the part is ground. Decorative parts (CanCollide false, CanQuery false)
+-- hang on walls instead of resting on the ground, so they are neither checked nor hit. A part resting only on a part
+-- that itself floats counts as supported; lift this by grounding hits recursively.
+local function findFloating(boxes: { Box })
+	local tolerance = arguments.overlapToleranceStuds
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	params.IgnoreWater = true
+	local reach = Vector3.new(0, -2 * tolerance, 0)
+	for _, box in boxes do
+		local part = box.part
+		if not part.CanCollide or isGround(box) then
+			continue
+		end
+		params.FilterDescendantsInstances = { part }
+		local supported = false
+		for _, origin in rayOrigins(box) do
+			if workspace:Raycast(origin, reach, params) then
+				supported = true
+				break
 			end
 		end
-	end
-	for index, box in boxes do
-		if not grounded[index] then
+		if not supported then
 			addIssue({
 				kind = "floating",
-				parts = { box.part:GetFullName() },
-				position = toPosition(box.part.Position),
-				detail = "touches no part or terrain that leads down to the ground",
+				parts = { part:GetFullName() },
+				position = toPosition(part.Position),
+				detail = `no part or terrain within {tolerance} studs below its center or footprint corners`,
 			})
 		end
 	end
@@ -251,8 +288,8 @@ end
 
 local model = findMapModel()
 local boxes = collectBoxes(model)
-local contacts = findOverlapsAndContacts(boxes)
-findFloating(boxes, contacts)
+findOverlaps(model, boxes)
+findFloating(boxes)
 local zoneCount, reachabilityChecked = findUnreachableZones(boxes)
 
 return HttpService:JSONEncode({
