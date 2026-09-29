@@ -61,7 +61,7 @@ Depends on: none | Files: `src/map/prop-placement.ts`, `src/map/prop-placement.t
 ### Task 8: feat(map): place set pieces by room type
 Depends on: 6, 7 | Files: `src/map/set-piece-placement.ts`, `src/map/set-piece-placement.test.ts`, `src/map/build-map-tool.ts` | Data: an array of prop records per typed room, track bed and platform edge along the longest doorless wall, a counter facing the entry door, a sign inside above each door | Proof: node --test src/map/set-piece-placement.test.ts
 ### Task 9: feat(presets): give the train station its room types and set pieces
-Depends on: 1, 8 | Files: `presets/train-station.json`, `eval/benchmarks/train-station.json`, `scripts/smoke-studio.ts` | Data: room types `concourse`, `platform`, `ticket-hall` in the preset, typed rooms in the benchmark and the smoke map | Proof: npm run smoke:studio
+Depends on: 1, 8 | Files: `presets/train-station.json`, `eval/benchmarks/train-station.json`, `scripts/smoke-studio.ts`, `luau/build-map.luau` | Data: build-map.luau turns each prop by its `yaw` and sets its `attributes` (Task 8 emits both); room types `concourse`, `platform`, `ticket-hall` in the preset, typed rooms in the benchmark and the smoke map | Proof: npm run smoke:studio
 ### Task 10: feat(map): add lab bench, cell bars, control console, crate stack and fireplace generators
 Depends on: 7 | Files: `src/map/prop-placement.ts`, `src/map/prop-placement.test.ts`, `luau/props/lab-bench.luau`, `luau/props/cell-bars.luau`, `luau/props/control-console.luau`, `luau/props/crate-stack.luau`, `luau/props/fireplace.luau` | Data: five more entries in `propKinds` and the dimensions table | Proof: npm run lint:luau
 ### Task 11: feat(presets): give horror facility, sci-fi station and cozy town their room types and set pieces
