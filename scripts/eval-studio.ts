@@ -173,13 +173,13 @@ try {
       const named =
         check.answer === undefined
           ? `nothing (${String(check.error)})`
-          : `${check.answer.genre} / ${check.answer.room}`;
+          : `${check.answer.genre} / ${check.answer.room} (${check.answer.furnished})`;
       console.log(
         `  ${check.room} (${check.roomType}): named ${named}: ${check.passed ? "pass" : "fail"}`,
       );
       if (!check.passed) {
         failedPlaceChecks.push(
-          `${line.benchmark} ${check.room}: named ${named}, not ${check.genre} / ${check.roomType}`,
+          `${line.benchmark} ${check.room}: named ${named}, not ${check.genre} / ${check.roomType} furnished`,
         );
       }
     }

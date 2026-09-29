@@ -20,7 +20,12 @@ await test("a prompt without the eval source line is rejected", () => {
 });
 
 await test("the room matches ignoring case, spaces and hyphens; another genre or unknown does not", () => {
-  const answer = { clues: "", genre: "train-station", room: "Ticket Hall" };
+  const answer = {
+    clues: "",
+    furnished: "furnished" as const,
+    genre: "train-station",
+    room: "Ticket Hall",
+  };
   assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), true);
   assert.equal(placeMatches(answer, "train-station", "platform", []), false);
   assert.equal(
@@ -30,7 +35,12 @@ await test("the room matches ignoring case, spaces and hyphens; another genre or
 });
 
 await test("a name the room type lists matches, ignoring case, spaces and hyphens; an unlisted one does not", () => {
-  const answer = { clues: "", genre: "train-station", room: "Main Concourse" };
+  const answer = {
+    clues: "",
+    furnished: "furnished" as const,
+    genre: "train-station",
+    room: "Main Concourse",
+  };
   assert.equal(placeMatches(answer, "train-station", "ticket-hall", ["main-concourse"]), true);
   assert.equal(placeMatches(answer, "train-station", "ticket-hall", ["waiting room"]), false);
   assert.equal(
@@ -38,5 +48,19 @@ await test("a name the room type lists matches, ignoring case, spaces and hyphen
       "main-concourse",
     ]),
     false,
+  );
+});
+
+await test("an empty answer fails even when the genre and room are right", () => {
+  const answer = {
+    clues: "",
+    genre: "train-station",
+    room: "ticket hall",
+    furnished: "empty" as const,
+  };
+  assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), false);
+  assert.equal(
+    placeMatches({ ...answer, furnished: "furnished" }, "train-station", "ticket-hall", []),
+    true,
   );
 });

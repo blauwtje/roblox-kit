@@ -16,6 +16,7 @@ const placeAnswerSchema = z.object({
   clues: z.string(),
   genre: z.string(),
   room: z.string(),
+  furnished: z.enum(["furnished", "empty"]),
 });
 
 export type PlaceAnswer = z.output<typeof placeAnswerSchema>;
@@ -71,7 +72,7 @@ function normalizedRoom(name: string): string {
 
 /**
  * Whether the reviewer named the spec's genre and either the room type or one of its `acceptedNames`
- * (SKILL.md step 5); `unknown` never matches.
+ * (SKILL.md step 5), and did not call the room `empty`; `unknown` never matches.
  */
 export function placeMatches(
   answer: PlaceAnswer,
@@ -82,6 +83,7 @@ export function placeMatches(
   const named = normalizedRoom(answer.room);
   return (
     answer.genre === genre &&
+    answer.furnished === "furnished" &&
     [roomType, ...acceptedNames].some((accepted) => normalizedRoom(accepted) === named)
   );
 }

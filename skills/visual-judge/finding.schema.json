@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "severity", "evidence", "reasoning", "verdict"],
-  "if": { "properties": { "type": { "const": "unidentified-place" } } },
+  "if": { "properties": { "type": { "enum": ["unidentified-place", "empty-room"] } } },
   "then": { "properties": { "severity": { "const": "blocker" } } },
   "properties": {
     "type": {
@@ -20,7 +20,8 @@
         "lighting",
         "spec-miss",
         "visual",
-        "unidentified-place"
+        "unidentified-place",
+        "empty-room"
       ]
     },
     "severity": {
