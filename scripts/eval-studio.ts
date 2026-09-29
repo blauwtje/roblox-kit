@@ -80,13 +80,23 @@ async function evaluate(file: string, connection: StudioConnection) {
     },
     connection,
   );
-  const captured = await callTool(captureZonesTool, { mapId: spec.mapId }, connection);
-  if (captured.output.remainingZones.length > 0) {
-    throw new Error(
-      `${benchmark}: zones left uncaptured: ${captured.output.remainingZones.join(", ")}.`,
-    );
-  }
-  const captures = await saveCaptures(benchmark, captured.output.shots, captured.content);
+  const capturePaths = new Set<string>();
+  const captureWarnings: string[] = [];
+  let zones: string[] | undefined;
+  do {
+    const captured = await callTool(captureZonesTool, { mapId: spec.mapId, zones }, connection);
+    if (zones !== undefined && captured.output.remainingZones.length >= zones.length) {
+      throw new Error(
+        `${benchmark}: zones left uncaptured: ${captured.output.remainingZones.join(", ")}.`,
+      );
+    }
+    // Every call repeats the whole-map cutaway under the same file name, so the set keeps one path.
+    const paths = await saveCaptures(benchmark, captured.output.shots, captured.content);
+    for (const path of paths) capturePaths.add(path);
+    captureWarnings.push(...captured.output.warnings);
+    zones = captured.output.remainingZones;
+  } while (zones.length > 0);
+  const captures = [...capturePaths];
   const budget = spec.performanceBudget;
   return {
     benchmark,
@@ -104,7 +114,7 @@ async function evaluate(file: string, connection: StudioConnection) {
     partCount: built.output.partCount,
     zoneCount: checked.output.zoneCount,
     captures,
-    captureWarnings: captured.output.warnings,
+    captureWarnings,
   };
 }
 
