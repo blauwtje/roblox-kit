@@ -95,6 +95,20 @@ await test("a style with overrides and a seed builds like the same spec without 
   assert.equal(buildMapTool.outputSchema.parse(result.structuredContent).partCount, 14);
 });
 
+await test("a style sends its palette colors and role variants; without a style, defaults and no variants", async () => {
+  const styledStudio = studioReturning('{"partCount":14,"replaced":false}');
+  await run(styledStudio, { ...twoRoomSpec, style: { preset: "train-station" } });
+  const styledCode = String(styledStudio.requests[0]?.arguments["code"]);
+  assert.ok(styledCode.includes('"color":"#8a7f70"'));
+  assert.ok(styledCode.includes('"variants":{"wall":{"baseMaterial":"Brick","studsPerTile":8}}'));
+
+  const plainStudio = studioReturning('{"partCount":14,"replaced":false}');
+  await run(plainStudio, twoRoomSpec);
+  const plainCode = String(plainStudio.requests[0]?.arguments["code"]);
+  assert.ok(plainCode.includes('"variants":{}'));
+  assert.ok(plainCode.includes('"color":"#b8b8b8"'));
+});
+
 await test("an unknown preset fails naming the known ones before Studio is asked", async () => {
   const studio = studioReturning("{}");
   await assert.rejects(
@@ -123,5 +137,7 @@ await test("build-map.luau is strict, guards its build with a recording and chec
   assert.ok(source.startsWith("--!strict"));
   assert.ok(source.includes("TryBeginRecording"));
   assert.ok(source.includes("Enum.FinishRecordingOperation.Cancel"));
+  assert.ok(source.includes("MaterialService"));
+  assert.ok(source.includes("Color3.fromHex"));
   assert.ok(source.indexOf("assertMaterialsExist()") < source.indexOf("TryBeginRecording"));
 });

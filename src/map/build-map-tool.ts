@@ -5,6 +5,7 @@ import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
+import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { mapSpecSchema, type TerrainFill } from "./map-spec.ts";
@@ -31,6 +32,7 @@ const buildMapOutput = z.strictObject({
 /** What `build-map.luau` reports about the Model it built. */
 const builtMapSchema = z.strictObject({ partCount: z.number().int(), replaced: z.boolean() });
 
+type Variant = NonNullable<Preset["surfaces"][keyof Preset["surfaces"]]["variant"]>;
 type Bounds = z.infer<typeof boundsSchema>;
 
 function boundsOfBox(center: Vector, size: Vector): Bounds {
@@ -79,11 +81,22 @@ function zonesOf(parts: PartRecord[]): z.infer<typeof buildMapOutput>["zones"] {
   }));
 }
 
+/** The flat MaterialVariant of each surface role of the style that names one; none without a style. */
+function variantsOf(style: Preset | undefined): Record<string, Variant> {
+  const variants: Record<string, Variant> = {};
+  for (const [role, surface] of Object.entries(style?.surfaces ?? {})) {
+    if (surface.variant !== undefined) {
+      variants[role] = surface.variant;
+    }
+  }
+  return variants;
+}
+
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. An optional style { preset, overrides } names a genre preset and is checked before Studio is asked; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
@@ -98,10 +111,8 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   },
   async handler(input, context) {
     // Resolving the style and laying out first keep a spec that cannot be built from touching Studio.
-    if (input.style !== undefined) {
-      resolveStyle(presets, input.style);
-    }
-    const layout = layoutMap(input);
+    const style = input.style === undefined ? undefined : resolveStyle(presets, input.style);
+    const layout = layoutMap(input, style?.surfaces);
     const studioId = await selectStudio(context.studio, input.studioId);
     const built = await runLuauFile({
       connection: context.studio,
@@ -113,6 +124,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
         mapsFolderName: config.mapsFolderName,
         parts: layout.parts,
         terrainFills: layout.terrainFills,
+        variants: variantsOf(style),
       },
       resultSchema: builtMapSchema,
     });

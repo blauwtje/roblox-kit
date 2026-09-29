@@ -8,7 +8,14 @@ type PartRecord = {
 	kind: string,
 	position: Vector,
 	size: Vector,
+	role: string,
+	color: string,
 	material: string,
+}
+
+type Variant = {
+	baseMaterial: string,
+	studsPerTile: number,
 }
 
 type TerrainFill = {
@@ -24,6 +31,8 @@ type Arguments = {
 	mapsFolderName: string,
 	parts: { PartRecord },
 	terrainFills: { TerrainFill },
+	-- Flat MaterialVariant of each surface role that has one.
+	variants: { [string]: Variant },
 }
 
 -- Attribute on the map Model holding the terrain fills of its build as JSON, so a rebuild can clear them.
@@ -32,6 +41,7 @@ local TERRAIN_ATTRIBUTE_NAME = "RobloxKitTerrainFills"
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local HttpService = game:GetService("HttpService")
+local MaterialService = game:GetService("MaterialService")
 
 local function toVector3(vector: Vector): Vector3
 	return Vector3.new(vector.x, vector.y, vector.z)
@@ -50,6 +60,9 @@ local function assertMaterialsExist()
 	end
 	for _, fill in arguments.terrainFills do
 		check(fill.material)
+	end
+	for _, variant in arguments.variants do
+		check(variant.baseMaterial)
 	end
 	if #unknown > 0 then
 		error(
@@ -95,6 +108,28 @@ local function mapsFolder(): Instance
 	return folder
 end
 
+-- The MaterialVariant of a role, named after the map and role; a rebuild reuses it and refreshes its values.
+local function variantFor(role: string, variant: Variant): MaterialVariant
+	local variantName = `{arguments.mapId}-{role}`
+	local existing = MaterialService:FindFirstChild(variantName)
+	local materialVariant = if existing and existing:IsA("MaterialVariant")
+		then existing
+		else Instance.new("MaterialVariant")
+	materialVariant.Name = variantName
+	materialVariant.BaseMaterial = materialNamed(variant.baseMaterial)
+	materialVariant.StudsPerTile = variant.studsPerTile
+	materialVariant.Parent = MaterialService
+	return materialVariant
+end
+
+-- A variant only renders on a part whose Material is the variant's base material.
+local function applyVariant(part: BasePart, record: PartRecord)
+	local variant = arguments.variants[record.role]
+	if variant and variant.baseMaterial == record.material then
+		part.MaterialVariant = variantFor(record.role, variant).Name
+	end
+end
+
 local function newPart(record: PartRecord): BasePart
 	local part: BasePart = if record.kind == "spawn" then Instance.new("SpawnLocation") else Instance.new("Part")
 	part.Name = record.name
@@ -102,6 +137,8 @@ local function newPart(record: PartRecord): BasePart
 	part.Size = toVector3(record.size)
 	part.Position = toVector3(record.position)
 	part.Material = materialNamed(record.material)
+	part.Color = Color3.fromHex(record.color)
+	applyVariant(part, record)
 	return part
 end
 

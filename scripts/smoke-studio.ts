@@ -7,10 +7,13 @@ import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { mapSpecSchema } from "../src/map/map-spec.ts";
+import { loadPresets } from "../src/style/load-preset.ts";
 import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+
+const presets = await loadPresets();
 
 const capabilitiesSchema = z.array(
   z.object({ capability: z.string(), ok: z.boolean(), detail: z.string() }),
@@ -144,6 +147,9 @@ local function destroyNamed(container, name)
   end
 end
 destroyNamed(workspace, "${config.mapsFolderName}")
+for _, variant in game:GetService("MaterialService"):GetChildren() do
+  if variant:IsA("MaterialVariant") and string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then variant:Destroy() end
+end
 destroyNamed(ServerScriptService, "RobloxKitPlaytestServerHarness")
 destroyNamed(StarterPlayerScripts, "RobloxKitPlaytestClientHarness")
 local min = Vector3.new(${smokeRegion.min.join(", ")})
@@ -168,6 +174,10 @@ for x = 1, voxels.Size.X do
     end
   end
 end
+local smokeVariants = 0
+for _, variant in game:GetService("MaterialService"):GetChildren() do
+  if string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then smokeVariants += 1 end
+end
 local harnesses = 0
 for _, name in { "RobloxKitPlaytestServerHarness", "RobloxKitPlaytestClientHarness" } do
   if game:GetService("ServerScriptService"):FindFirstChild(name) then harnesses += 1 end
@@ -175,13 +185,14 @@ for _, name in { "RobloxKitPlaytestServerHarness", "RobloxKitPlaytestClientHarne
   if scripts and scripts:FindFirstChild(name) then harnesses += 1 end
 end
 return game:GetService("HttpService"):JSONEncode({
-  workspace = names, serverStorage = #storage, solidTerrainVoxels = solid, harnesses = harnesses,
+  workspace = names, smokeVariants = smokeVariants, serverStorage = #storage, solidTerrainVoxels = solid, harnesses = harnesses,
 })`;
 
 const placeStateSchema = z.object({
   workspace: z.array(z.string()),
   serverStorage: z.number(),
   solidTerrainVoxels: z.number(),
+  smokeVariants: z.number(),
   harnesses: z.number(),
 });
 
@@ -241,6 +252,54 @@ async function probeBuildMap(connection: StudioConnection): Promise<string> {
     layout.parts.length,
   );
   return `${String(output.partCount)} parts in ${String(output.zones.length)} zones`;
+}
+
+/** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */
+const paintedMapLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local variant = game:GetService("MaterialService"):FindFirstChild("${smokeMapSpec.mapId}-wall")
+local painted = { floors = {}, walls = {}, wallVariants = {}, variantBase = "", variantStuds = 0 }
+for _, part in model:GetChildren() do
+  local list = if string.find(part.Name, "floor", 1, true) then painted.floors elseif string.find(part.Name, "wall", 1, true) then painted.walls else nil
+  if list then table.insert(list, part.Color:ToHex()) end
+  if list == painted.walls then table.insert(painted.wallVariants, part.MaterialVariant) end
+end
+if variant and variant:IsA("MaterialVariant") then
+  painted.variantBase = variant.BaseMaterial.Name
+  painted.variantStuds = variant.StudsPerTile
+end
+return game:GetService("HttpService"):JSONEncode(painted)`;
+
+const paintedMapSchema = z.object({
+  floors: z.array(z.string()),
+  walls: z.array(z.string()),
+  wallVariants: z.array(z.string()),
+  variantBase: z.string(),
+  variantStuds: z.number(),
+});
+
+async function probePaintedMap(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const painted = paintedMapSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, paintedMapLuau)),
+  );
+  const { surfaces } = presets.get("train-station") ?? {};
+  const variant = surfaces?.wall.variant;
+  if (surfaces === undefined || variant === undefined) {
+    throw new Error("The train-station preset no longer names a wall MaterialVariant.");
+  }
+  const hex = (color: string) => color.slice(1).toLowerCase();
+  expectEqual("floor colors", [...new Set(painted.floors)], [hex(surfaces.floor.color)]);
+  expectEqual("wall colors", [...new Set(painted.walls)], [hex(surfaces.wall.color)]);
+  expectEqual("wall parts built", painted.walls.length > 0, true);
+  expectEqual(
+    "wall MaterialVariant names",
+    [...new Set(painted.wallVariants)],
+    [`${smokeMapSpec.mapId}-wall`],
+  );
+  expectEqual("MaterialVariant base", painted.variantBase, variant.baseMaterial);
+  expectEqual("MaterialVariant studsPerTile", painted.variantStuds, variant.studsPerTile);
+  return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
 }
 
 async function probeCheckMap(connection: StudioConnection): Promise<string> {
@@ -311,6 +370,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   try {
     const steps: [string, () => Promise<string>][] = [
       ["build_map", () => probeBuildMap(connection)],
+      ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],
       [
@@ -362,6 +422,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       expectEqual("ServerStorage children", state.serverStorage, 0);
       expectEqual("terrain voxels over the map region", state.solidTerrainVoxels, 0);
       expectEqual("harness scripts left", state.harnesses, 0);
+      expectEqual("smoke MaterialVariants left", state.smokeVariants, 0);
       return Promise.resolve(JSON.stringify(state));
     }),
   );
