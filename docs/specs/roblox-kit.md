@@ -136,7 +136,7 @@ Depends on: 40 | Files: `src/server/tool-definition.ts`, `src/server/main.ts`, `
 ### Task 42: feat(map): group a layout into six ordered build phases
 Depends on: 41 | Files: `src/map/build-phases.ts`, `src/map/build-phases.test.ts` | Data: an ordered array of `{ name, parts }` for shell, floors and ceilings, openings, surfaces, props, lighting | Proof: npm run check
 ### Task 43: feat(map): run build_map as six execute_luau phases with progress
-Depends on: 42 | Files: `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `luau/build-map.luau`, `scripts/smoke-studio.ts` | Data: one `build-map.luau` call per phase with the phase name as argument, result gains `phases: [{ name, partCount }]` | Proof: npm run smoke:studio
+Depends on: 42 | Files: `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `luau/build-map.luau`, `scripts/smoke-studio.ts`, `luau/apply-lighting.luau`, `src/lighting/apply-lighting.ts`, `src/lighting/apply-lighting.test.ts` | Data: one `build-map.luau` call per phase with the phase name as argument, result gains `phases: [{ name, partCount }]` | Proof: npm run smoke:studio
 ### Task 44: feat(map): add objectives and a performance budget to the map spec
 Depends on: 43 | Files: `src/map/map-spec.ts`, `src/map/map-spec.test.ts`, `src/config.ts` | Data: optional `objectives` array and `performanceBudget` object, defaults `config.maxDrawCalls` 1,000 and `config.maxTriangles` 1,000,000 | Proof: npm run check
 ### Task 45: feat(map): check overlap in two passes and floating with five rays
