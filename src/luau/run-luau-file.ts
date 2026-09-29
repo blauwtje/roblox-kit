@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { config } from "../config.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
 
 const bundledLuauDirectory = new URL("../../luau/", import.meta.url);
@@ -59,6 +60,11 @@ export async function runLuauFile<Schema extends z.ZodType>(
   const text = resultText(toolResult);
   if (toolResult.isError === true) {
     throw new Error(`${request.fileName} failed in Studio: ${text}`);
+  }
+  if (text.endsWith(config.executeLuauTruncationMarker)) {
+    throw new Error(
+      `${request.fileName} returned more than ${String(config.executeLuauMaxResultChars)} characters and Studio truncated it. Narrow the request (fewer zones or parts, or a smaller page) and retry.`,
+    );
   }
   let resultJson: unknown;
   try {

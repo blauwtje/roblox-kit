@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
+import { config } from "../config.ts";
 import { runLuauFile } from "./run-luau-file.ts";
 
 const pingSchema = z.object({ pong: z.boolean(), echo: z.string() });
@@ -79,5 +80,13 @@ await test("rejects a file that is not bundled", async () => {
       resultSchema: z.object({}),
     }),
     /ENOENT/,
+  );
+});
+
+await test("a result ending in the truncation marker is an actionable error, not a parse failure", async () => {
+  const truncated = `{"issues":[{"a":1}${config.executeLuauTruncationMarker}`;
+  await assert.rejects(
+    ping(connectionReturning(truncated), "hi"),
+    /truncated it\. Narrow the request/,
   );
 });
