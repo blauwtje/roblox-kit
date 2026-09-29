@@ -130,7 +130,7 @@ Depends on: 37 | Files: `luau/props/bench.luau`, `luau/props/lamp.luau`, `luau/p
 ### Task 39: feat(map): place props from the preset prop kit
 Depends on: 38 | Files: `src/map/prop-placement.ts`, `src/map/prop-placement.test.ts`, `presets/cozy-town.json`, `presets/horror-facility.json`, `presets/sci-fi-station.json`, `presets/train-station.json` | Data: one `{ kind, pivot, size, seed }` record per prop | Proof: npm run check
 ### Task 40: feat(map): build ceilings, details and ProceduralModel props
-Depends on: 39 | Files: `luau/build-map.luau`, `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `scripts/smoke-studio.ts` | Data: one generator ModuleScript per kind under the map Model, `WaitForGenerationAsync` before return | Proof: npm run smoke:studio
+Depends on: 39 | Files: `luau/build-map.luau`, `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `scripts/smoke-studio.ts`, `luau/check-map.luau` | Data: one generator ModuleScript per kind under the map Model, `WaitForGenerationAsync` before return | Proof: npm run smoke:studio
 ### Task 41: feat(server): pass a progress reporter to tool handlers
 Depends on: 40 | Files: `src/server/tool-definition.ts`, `src/server/main.ts`, `src/server/main.test.ts` | Data: a `reportProgress(progress, total, message)` function on ToolContext, a no-op without a progressToken | Proof: npm run check
 ### Task 42: feat(map): group a layout into six ordered build phases
