@@ -7,3 +7,10 @@ Task 2 44f7afe: wait before each screen_capture, since it sets its own camera an
 Task 2 44f7afe: 3000 ms, not measured against wall luminance (Task 3's measure script does that); raise it in config if back-to-back captures still differ.
 Task 2 44f7afe: the tool description states the per-image wait (an 11-image call takes about 33 s longer).
 Task 2 44f7afe: the test uses mock.timers and the code calls timers through the default module object (`timers.setTimeout`), since a named ESM import is not mockable.
+Task 6 5634f0f: a room type on a spec with no style is rejected as "declared room types: none" rather than ignored.
+Task 6 5634f0f: an empty roomType string is rejected by the schema (min 1), matching the preset's roomTypes keys.
+Task 8 477e8f2: typed rooms get only their set pieces and signs; plain kit props are placed only in untyped rooms (spec filtered before placeProps), so random props cannot overlap set pieces.
+Task 8 477e8f2: "entry door" = the room's first door; a piece other than track bed/platform edge stands on the opposite wall, centered on that door's offset (clamped), facing it; no door means south entry.
+Task 8 477e8f2: any setPieces kind that is a propKind but not track-bed/platform-edge/sign follows the counter rule (so Task 10/11 kinds place without edits); "sign" in setPieces is ignored since signs come from doors; unknown kind throws.
+Task 8 477e8f2: signs hang just inside the doorway under the arch lintel (door gaps are full wall height, so there is no wall above), facing into the room.
+Task 8 477e8f2: track bed and platform edge span the wall minus corner-pillar reach; a room with a door in every wall, or too small for a piece, throws a named error instead of dropping it.
