@@ -21,6 +21,7 @@ const setPieceKit = [
   "departure-board",
   "clock",
   "ticket-counter",
+  "ticket-machine",
 ];
 
 const hallSpec = mapSpecSchema.parse({

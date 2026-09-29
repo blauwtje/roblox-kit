@@ -25,6 +25,7 @@ export const propKinds = [
   "departure-board",
   "clock",
   "ticket-counter",
+  "ticket-machine",
 ] as const;
 
 export type PropKind = (typeof propKinds)[number];
@@ -71,6 +72,7 @@ export const propDimensions = Object.freeze({
   "departure-board": { x: 12, y: 10, z: 1 },
   clock: { x: 5, y: 11, z: 1.2 },
   "ticket-counter": { x: 14, y: 8, z: 3 },
+  "ticket-machine": { x: 3, y: 6, z: 2 },
 });
 
 const sides: Side[] = ["north", "south", "east", "west"];
