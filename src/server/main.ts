@@ -7,6 +7,7 @@ import {
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { config } from "../config.ts";
 import { buildMapTool } from "../map/build-map-tool.ts";
+import { captureZonesTool } from "../map/capture-zones-tool.ts";
 import { createCheckMapTool } from "../map/check-map-tool.ts";
 import { CheckReportStore } from "../map/check-report-store.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
@@ -18,7 +19,11 @@ import { toolErrorResult } from "./tool-error.ts";
 const checkReports = new CheckReportStore();
 
 /** The server's tools in `tools/list` order; each tool module adds its definition here. */
-export const tools: readonly ToolDefinition[] = [buildMapTool, createCheckMapTool(checkReports)];
+export const tools: readonly ToolDefinition[] = [
+  buildMapTool,
+  createCheckMapTool(checkReports),
+  captureZonesTool,
+];
 
 export interface ServerOptions {
   serverInfo: Implementation;
