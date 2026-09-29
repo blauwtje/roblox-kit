@@ -1,0 +1,169 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { test } from "node:test";
+import { Client } from "@modelcontextprotocol/client";
+import { InMemoryTransport } from "@modelcontextprotocol/server";
+import { config } from "../config.ts";
+import { createServer } from "../server/main.ts";
+import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
+import { createCheckMapTool } from "./check-map-tool.ts";
+import { CheckReportStore, type CheckIssue, type CheckReport } from "./check-report-store.ts";
+
+const studios = [{ id: "studio-a", name: "Place A" }];
+const partPath = (name: string) => `Workspace.${config.mapsFolderName}.arena.${name}`;
+
+function issueOf(kind: CheckIssue["kind"], name: string): CheckIssue {
+  return {
+    kind,
+    parts: [partPath(name)],
+    position: { x: 1, y: 2, z: 3 },
+    detail: `${kind} ${name}`,
+  };
+}
+
+function checkedMap(overrides: object = {}): string {
+  return JSON.stringify({
+    partCount: 9,
+    zoneCount: 2,
+    reachabilityChecked: true,
+    counts: { overlapping: 0, floating: 0, unreachable: 0 },
+    issues: { overlapping: [], floating: [], unreachable: [] },
+    ...overrides,
+  });
+}
+
+function studioReturning(text: string, isError = false) {
+  return new FakeStudioConnection(studios, {
+    execute_luau: () => ({ content: [{ type: "text", text }], isError }),
+  });
+}
+
+function setup(studio: FakeStudioConnection) {
+  const reports = new CheckReportStore();
+  const tool = createCheckMapTool(reports);
+  return {
+    reports,
+    tool,
+    run: (input: object) => tool.handler(tool.inputSchema.parse(input), { studio }),
+  };
+}
+
+await test("check_map has a strict schema, read-only annotations and the mapId lifetime in its description", () => {
+  const { tool } = setup(studioReturning(checkedMap()));
+  assert.equal(tool.annotations.readOnlyHint, true);
+  assert.match(tool.description, /handle lasts while that Model exists/);
+  assert.throws(() => tool.inputSchema.parse({ mapId: "arena", extra: 1 }));
+  assert.throws(() => tool.inputSchema.parse({}));
+});
+
+await test("a clean map passes and sends the map and tolerances to Studio", async () => {
+  const studio = studioReturning(checkedMap());
+  const { run } = setup(studio);
+  const result = await run({ mapId: "arena" });
+
+  const [request] = studio.requests;
+  assert.equal(request?.name, "execute_luau");
+  assert.equal(request.arguments["datamodel_type"], "Edit");
+  const code = String(request.arguments["code"]);
+  assert.ok(code.includes('"mapId":"arena"'));
+  assert.ok(code.includes(`"overlapToleranceStuds":${String(config.overlapToleranceStuds)}`));
+  assert.ok(code.includes(`"agentRadiusStuds":${String(config.pathfindingAgentRadiusStuds)}`));
+
+  assert.equal(result.isError, undefined);
+  const structured = result.structuredContent as { passed: boolean; issues: unknown[] };
+  assert.equal(structured.passed, true);
+  assert.deepEqual(structured.issues, []);
+  const [text, link] = result.content;
+  assert.deepEqual(JSON.parse(text?.type === "text" ? text.text : ""), structured);
+  assert.equal(link?.type, "resource_link");
+});
+
+await test("issues are listed inline up to a cap and all of them are stored under the linked report", async () => {
+  const overlapping = Array.from({ length: 15 }, (_, index) =>
+    issueOf("overlapping", `wall-${String(index)}`),
+  );
+  const floating = Array.from({ length: 10 }, (_, index) =>
+    issueOf("floating", `crate-${String(index)}`),
+  );
+  const unreachable = [issueOf("unreachable", "vault-floor")];
+  const studio = studioReturning(
+    checkedMap({
+      counts: { overlapping: 15, floating: 10, unreachable: 1 },
+      issues: { overlapping, floating, unreachable },
+    }),
+  );
+  const { reports, tool, run } = setup(studio);
+  const result = await run({ mapId: "arena" });
+
+  const structured = tool.outputSchema.parse(result.structuredContent);
+  assert.equal(structured.passed, false);
+  assert.deepEqual(structured.counts, { overlapping: 15, floating: 10, unreachable: 1 });
+  assert.equal(structured.issues.length, 20);
+  assert.equal(structured.issuesOmitted, 6);
+  assert.deepEqual(structured.issues[0]?.parts, [partPath("wall-0")]);
+
+  const link = result.content[1];
+  assert.ok(link?.type === "resource_link");
+  assert.equal(link.uri, structured.reportUri);
+  assert.ok(structured.reportUri.startsWith(config.checkReportUriPrefix));
+  assert.equal(reports.get(structured.reportId)?.issues.length, 26);
+});
+
+await test("a missing map or a malformed result fails, passing on Studio's actionable text", async () => {
+  const message =
+    'No map "arena" under Workspace.RobloxKitMaps. Call build_map with this mapId first.';
+  await assert.rejects(
+    setup(studioReturning(message, true)).run({ mapId: "arena" }),
+    /Call build_map/,
+  );
+  await assert.rejects(setup(studioReturning('{"partCount":"many"}')).run({ mapId: "arena" }));
+});
+
+await test("asks for a studioId when several Studios are connected", async () => {
+  const studio = new FakeStudioConnection([...studios, { id: "studio-b", name: "Place B" }]);
+  await assert.rejects(setup(studio).run({ mapId: "arena" }), /Pass studioId as one of/);
+  assert.equal(studio.requests.length, 0);
+});
+
+await test("the server serves a stored report at its linked uri and refuses an unknown one", async () => {
+  const reports = new CheckReportStore();
+  const tool = createCheckMapTool(reports);
+  const studio = studioReturning(
+    checkedMap({
+      counts: { overlapping: 0, floating: 1, unreachable: 0 },
+      issues: { overlapping: [], floating: [issueOf("floating", "crate")], unreachable: [] },
+    }),
+  );
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const serverInfo = { name: "roblox-kit-test", version: "0.0.0" };
+  await createServer({ serverInfo, studio, tools: [tool], checkReports: reports }).connect(
+    serverTransport,
+  );
+  const client = new Client({ name: "test-client", version: "0.0.0" });
+  await client.connect(clientTransport);
+  try {
+    const called = await client.callTool({ name: "check_map", arguments: { mapId: "arena" } });
+    const uri = (called.structuredContent as { reportUri: string }).reportUri;
+    const read = await client.readResource({ uri });
+    const [contents] = read.contents;
+    const report = JSON.parse(
+      contents !== undefined && "text" in contents ? contents.text : "{}",
+    ) as CheckReport;
+    assert.equal(report.mapId, "arena");
+    assert.equal(report.issues[0]?.detail, "floating crate");
+    await assert.rejects(
+      client.readResource({ uri: `${config.checkReportUriPrefix}missing` }),
+      /call check_map again/,
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+await test("check-map.luau is strict, caps its issue lists and reads the map from the mapId", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  assert.ok(source.startsWith("--!strict"));
+  assert.ok(source.includes("MAX_ISSUES_PER_KIND"));
+  assert.ok(source.includes("CreatePath"));
+  assert.ok(source.includes("Call build_map with this mapId first"));
+});
