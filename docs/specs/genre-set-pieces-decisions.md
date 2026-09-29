@@ -18,3 +18,7 @@ Task 9 9788a92: concourse gets set piece "bench", signLabels CONCOURSE / PLATFOR
 Task 9 9788a92: smoke room mapping hall=concourse, vault=ticket-hall, yard=platform.
 Task 9 9788a92: Luau treats an attribute whose name ends in "Color" as a hex color (Color3), others as strings.
 Task 9 9788a92: smoke duplicates build-map-tool's private propsOf split (plain rooms get kit props, typed rooms set pieces) because build-map-tool.ts is not in Task 9 Files.
+Task 10 47fbc8c: dimensions (studs x,y,z) lab-bench 7x3.2x2.5, cell-bars 8x9x0.5, control-console 6x3.5x3.5, crate-stack 4x4x2.5, fireplace 6x5x2
+Task 10 47fbc8c: front of every piece faces -Z, like counter and sign
+Task 10 47fbc8c: crate-stack and fireplace use Neon flame/monitor colors and Seed-driven variation (vessels, bar spacing, button colors, crate jitter, flame height)
+Task 10 47fbc8c: counter left as the existing generator for the shop room
