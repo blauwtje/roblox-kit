@@ -13,6 +13,7 @@ import { resolveStyle } from "../style/resolve-style.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
+import { placeArrangements } from "./arrangement-placement.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { buildRoomDetails, type DetailPart } from "./room-details.ts";
@@ -225,16 +226,22 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
 }
 
 /**
- * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type,
- * which would collide with random kit props; warnings name each set piece skipped for lack of space.
+ * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type
+ * followed by its arrangements, which would collide with random kit props; warnings name each set piece
+ * skipped for lack of space and each arrangement that placed nothing.
  */
 export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; warnings: string[] } {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
   const setPieces = placeSetPieces(spec, style.roomTypes, style.palette.accent, seed);
+  const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
   return {
-    props: [...placeProps(plainSpec, style.propKit, seed), ...setPieces.pieces],
-    warnings: setPieces.warnings,
+    props: [
+      ...placeProps(plainSpec, style.propKit, seed),
+      ...setPieces.pieces,
+      ...arrangements.pieces,
+    ],
+    warnings: [...setPieces.warnings, ...arrangements.warnings],
   };
 }
 

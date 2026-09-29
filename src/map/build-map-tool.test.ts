@@ -4,7 +4,9 @@ import { test } from "node:test";
 import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { tools } from "../server/main.ts";
-import { buildMapTool } from "./build-map-tool.ts";
+import { buildMapTool, propsOf } from "./build-map-tool.ts";
+import { mapSpecSchema } from "./map-spec.ts";
+import { loadPresets } from "../style/load-preset.ts";
 
 const studios = [{ id: "studio-a", name: "Place A" }];
 
@@ -386,6 +388,40 @@ await test("a room type the style declares builds", async () => {
   const spec = { ...twoRoomSpec, rooms: typedRooms, style: { preset: "cozy-town", overrides } };
   await run(studio, spec);
   assert.ok(studio.requests.length > 0);
+});
+
+await test("propsOf furnishes a typed room with its arrangements after its set pieces and merges warnings", async () => {
+  const preset = (await loadPresets()).get("cozy-town");
+  assert.ok(preset !== undefined);
+  const style = {
+    ...preset,
+    roomTypes: {
+      platform: {
+        setPieces: ["track-bed"],
+        signLabel: "PLATFORM 1",
+        arrangements: [
+          { shape: "along-length" as const, piece: "lamp", spacing: 12, inset: 2 },
+          { shape: "grid" as const, piece: "pillar", spacing: 5000 },
+        ],
+      },
+    },
+  };
+  const spec = {
+    ...twoRoomSpec,
+    rooms: twoRoomSpec.rooms.map((room, index) =>
+      index === 0 ? { ...room, roomType: "platform", width: 60, depth: 20 } : room,
+    ),
+  };
+  const { props, warnings } = propsOf(mapSpecSchema.parse(spec), style);
+  const kinds = props.map((prop) => prop.kind);
+  assert.ok(kinds.includes("track-bed"));
+  const afterSetPieces = kinds.slice(kinds.indexOf("track-bed") + 1);
+  assert.ok(
+    afterSetPieces.filter((kind) => kind === "lamp").length > 1,
+    "arrangement lamps follow the set piece",
+  );
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0] ?? "", /pillar/);
 });
 
 await test("passes Studio's error text on, such as an unknown material", async () => {
