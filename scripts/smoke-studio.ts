@@ -7,7 +7,8 @@ import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
-import { mapSpecSchema } from "../src/map/map-spec.ts";
+import { relationMapSpecSchema } from "../src/map/map-spec.ts";
+import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
 import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
@@ -95,41 +96,40 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
 
 /**
  * A fixed 3-room map far from the place's Baseplate (x and z near 2000), so everything the smoke
- * builds, fills and removes lies outside what the place owns.
+ * builds, fills and removes lies outside what the place owns. The vault and the yard are placed by
+ * relation, so the map also has two hallway zones.
  */
-const smokeMapSpec = mapSpecSchema.parse({
+const smokeRelationSpec = relationMapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
   style: { preset: "train-station" },
   seed: 1,
   rooms: [
-    {
-      name: "hall",
-      x: 2000,
-      z: 2000,
-      width: 20,
-      depth: 20,
-      spawn: true,
-      doors: [{ side: "east" }],
-    },
+    { name: "hall", x: 2000, z: 2000, width: 20, depth: 20, spawn: true },
     {
       name: "vault",
-      x: 2020,
-      z: 2000,
       width: 20,
       depth: 20,
-      doors: [{ side: "west" }, { side: "east" }],
+      relation: { to: "hall", direction: "east", hallwayLength: 10, hallwayWidth: 8 },
     },
-    { name: "yard", x: 2040, z: 2000, width: 20, depth: 20, doors: [{ side: "west" }] },
+    {
+      name: "yard",
+      width: 20,
+      depth: 20,
+      relation: { to: "vault", direction: "east", hallwayLength: 10, hallwayWidth: 8 },
+    },
   ],
   terrain: [
     {
       shape: "block",
-      center: { x: 2020, y: -12, z: 2000 },
-      size: { x: 60, y: 8, z: 20 },
+      center: { x: 2030, y: -12, z: 2000 },
+      size: { x: 80, y: 8, z: 20 },
       material: "Grass",
     },
   ],
 });
+
+/** The smoke map with every room centered: what layout, lights and the checks below expect. */
+const smokeMapSpec = resolveRelations(smokeRelationSpec);
 
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
 const smokeRegion = { min: [1960, -30, 1960], max: [2080, 30, 2040] };
@@ -299,7 +299,7 @@ async function callRealTool<Input extends z.ZodObject, Output extends z.ZodObjec
 
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
   const layout = layoutMap(smokeMapSpec);
-  const { output } = await callRealTool(buildMapTool, smokeMapSpec, connection);
+  const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
   expectEqual("build_map partCount", output.partCount, layout.parts.length);
   expectEqual(
@@ -463,7 +463,7 @@ async function probeLighting(connection: StudioConnection): Promise<string> {
   );
   expectClose("Bloom Intensity", lighting.bloomIntensity, recipe.Bloom.Intensity);
 
-  await callRealTool(buildMapTool, smokeMapSpec, connection);
+  await callRealTool(buildMapTool, smokeRelationSpec, connection);
   const rebuilt = await readMapLights(connection, studioId);
   expectEqual("light count after a rebuild", rebuilt.lights.length, placements.length);
   expectEqual("snapshot kept across a rebuild", rebuilt.snapshot, built.snapshot);
@@ -499,7 +499,7 @@ async function probeCaptureZones(connection: StudioConnection): Promise<string> 
   expectEqual(
     "capture_zones shot zones",
     output.shots.map((shot) => shot.zone),
-    smokeMapSpec.rooms.map((room) => room.name),
+    smokeMapSpec.rooms.map((room) => room.name).sort(),
   );
   expectEqual("capture_zones image count", images.length, smokeMapSpec.rooms.length);
   return `${String(images.length)} images, one per zone`;

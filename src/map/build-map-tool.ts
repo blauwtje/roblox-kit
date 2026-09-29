@@ -10,14 +10,15 @@ import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
-import { mapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
+import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
+import { resolveRelations } from "./relation-solver.ts";
 
 const presets = await loadPresets();
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
 
-const buildMapInput = mapSpecSchema.safeExtend({
+const buildMapInput = relationMapSpecSchema.safeExtend({
   /** Which Studio builds the map; optional while exactly one is connected. */
   studioId: z.string().min(1).optional(),
 });
@@ -138,7 +139,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor, applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor, applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
@@ -152,9 +153,10 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     openWorldHint: false,
   },
   async handler(input, context) {
-    // Resolving the style and laying out first keep a spec that cannot be built from touching Studio.
-    const style = input.style === undefined ? undefined : resolveStyle(presets, input.style);
-    const layout = layoutMap(input, style?.surfaces);
+    // Resolving relations and the style and laying out first keep a spec that cannot be built from touching Studio.
+    const spec = resolveRelations(input);
+    const style = spec.style === undefined ? undefined : resolveStyle(presets, spec.style);
+    const layout = layoutMap(spec, style?.surfaces);
     const studioId = await selectStudio(context.studio, input.studioId);
     const built = await runLuauFile({
       connection: context.studio,
@@ -167,7 +169,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
         parts: layout.parts,
         terrainFills: layout.terrainFills,
         variants: variantsOf(style),
-        lights: lightRecordsOf(input, layout.parts, style),
+        lights: lightRecordsOf(spec, layout.parts, style),
       },
       resultSchema: builtMapSchema,
     });

@@ -90,6 +90,53 @@ await test("sends the laid-out parts and fills to Studio and returns the map han
   assert.deepEqual(JSON.parse(text.text), structured);
 });
 
+await test("a room placed by relation builds at its grid-snapped center with a hallway zone between", async () => {
+  const relationSpec = {
+    mapId: "related-rooms",
+    rooms: [
+      { name: "start", x: 0, z: 0, width: 40, depth: 40, spawn: true },
+      {
+        name: "hall",
+        width: 40,
+        depth: 40,
+        relation: { to: "start", direction: "east", hallwayLength: 10, hallwayWidth: 8 },
+      },
+    ],
+  };
+  const studio = studioReturning('{"partCount":20,"replaced":false}');
+  const result = await run(studio, relationSpec);
+
+  assert.equal(result.isError, undefined);
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.deepEqual(
+    structured.zones.map((zone) => zone.name),
+    ["start", "hall", "start-hall-hallway"],
+  );
+  assert.deepEqual(structured.zones[1]?.bounds, {
+    min: { x: 30, y: -1, z: -20 },
+    max: { x: 70, y: 12, z: 20 },
+  });
+  assert.equal(structured.zones[2]?.bounds.min.x, 20);
+  assert.equal(structured.zones[2].bounds.max.x, 30);
+});
+
+await test("a relation to an unknown room fails before Studio is asked", async () => {
+  const studio = studioReturning("{}");
+  const spec = {
+    mapId: "lost",
+    rooms: [
+      {
+        name: "hall",
+        width: 40,
+        depth: 40,
+        relation: { to: "nowhere", direction: "east", hallwayLength: 10, hallwayWidth: 8 },
+      },
+    ],
+  };
+  await assert.rejects(run(studio, spec), /unknown room "nowhere"/);
+  assert.equal(studio.requests.length, 0);
+});
+
 await test("a spec that cannot be laid out fails before Studio is asked", async () => {
   const studio = studioReturning("{}");
   const tinyRoom = { mapId: "tiny", rooms: [{ name: "closet", x: 0, z: 0, width: 2, depth: 2 }] };
