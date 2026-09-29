@@ -67,6 +67,10 @@
     }
   },
   "propKit": ["pillar", "lamp", "stairs", "rail"],
+  "roomTypes": {
+    "bridge": { "setPieces": ["control-console"], "signLabel": "BRIDGE" },
+    "cargo-bay": { "setPieces": ["crate-stack"], "signLabel": "CARGO BAY" }
+  },
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,

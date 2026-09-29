@@ -67,6 +67,10 @@
     }
   },
   "propKit": ["bench", "lamp", "rail"],
+  "roomTypes": {
+    "shop": { "setPieces": ["counter"], "signLabel": "SHOP" },
+    "home": { "setPieces": ["fireplace"], "signLabel": "HOME" }
+  },
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,

@@ -67,6 +67,10 @@
     }
   },
   "propKit": ["pillar", "lamp", "stairs"],
+  "roomTypes": {
+    "lab": { "setPieces": ["lab-bench"], "signLabel": "LABORATORY" },
+    "cell-block": { "setPieces": ["cell-bars"], "signLabel": "CELL BLOCK" }
+  },
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,
