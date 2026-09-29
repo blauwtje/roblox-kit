@@ -185,7 +185,13 @@ await test("a style with overrides and a seed builds like the same spec without 
 
 await test("a style sends its palette colors and role variants; without a style, defaults and no variants", async () => {
   const styledConnection = styledStudio();
-  await run(styledConnection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  await run(styledConnection, {
+    ...twoRoomSpec,
+    style: {
+      preset: "train-station",
+      overrides: { surfaces: { wall: { variant: { baseMaterial: "Brick", studsPerTile: 8 } } } },
+    },
+  });
   const styledCode = String(styledConnection.requests[0]?.arguments["code"]);
   assert.ok(String(styledConnection.requests[0]?.arguments["code"]).includes('"phase":"shell"'));
   assert.ok(styledCode.includes('"color":"#8a7f70"'));

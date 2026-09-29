@@ -10,11 +10,7 @@
     },
     "wall": {
       "material": "Brick",
-      "color": "#8a7f70",
-      "variant": {
-        "baseMaterial": "Brick",
-        "studsPerTile": 8
-      }
+      "color": "#8a7f70"
     },
     "trim": {
       "material": "Metal",
@@ -56,17 +52,17 @@
   "lightRoles": {
     "zoneMarker": {
       "range": 30,
-      "brightness": 1.2,
+      "brightness": 0.3,
       "color": "#f2d9a0"
     },
     "focal": {
       "range": 45,
-      "brightness": 1.8,
+      "brightness": 0.45,
       "color": "#ffe6b0"
     },
     "hero": {
       "range": 80,
-      "brightness": 2.5,
+      "brightness": 0.625,
       "color": "#fff1cf"
     }
   },
