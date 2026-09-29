@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { config } from "../src/config.ts";
 import { runLuauFile } from "../src/luau/run-luau-file.ts";
-import { buildMapTool } from "../src/map/build-map-tool.ts";
+import { buildMapTool, propsOf } from "../src/map/build-map-tool.ts";
 import { captureZonesTool } from "../src/map/capture-zones-tool.ts";
 import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
-import { placeProps, type PropRecord } from "../src/map/prop-placement.ts";
-import { placeSetPieces, type SetPieceRecord } from "../src/map/set-piece-placement.ts";
+import type { PropRecord } from "../src/map/prop-placement.ts";
+import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
 import { buildRoomDetails } from "../src/map/room-details.ts";
 import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
@@ -323,16 +323,7 @@ function styledSmokeMap() {
   }
   const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
   const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
-  const seed = smokeMapSpec.seed ?? config.defaultSeed;
-  // The same split build_map makes: kit props in plain rooms, set pieces in typed ones.
-  const plainSpec = {
-    ...smokeMapSpec,
-    rooms: smokeMapSpec.rooms.filter((room) => room.roomType === undefined),
-  };
-  const props = [
-    ...placeProps(plainSpec, preset.propKit, seed),
-    ...placeSetPieces(smokeMapSpec, preset.roomTypes, preset.palette.accent, seed),
-  ];
+  const props = propsOf(smokeMapSpec, preset);
   return { layout, details, props };
 }
 

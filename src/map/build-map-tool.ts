@@ -226,7 +226,7 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
  * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type,
  * which would collide with random kit props.
  */
-function propsOf(spec: MapSpec, style: Preset): PropRecord[] {
+export function propsOf(spec: MapSpec, style: Preset): PropRecord[] {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
   return [

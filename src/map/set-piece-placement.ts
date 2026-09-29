@@ -1,9 +1,14 @@
-import { config } from "../config.ts";
 import { detailDimensions } from "./room-details.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
-import { propDimensions, propKinds } from "./prop-placement.ts";
-import type { PropKind, PropRecord } from "./prop-placement.ts";
+import {
+  cornerReachStuds,
+  propDimensions,
+  propKinds,
+  propSize,
+  roomBounds,
+} from "./prop-placement.ts";
+import type { PropKind, PropRecord, RoomBounds } from "./prop-placement.ts";
 import type { Preset } from "../style/preset-schema.ts";
 
 type Side = RoomSpec["doors"][number]["side"];
@@ -35,21 +40,12 @@ const sideOrder: Side[] = ["north", "south", "east", "west"];
 /** Clear space kept below a sign's lintel. */
 const signLintelGapStuds = 0.25;
 
-/** The corner pillars' reach along a wall, kept free at both ends of a set piece that spans a wall. */
-const cornerReachStuds = detailDimensions.pillarSizeStuds + propDimensions.clearanceStuds;
-
-interface RoomInterior {
-  halfWidth: number;
-  halfDepth: number;
-  wallHeight: number;
-}
-
 function runsAlongX(side: Side): boolean {
   return side === "north" || side === "south";
 }
 
 /** Length of a wall's inner face and how deep the room is across it. */
-function wallSpan(interior: RoomInterior, side: Side): { length: number; across: number } {
+function wallSpan(interior: RoomBounds, side: Side): { length: number; across: number } {
   const width = 2 * interior.halfWidth;
   const depth = 2 * interior.halfDepth;
   return runsAlongX(side) ? { length: width, across: depth } : { length: depth, across: width };
@@ -58,7 +54,7 @@ function wallSpan(interior: RoomInterior, side: Side): { length: number; across:
 /** World center of a point `along` a wall from the room center and `inset` studs in from its inner face. */
 function pointOnWall(
   room: RoomSpec,
-  interior: RoomInterior,
+  interior: RoomBounds,
   side: Side,
   along: number,
   inset: number,
@@ -86,7 +82,7 @@ function setPieceKind(room: RoomSpec, name: string): PropKind {
 }
 
 /** The longest wall with no door in it; the first in north, south, east, west order on a tie. */
-function longestDoorlessWall(room: RoomSpec, interior: RoomInterior, kind: PropKind): Side {
+function longestDoorlessWall(room: RoomSpec, interior: RoomBounds, kind: PropKind): Side {
   const doorless = sideOrder.filter((side) => !room.doors.some((door) => door.side === side));
   const longest = doorless.reduce<Side | undefined>(
     (best, side) =>
@@ -114,7 +110,7 @@ function assertFits(room: RoomSpec, kind: PropKind, free: number): void {
 /** Track bed against the wall and the platform edge in front of it, its warning strip facing the track. */
 function trackPiece(
   room: RoomSpec,
-  interior: RoomInterior,
+  interior: RoomBounds,
   kind: "track-bed" | "platform-edge",
   seed: number,
 ): SetPieceRecord {
@@ -142,7 +138,7 @@ interface Placement {
 
 function placed(
   room: RoomSpec,
-  interior: RoomInterior,
+  interior: RoomBounds,
   placement: Placement,
   attributes: Record<string, string> = {},
   height?: number,
@@ -158,22 +154,48 @@ function placed(
   };
 }
 
+/**
+ * The position along a wall nearest `preferred` where a piece of `length` stays out of every doorway on
+ * that wall and inside +-`reach`; throws when the doorways leave no room.
+ */
+function alongClearOfDoors(
+  room: RoomSpec,
+  bounds: RoomBounds,
+  side: Side,
+  length: number,
+  reach: number,
+  preferred: number,
+): number {
+  const keepOut = bounds.doorWidth / 2 + propDimensions.clearanceStuds + length / 2;
+  const doorOffsets = room.doors.filter((door) => door.side === side).map((door) => door.offset);
+  const candidates = [
+    preferred,
+    ...doorOffsets.flatMap((offset) => [offset - keepOut, offset + keepOut]),
+  ]
+    .map((along) => Math.max(-reach, Math.min(reach, along)))
+    .filter((along) => doorOffsets.every((offset) => Math.abs(along - offset) >= keepOut))
+    .sort((first, second) => Math.abs(first - preferred) - Math.abs(second - preferred));
+  const [nearest] = candidates;
+  if (nearest === undefined) {
+    throw new Error(`Room "${room.name}" has no space on its ${side} wall clear of the doorways.`);
+  }
+  return nearest;
+}
+
 /** A piece against the wall opposite the room's entry door (its first door), looking at that door. */
 function pieceFacingEntry(
   room: RoomSpec,
-  interior: RoomInterior,
+  interior: RoomBounds,
   kind: PropKind,
   seed: number,
 ): SetPieceRecord {
   const entry: Door | undefined = room.doors[0];
   const entrySide = entry?.side ?? "south";
   const side = oppositeSide[entrySide];
-  // A pillar has no height of its own and stands as tall as the wall.
-  const dimensions = { y: interior.wallHeight, ...propDimensions[kind] };
-  const size = { ...dimensions, y: Math.min(dimensions.y, interior.wallHeight) };
+  const size = propSize(kind, interior.wallHeight);
   const reach = wallSpan(interior, side).length / 2 - cornerReachStuds - size.x / 2;
   assertFits(room, kind, reach);
-  const along = Math.max(-reach, Math.min(reach, entry?.offset ?? 0));
+  const along = alongClearOfDoors(room, interior, side, size.x, reach, entry?.offset ?? 0);
   const inset = propDimensions.clearanceStuds + size.z / 2;
   return placed(room, interior, { kind, side, along, inset, size, facing: entrySide, seed });
 }
@@ -181,7 +203,7 @@ function pieceFacingEntry(
 /** A sign hung just inside a doorway, under the arch lintel and facing into the room. */
 function signOverDoor(
   room: RoomSpec,
-  interior: RoomInterior,
+  interior: RoomBounds,
   door: Door,
   attributes: Record<string, string>,
   seed: number,
@@ -213,13 +235,7 @@ function setPiecesOfRoom(
   if (roomType === undefined) {
     return [];
   }
-  const wallThickness =
-    room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds;
-  const interior: RoomInterior = {
-    halfWidth: room.width / 2 - wallThickness,
-    halfDepth: room.depth / 2 - wallThickness,
-    wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
-  };
+  const interior = roomBounds(spec, room);
   const pieces = roomType.setPieces
     .filter((name) => name !== "sign")
     .map((name) => {

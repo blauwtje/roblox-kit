@@ -77,7 +77,7 @@ interface Footprint {
   maxZ: number;
 }
 
-interface RoomBounds {
+export interface RoomBounds {
   halfWidth: number;
   halfDepth: number;
   wallHeight: number;
@@ -98,7 +98,7 @@ function isPropKind(name: string): name is PropKind {
 }
 
 /** Size of a prop along a north or south wall; the lamp and pillar are capped by, or as tall as, the wall. */
-function propSize(kind: PropKind, wallHeight: number): Vector {
+export function propSize(kind: PropKind, wallHeight: number): Vector {
   if (kind === "pillar") {
     return { ...propDimensions.pillar, y: wallHeight };
   }
@@ -106,7 +106,7 @@ function propSize(kind: PropKind, wallHeight: number): Vector {
   return { ...size, y: Math.min(size.y, wallHeight) };
 }
 
-function roomBounds(spec: MapSpec, room: RoomSpec): RoomBounds {
+export function roomBounds(spec: MapSpec, room: RoomSpec): RoomBounds {
   const wallThickness =
     room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds;
   return {
@@ -117,9 +117,12 @@ function roomBounds(spec: MapSpec, room: RoomSpec): RoomBounds {
   };
 }
 
+/** How far a corner pillar reaches along a wall, kept free at each corner. */
+export const cornerReachStuds = detailDimensions.pillarSizeStuds + propDimensions.clearanceStuds;
+
 /** The four corners kept free for the corner pillars of `buildRoomDetails`. */
 function cornerFootprints(bounds: RoomBounds): Footprint[] {
-  const reach = detailDimensions.pillarSizeStuds + propDimensions.clearanceStuds;
+  const reach = cornerReachStuds;
   return [-1, 1].flatMap((signX) =>
     [-1, 1].map((signZ) => ({
       minX: signX < 0 ? -bounds.halfWidth : bounds.halfWidth - reach,
