@@ -150,7 +150,7 @@ Depends on: 47 | Files: `luau/sample-scene-stats.luau`, `src/map/check-map-tool.
 ### Task 49: feat(map): frame two opposite views per zone and one top-down cutaway
 Depends on: 48 | Files: `src/map/zone-cameras.ts`, `src/map/zone-cameras.test.ts` | Data: a shots array of `{ zone, view, cameraPosition, lookAt }`, view `a`, `b` or `top` | Proof: npm run check
 ### Task 50: feat(map): hide tagged ceilings during capture and restore them
-Depends on: 49 | Files: `luau/set-ceilings-hidden.luau`, `src/map/capture-zones-tool.ts`, `src/map/capture-zones-tool.test.ts` | Data: each ceiling's original Transparency in a part attribute, restored in `finally` and at call start | Proof: npm run check
+Depends on: 49 | Files: `luau/set-ceilings-hidden.luau`, `src/map/capture-zones-tool.ts`, `src/map/capture-zones-tool.test.ts`, `src/config.ts` | Data: each ceiling's original Transparency in a part attribute, restored in `finally` and at call start | Proof: npm run check
 ### Task 51: feat(map): report image sizes and cap images per call
 Depends on: 50 | Files: `src/map/capture-zones-tool.ts`, `src/map/capture-zones-tool.test.ts`, `src/config.ts`, `scripts/smoke-studio.ts` | Data: shots gain `width` and `height`, result gains `remainingZones` and `warnings` arrays | Proof: npm run smoke:studio
 ### Task 52: feat(eval): add the three benchmark map specs
