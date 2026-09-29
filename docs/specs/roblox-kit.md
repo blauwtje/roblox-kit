@@ -146,7 +146,7 @@ Depends on: 45 | Files: `luau/check-map.luau`, `src/map/check-map-tool.ts`, `src
 ### Task 47: feat(map): report size-rule violations for preset maps
 Depends on: 46 | Files: `src/map/size-rules.ts`, `src/map/size-rules.test.ts`, `src/map/check-map-tool.ts`, `src/map/check-map-tool.test.ts`, `src/map/check-report-store.ts` | Data: issue records of kind `sizeRule` computed from the layout, empty when no preset | Proof: npm run check
 ### Task 48: feat(map): sample draw calls and triangles per zone camera
-Depends on: 47 | Files: `luau/sample-scene-stats.luau`, `src/map/check-map-tool.ts`, `src/config.ts`, `scripts/smoke-studio.ts` | Data: one `{ zone, drawCalls, triangles }` sample per zone camera after `config.statsSettleSeconds` | Proof: npm run smoke:studio
+Depends on: 47 | Files: `luau/sample-scene-stats.luau`, `src/map/check-map-tool.ts`, `src/config.ts`, `scripts/smoke-studio.ts`, `src/map/check-map-tool.test.ts` | Data: one `{ zone, drawCalls, triangles }` sample per zone camera after `config.statsSettleSeconds` | Proof: npm run smoke:studio
 ### Task 49: feat(map): frame two opposite views per zone and one top-down cutaway
 Depends on: 48 | Files: `src/map/zone-cameras.ts`, `src/map/zone-cameras.test.ts` | Data: a shots array of `{ zone, view, cameraPosition, lookAt }`, view `a`, `b` or `top` | Proof: npm run check
 ### Task 50: feat(map): hide tagged ceilings during capture and restore them
