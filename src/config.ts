@@ -30,6 +30,8 @@ export const config = Object.freeze({
   defaultDoorWidthStuds: 6,
   /** Seed of a map spec that sets none. */
   defaultSeed: 1,
+  /** Grid that the center of a room placed by relation snaps to. */
+  gridStuds: 5,
 
   /** How far below the ceiling a room light hangs. */
   lightCeilingDropStuds: 1,
