@@ -145,8 +145,8 @@ const smokeMapSpec = resolveRelations(smokeRelationSpec);
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
 const smokeRegion = { min: [1960, -30, 1960], max: [2100, 30, 2040] };
 
-/** What must remain in Workspace once the smoke is done. */
-const placeWorkspaceChildren = ["Terrain", "Baseplate", "SpawnLocation", "Camera"];
+/** Name of the Model the blocker probe puts beside the smoke map; the cleanup removes it by name. */
+const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
 
 /** Puts Lighting back from the snapshot the map Model holds; it must run before the Model is destroyed. */
 const restoreLightingLuau = `
@@ -177,7 +177,7 @@ if typeof(encoded) == "string" then
   end
 end`;
 
-/** Removes what the smoke and the tools insert: only names and the region the smoke owns. */
+/** Removes what the smoke and the tools insert: only names and the region the smoke owns; other maps stay. */
 const cleanupLuau = `${restoreLightingLuau}
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayerScripts = game:GetService("StarterPlayer"):FindFirstChildOfClass("StarterPlayerScripts")
@@ -187,7 +187,10 @@ local function destroyNamed(container, name)
     if child.Name == name then child:Destroy() end
   end
 end
-destroyNamed(workspace, "${config.mapsFolderName}")
+local mapsFolder = workspace:FindFirstChild("${config.mapsFolderName}")
+destroyNamed(mapsFolder, "${smokeMapSpec.mapId}")
+destroyNamed(mapsFolder, "${blockerModelName}")
+if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
 for _, variant in game:GetService("MaterialService"):GetChildren() do
   if variant:IsA("MaterialVariant") and string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then variant:Destroy() end
 end
@@ -632,9 +635,6 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
   return `passed=${String(output.passed)} counts=${JSON.stringify(output.counts)} sceneStats=${JSON.stringify(output.sceneStats)}`;
 }
 
-/** Name of the Model the blocker probe puts beside the smoke map; the maps folder cleanup removes it. */
-const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
-
 /** Walls off the hallway between the hall and the vault with a Model outside the smoke map. */
 function blockerLuau(): string {
   const roomNamed = (name: string) => {
@@ -739,6 +739,9 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   const lightingBefore = lightingStateSchema.parse(
     JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
   );
+  const stateBefore = placeStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, placeStateLuau)),
+  );
   try {
     const steps: [string, () => Promise<string>][] = [
       ["build_map", () => probeBuildMap(connection)],
@@ -793,11 +796,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   findings.push(
     await probeTool("place restored after the smoke", () => {
       expectEqual("Lighting", lightingAfter, lightingBefore);
-      expectEqual(
-        "Workspace children",
-        [...state.workspace].sort(),
-        [...placeWorkspaceChildren].sort(),
-      );
+      expectEqual("Workspace children", state.workspace, stateBefore.workspace);
       expectEqual("ServerStorage children", state.serverStorage, 0);
       expectEqual("terrain voxels over the map region", state.solidTerrainVoxels, 0);
       expectEqual("harness scripts left", state.harnesses, 0);
