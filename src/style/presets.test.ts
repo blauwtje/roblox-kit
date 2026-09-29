@@ -24,15 +24,13 @@ await test("the bundled presets folder holds the four genre presets", async () =
   assert.deepEqual([...presets.keys()], genreNames);
 });
 
-await test("every bundled preset uses built-in Materials only", async () => {
+await test("every bundled preset uses built-in Materials only and sets no MaterialVariant", async () => {
   const presets = await loadPresets();
   for (const [name, preset] of presets) {
     for (const [role, surface] of Object.entries(preset.surfaces)) {
       assert.ok(builtInMaterials.has(surface.material), `${name} ${role}: ${surface.material}`);
-      const baseMaterial = surface.variant?.baseMaterial;
-      if (baseMaterial !== undefined) {
-        assert.ok(builtInMaterials.has(baseMaterial), `${name} ${role} variant: ${baseMaterial}`);
-      }
+      // A variant without texture maps renders flat color and hides the material's texture.
+      assert.equal(surface.variant, undefined, `${name} ${role} sets a MaterialVariant`);
     }
   }
 });

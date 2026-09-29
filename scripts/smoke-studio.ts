@@ -101,9 +101,15 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
  * builds, fills and removes lies outside what the place owns. The vault and the yard are placed by
  * relation, so the map also has two hallway zones.
  */
+/** No bundled preset sets a MaterialVariant, so the smoke asks for one to probe that build_map applies it. */
+const smokeWallVariant = { baseMaterial: "Brick", studsPerTile: 8 };
+
 const smokeRelationSpec = relationMapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
-  style: { preset: "train-station" },
+  style: {
+    preset: "train-station",
+    overrides: { surfaces: { wall: { variant: smokeWallVariant } } },
+  },
   seed: 1,
   // At the train-station size rules, so check_map with the preset reports no sizeRule issue.
   wallHeight: 16,
@@ -455,9 +461,8 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
     JSON.parse(await executeLuau(connection, studioId, paintedMapLuau)),
   );
   const { surfaces } = presets.get("train-station") ?? {};
-  const variant = surfaces?.wall.variant;
-  if (surfaces === undefined || variant === undefined) {
-    throw new Error("The train-station preset no longer names a wall MaterialVariant.");
+  if (surfaces === undefined) {
+    throw new Error("The train-station preset is missing.");
   }
   const hex = (color: string) => color.slice(1).toLowerCase();
   expectEqual("floor colors", [...new Set(painted.floors)], [hex(surfaces.floor.color)]);
@@ -468,8 +473,8 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
     [...new Set(painted.wallVariants)],
     [`${smokeMapSpec.mapId}-wall`],
   );
-  expectEqual("MaterialVariant base", painted.variantBase, variant.baseMaterial);
-  expectEqual("MaterialVariant studsPerTile", painted.variantStuds, variant.studsPerTile);
+  expectEqual("MaterialVariant base", painted.variantBase, smokeWallVariant.baseMaterial);
+  expectEqual("MaterialVariant studsPerTile", painted.variantStuds, smokeWallVariant.studsPerTile);
   return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
 }
 

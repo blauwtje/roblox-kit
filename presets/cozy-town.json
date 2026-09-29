@@ -10,11 +10,7 @@
     },
     "wall": {
       "material": "Plaster",
-      "color": "#e8d5b5",
-      "variant": {
-        "baseMaterial": "Plaster",
-        "studsPerTile": 8
-      }
+      "color": "#e8d5b5"
     },
     "trim": {
       "material": "Wood",

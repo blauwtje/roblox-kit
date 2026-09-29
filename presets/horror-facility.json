@@ -10,11 +10,7 @@
     },
     "wall": {
       "material": "Concrete",
-      "color": "#3a4340",
-      "variant": {
-        "baseMaterial": "Concrete",
-        "studsPerTile": 10
-      }
+      "color": "#3a4340"
     },
     "trim": {
       "material": "Metal",

@@ -10,11 +10,7 @@
     },
     "wall": {
       "material": "SmoothPlastic",
-      "color": "#e6ebf0",
-      "variant": {
-        "baseMaterial": "SmoothPlastic",
-        "studsPerTile": 6
-      }
+      "color": "#e6ebf0"
     },
     "trim": {
       "material": "Metal",
