@@ -49,8 +49,11 @@ interface RoomMeasure {
 }
 
 /** A band along the inner face of a wall stretch. */
+/** The trim bands along every wall stretch, named `<room>-<band>-<side>-<number>` after their wall. */
+export const wallBandNames = ["baseboard", "crown", "stripe"] as const;
+
 interface Band {
-  name: string;
+  name: (typeof wallBandNames)[number];
   kind: "trim" | "stripe";
   role: "trim" | "accent";
   depth: number;

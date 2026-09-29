@@ -18,6 +18,9 @@ const setPieceKit = [
   "control-console",
   "crate-stack",
   "fireplace",
+  "departure-board",
+  "clock",
+  "ticket-counter",
 ];
 
 const hallSpec = mapSpecSchema.parse({

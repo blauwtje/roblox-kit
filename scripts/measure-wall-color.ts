@@ -92,14 +92,15 @@ function hideCeilings(connection: StudioConnection, studioId: string, mapId: str
   return runLuauFile({
     connection,
     studioId,
-    fileName: "set-ceilings-hidden.luau",
+    fileName: "set-cutaway-hidden.luau",
     datamodelType: "Edit",
     arguments: {
       mapId,
       mapsFolderName: config.mapsFolderName,
       ceilingTag: config.ceilingTag,
-      originalTransparencyAttribute: config.ceilingOriginalTransparencyAttribute,
+      originalTransparencyAttribute: config.cutawayOriginalTransparencyAttribute,
       hidden: true,
+      wallPrefixes: [],
     },
     resultSchema: ceilingsChangedSchema,
   });

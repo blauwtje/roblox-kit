@@ -165,7 +165,8 @@ function placed(
 
 /**
  * The position along a wall nearest `preferred` where a piece of `length` stays out of every doorway on
- * that wall and inside +-`reach`; throws a SetPieceMisfit when the doorways leave no room.
+ * that wall, widened by `doorMargin` on each side, and inside +-`reach`; throws a SetPieceMisfit when the
+ * doorways leave no room.
  */
 function alongClearOfDoors(
   room: RoomSpec,
@@ -174,8 +175,9 @@ function alongClearOfDoors(
   length: number,
   reach: number,
   preferred: number,
+  doorMargin = 0,
 ): number {
-  const keepOut = bounds.doorWidth / 2 + propDimensions.clearanceStuds + length / 2;
+  const keepOut = bounds.doorWidth / 2 + doorMargin + propDimensions.clearanceStuds + length / 2;
   const doorOffsets = room.doors.filter((door) => door.side === side).map((door) => door.offset);
   const candidates = [
     preferred,
@@ -206,13 +208,21 @@ function pieceFacingEntry(
   const size = propSize(kind, interior.wallHeight);
   const reach = wallSpan(interior, side).length / 2 - cornerReachStuds - size.x / 2;
   assertFits(room, kind, reach);
-  const along = alongClearOfDoors(room, interior, side, size.x, reach, entry?.offset ?? 0);
+  // An east or west door has a blade sign beside it (signAtDoor), which a tall piece would cut through.
+  const bladeMargin = runsAlongX(side) ? 0 : propDimensions.sign.z + propDimensions.clearanceStuds;
+  const preferred = entry?.offset ?? 0;
+  const along = alongClearOfDoors(room, interior, side, size.x, reach, preferred, bladeMargin);
   const inset = propDimensions.clearanceStuds + size.z / 2;
   return placed(room, interior, { kind, side, along, inset, size, facing: entrySide, seed });
 }
 
-/** A sign hung just inside a doorway, under the arch lintel and facing into the room. */
-function signOverDoor(
+/**
+ * A sign at a door, its label on both faces. On a north or south wall it hangs just inside the doorway under
+ * the arch lintel, facing into the room. On an east or west wall it sticks out from the wall beside the doorway
+ * as a blade sign with its faces toward north and south, where the zone views look from; when doorways and
+ * corners leave that wall no space, it hangs in the doorway instead.
+ */
+function signAtDoor(
   room: RoomSpec,
   interior: RoomBounds,
   door: Door,
@@ -222,17 +232,65 @@ function signOverDoor(
   const size = propDimensions.sign;
   const height =
     interior.wallHeight - detailDimensions.archLintelHeightStuds - signLintelGapStuds - size.y / 2;
-  const inset = detailDimensions.archDepthStuds + size.z / 2;
-  const placement = {
+  const inDoorway = {
     kind: "sign" as const,
     side: door.side,
     along: door.offset,
-    inset,
+    inset: detailDimensions.archDepthStuds + size.z / 2,
     size,
     facing: oppositeSide[door.side],
     seed,
   };
-  return placed(room, interior, placement, attributes, height);
+  if (runsAlongX(door.side)) {
+    return placed(room, interior, inDoorway, attributes, height);
+  }
+  const reach = wallSpan(interior, door.side).length / 2 - cornerReachStuds - size.z / 2;
+  try {
+    const along = alongClearOfDoors(room, interior, door.side, size.z, reach, door.offset);
+    const blade = { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
+    return placed(room, interior, blade, attributes, height);
+  } catch (error) {
+    if (!(error instanceof SetPieceMisfit)) {
+      throw error;
+    }
+    return placed(room, interior, inDoorway, attributes, height);
+  }
+}
+
+/** The pieces that stand free in the room, with a face toward north and one toward south. */
+const standingKinds: ReadonlySet<PropKind> = new Set(["departure-board", "clock"]);
+
+/**
+ * A free-standing piece on the room's east-west center line, a quarter of the room's width west (slot 0) or
+ * east (slot 1) of center, so the center stays free for a spawn. Its faces look north and south, where the
+ * zone views look from, and it stays out of the doorway strip along every wall.
+ */
+function standingPiece(
+  room: RoomSpec,
+  interior: RoomBounds,
+  kind: PropKind,
+  slot: number,
+  seed: number,
+): SetPieceRecord {
+  const slotOffsets = [-interior.halfWidth / 2, interior.halfWidth / 2];
+  const along = slotOffsets[slot];
+  if (along === undefined) {
+    throw new SetPieceMisfit(
+      `Room "${room.name}" already holds ${String(slotOffsets.length)} standing pieces, so ${kind} has no spot left.`,
+    );
+  }
+  const size = propSize(kind, interior.wallHeight);
+  const doorway = propDimensions.doorwayDepthStuds;
+  assertFits(room, kind, interior.halfWidth - doorway - Math.abs(along) - size.x / 2);
+  assertFits(room, kind, interior.halfDepth - doorway - size.z / 2);
+  return {
+    kind,
+    pivot: { x: room.x + along, y: size.y / 2, z: room.z },
+    size,
+    seed,
+    yaw: yawFacing.north,
+    attributes: {},
+  };
 }
 
 function setPiecesOfRoom(
@@ -249,14 +307,18 @@ function setPiecesOfRoom(
   const interior = roomBounds(spec, room);
   const pieces: SetPieceRecord[] = [];
   const warnings: string[] = [];
+  let standingSlot = 0;
   for (const name of roomType.setPieces.filter((setPiece) => setPiece !== "sign")) {
     const kind = setPieceKind(room, name);
     try {
-      pieces.push(
-        kind === "track-bed" || kind === "platform-edge"
-          ? trackPiece(room, interior, kind, seed)
-          : pieceFacingEntry(room, interior, kind, seed),
-      );
+      if (kind === "track-bed" || kind === "platform-edge") {
+        pieces.push(trackPiece(room, interior, kind, seed));
+      } else if (standingKinds.has(kind)) {
+        pieces.push(standingPiece(room, interior, kind, standingSlot, seed));
+        standingSlot += 1;
+      } else {
+        pieces.push(pieceFacingEntry(room, interior, kind, seed));
+      }
     } catch (error) {
       if (!(error instanceof SetPieceMisfit)) {
         throw error;
@@ -265,14 +327,15 @@ function setPiecesOfRoom(
     }
   }
   const signAttributes = { Label: roomType.signLabel, AccentColor: accent };
-  const signs = room.doors.map((door) => signOverDoor(room, interior, door, signAttributes, seed));
+  const signs = room.doors.map((door) => signAtDoor(room, interior, door, signAttributes, seed));
   return { pieces: [...pieces, ...signs], warnings };
 }
 
 /**
  * The set pieces that say which place a typed room is: track bed and platform edge run along the longest
- * wall without a door, other pieces stand against the wall opposite the entry door (the room's first door)
- * looking at it, and every typed room gets a sign under the lintel of each door. Rooms without a type get none.
+ * wall without a door, a departure board and a clock stand free on the room's center line, other pieces stand
+ * against the wall opposite the entry door (the room's first door) looking at it, and every typed room gets a
+ * sign at each door. Rooms without a type get none.
  * A piece its room has no space for is skipped with a warning; a piece with no generator throws.
  */
 export function placeSetPieces(

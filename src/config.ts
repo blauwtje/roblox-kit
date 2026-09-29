@@ -25,8 +25,8 @@ export const config = Object.freeze({
   ceilingNameSuffix: "-ceiling",
   /** CollectionService tag on every ceiling part; capture_zones hides the parts by it. */
   ceilingTag: "RobloxKitCeiling",
-  /** Part attribute that holds a hidden ceiling's own Transparency until capture_zones restores it. */
-  ceilingOriginalTransparencyAttribute: "RobloxKitOriginalTransparency",
+  /** Part attribute that holds a hidden ceiling's or near wall's own Transparency until capture_zones restores it. */
+  cutawayOriginalTransparencyAttribute: "RobloxKitOriginalTransparency",
 
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",
@@ -75,6 +75,8 @@ export const config = Object.freeze({
   imageLongEdgeMax: 1568,
   /** Images capture_zones returns per call (1,924 tokens each at 1456x1030 under 25,000 output tokens); further zones go to remainingZones. */
   maxImagesPerCall: 11,
+  /** Milliseconds one blind place check of `npm run eval:studio` (a headless `claude -p` reading two images) may take. */
+  placeCheckTimeoutMs: 180_000,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,

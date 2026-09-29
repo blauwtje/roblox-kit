@@ -50,7 +50,7 @@ const ceilingsChanged = (changed: number): CallToolResult => ({
   content: [{ type: "text", text: JSON.stringify({ changed }) }],
 });
 
-/** The arguments of a set-ceilings-hidden call carry `hidden`; a zones read carries none. */
+/** The arguments of a set-cutaway-hidden call carry `hidden`; a zones read carries none. */
 const isCeilingsCall = (request: { arguments: Record<string, unknown> }) =>
   String(request.arguments["code"]).includes('"hidden":');
 
@@ -206,11 +206,14 @@ await test("an image that is neither a readable PNG nor a JPEG fails after the c
     run(studio, { mapId: "arena" }),
     /zone "arena" view top.*neither a readable PNG nor a readable JPEG/,
   );
+  const zoneViews = ["hide", "capture", "hide", "capture"];
   assert.deepEqual(callKinds(studio), [
     "restore",
     "read",
     "hide",
-    ...Array.from({ length: 5 }, () => "capture"),
+    "capture",
+    ...zoneViews,
+    ...zoneViews,
     "restore",
   ]);
 });
@@ -286,27 +289,33 @@ await test("a map with no zones, a missing map or a capture without an image fai
   );
 });
 
-/** Every call in order, as "restore", "hide", "capture" or "read". */
+/** One call as "restore", "hide", "capture" or "read". */
+function callKindOf(request: FakeStudioConnection["requests"][number]): string {
+  if (request.name === "screen_capture") {
+    return "capture";
+  }
+  if (!isCeilingsCall(request)) {
+    return "read";
+  }
+  return String(request.arguments["code"]).includes('"hidden":true') ? "hide" : "restore";
+}
+
+/** Every call in order. */
 function callKinds(studio: FakeStudioConnection): string[] {
-  return studio.requests.map((request) => {
-    if (request.name === "screen_capture") {
-      return "capture";
-    }
-    if (!isCeilingsCall(request)) {
-      return "read";
-    }
-    return String(request.arguments["code"]).includes('"hidden":true') ? "hide" : "restore";
-  });
+  return studio.requests.map(callKindOf);
 }
 
 await test("ceilings are restored at call start, hidden for the captures and restored after them", async () => {
   const studio = studioWith(() => okImage());
   await run(studio, { mapId: "arena" });
+  const zoneViews = ["hide", "capture", "hide", "capture"];
   assert.deepEqual(callKinds(studio), [
     "restore",
     "read",
     "hide",
-    ...Array.from({ length: 5 }, () => "capture"),
+    "capture",
+    ...zoneViews,
+    ...zoneViews,
     "restore",
   ]);
 
@@ -314,9 +323,24 @@ await test("ceilings are restored at call start, hidden for the captures and res
   assert.ok(hideCode.includes(`"ceilingTag":"${config.ceilingTag}"`));
   assert.ok(
     hideCode.includes(
-      `"originalTransparencyAttribute":"${config.ceilingOriginalTransparencyAttribute}"`,
+      `"originalTransparencyAttribute":"${config.cutawayOriginalTransparencyAttribute}"`,
     ),
   );
+  assert.ok(hideCode.includes('"wallPrefixes":[]'), "the whole-map shot hides no wall");
+});
+
+await test("view a hides its zone's south wall and trim, and view b brings them back", async () => {
+  const studio = studioWith(() => okImage());
+  await run(studio, { mapId: "arena", zones: ["start"] });
+  const hides = studio.requests
+    .filter((request) => callKindOf(request) === "hide")
+    .map((request) => String(request.arguments["code"]));
+  assert.equal(hides.length, 3);
+  const southOfStart = ["wall", "baseboard", "crown", "stripe"].map(
+    (part) => `"start-${part}-south-"`,
+  );
+  assert.ok(hides[1]?.includes(`"wallPrefixes":[${southOfStart.join(",")}]`), hides[1]);
+  assert.ok(hides[2]?.includes('"wallPrefixes":[]'), "view b shows the south wall again");
 });
 
 await test("ceilings are restored when a capture fails", async () => {

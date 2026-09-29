@@ -30,3 +30,8 @@ Task 12 d553024: `unknown` or any differing value counts as a mismatch.
 Task 12 d553024: one place-check subagent per typed room zone, skipped when the intent names no genre.
 Task 12 d553024: finding `specField` is `rooms[<index>].roomType`, or `style` for a style-less map; `evidence.visible` carries the subagent's `clues`.
 Task 12 d553024: room comparison is exact string match against the spec's `roomType` (e.g. "platform" vs "platform"); free-text room naming may need a synonym rule if it proves too strict.
+Place-check follow-up: departure-board and clock stand free on the room's east-west center line at a quarter width either side of center (the center stays free for a spawn), two-faced toward north and south; a third standing piece is skipped with a warning.
+Place-check follow-up: the ticket hall uses a new `ticket-counter` (glass screen, numbered windows); the plain `counter` stays for the cozy-town shop.
+Place-check follow-up: signs are 8x2.5x0.4 with the label on both faces; a sign at an east or west door is a blade sign beside the doorway facing north and south, and falls back to the doorway when the wall has no space.
+Place-check follow-up: view a hides its zone's south wall stretches and trim bands (`<zone>-wall-south-`, `-baseboard-`, `-crown-`, `-stripe-`) for that shot instead of a steeper pitch, which would foreshorten signs and boards.
+Place-check follow-up: `npm run eval:studio` runs the blind check through a headless `claude -p` (Read tool only, no settings or MCP servers, images copied under neutral names) on the user's Claude Code login, and exits 1 after recording every benchmark when a check fails.

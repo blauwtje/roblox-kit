@@ -6,7 +6,8 @@ import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
-import { zoneShots, type Bounds, type ViewedZoneShot } from "./zone-cameras.ts";
+import { wallBandNames } from "./room-details.ts";
+import { nearWallSideOfView, zoneShots, type Bounds, type ViewedZoneShot } from "./zone-cameras.ts";
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const coordinatesSchema = z.tuple([z.number(), z.number(), z.number()]);
@@ -22,8 +23,8 @@ const captureZonesInput = z.strictObject({
   studioId: z.string().min(1).optional(),
 });
 
-/** What `set-ceilings-hidden.luau` reports: how many ceilings it hid or restored. */
-const ceilingsChangedSchema = z.strictObject({ changed: z.number() });
+/** What `set-cutaway-hidden.luau` reports: how many parts it hid or restored. */
+const cutawayChangedSchema = z.strictObject({ changed: z.number() });
 
 const captureZonesOutput = z.strictObject({
   mapId: z.string(),
@@ -203,27 +204,45 @@ function planShots(
   return { plannedShots: [...cutaway, ...pairs], remainingZones };
 }
 
-/** Hides or restores the tagged ceilings of the map, so a top-down shot sees into the rooms. */
-async function setCeilingsHidden(
+/**
+ * With `hidden`, hides the tagged ceilings of the map, so the shots see into the rooms, and the parts named by
+ * `wallPrefixes`, restoring any other part hidden before; without it, restores every hidden part.
+ */
+async function setCutawayHidden(
   connection: StudioConnection,
   studioId: string,
   mapId: string,
   hidden: boolean,
+  wallPrefixes: string[] = [],
 ): Promise<void> {
   await runLuauFile({
     connection,
     studioId,
-    fileName: "set-ceilings-hidden.luau",
+    fileName: "set-cutaway-hidden.luau",
     datamodelType: "Edit",
     arguments: {
       mapId,
       mapsFolderName: config.mapsFolderName,
       ceilingTag: config.ceilingTag,
-      originalTransparencyAttribute: config.ceilingOriginalTransparencyAttribute,
+      originalTransparencyAttribute: config.cutawayOriginalTransparencyAttribute,
       hidden,
+      wallPrefixes,
     },
-    resultSchema: ceilingsChangedSchema,
+    resultSchema: cutawayChangedSchema,
   });
+}
+
+/**
+ * Name prefixes of the parts a shot hides besides the ceilings: the wall stretches and trim bands of its
+ * zone's near wall (`nearWallSideOfView`), as build_map names them. The whole-map shot hides no wall.
+ */
+function nearWallPrefixes(mapId: string, shot: ViewedZoneShot): string[] {
+  const side = nearWallSideOfView[shot.view];
+  if (side === undefined || shot.zone === mapId) {
+    return [];
+  }
+  const infixes = [config.wallNameInfix, ...wallBandNames.map((band) => `-${band}-`)];
+  return infixes.map((infix) => `${shot.zone}${infix}${side}-`);
 }
 
 /** Captures one shot through StudioMCP's `screen_capture` after `config.captureSettleMs`; the camera is set for that capture only. */
@@ -262,7 +281,7 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top, named by the mapId), then two views per zone (room) from opposite sides (views a and b, at ${String(config.zoneShotPitchDegrees)} degrees pitch), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with both its views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call, which passes cutaway false to skip the repeated cutaway). ` +
-      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Each capture waits ${String(config.captureSettleMs)} ms first so the lighting settles, which makes a call take that long per image. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
+      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures, and so is a zone's south (+Z) wall with its trim during view a, which looks over it; all are restored afterwards, also when a capture fails, and a call that finds parts a crashed call left hidden restores them first. Each capture waits ${String(config.captureSettleMs)} ms first so the lighting settles, which makes a call take that long per image. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -273,8 +292,8 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     },
     async handler(input, context) {
       const studioId = await selectStudio(context.studio, input.studioId);
-      // A call that died before its restore left ceilings hidden; this puts them back first.
-      await setCeilingsHidden(context.studio, studioId, input.mapId, false);
+      // A call that died before its restore left parts hidden; this puts them back first.
+      await setCutawayHidden(context.studio, studioId, input.mapId, false);
       const mapZones = await runLuauFile({
         connection: context.studio,
         studioId,
@@ -299,13 +318,19 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       // One at a time: every capture moves the same Studio camera.
       const captured: { shot: ViewedZoneShot; image: ImageBlock }[] = [];
       try {
-        await setCeilingsHidden(context.studio, studioId, input.mapId, true);
+        let hiddenWalls: string[] = [];
+        await setCutawayHidden(context.studio, studioId, input.mapId, true, hiddenWalls);
         for (const shot of plannedShots) {
+          const wallPrefixes = nearWallPrefixes(input.mapId, shot);
+          if (wallPrefixes.join("\n") !== hiddenWalls.join("\n")) {
+            await setCutawayHidden(context.studio, studioId, input.mapId, true, wallPrefixes);
+            hiddenWalls = wallPrefixes;
+          }
           const image = await captureShot(context.studio, studioId, input.mapId, shot);
           captured.push({ shot, image });
         }
       } finally {
-        await setCeilingsHidden(context.studio, studioId, input.mapId, false);
+        await setCutawayHidden(context.studio, studioId, input.mapId, false);
       }
       const shots = captured.map(({ shot, image }) => ({
         ...shot,

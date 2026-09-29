@@ -1,13 +1,15 @@
 --!strict
--- Hides or restores the tagged ceilings of one built map, for capture_zones.
--- A ceiling's own Transparency is kept in a part attribute while it is hidden, so a restore
--- also undoes a hide that an earlier call never got to undo. Returns a short JSON count.
+-- Sets which parts of one built map capture_zones hides: with hidden true, the tagged ceilings and every
+-- part whose name starts with one of wallPrefixes; every other part it hid earlier is restored, and with
+-- hidden false every part is. A part's own Transparency is kept in a part attribute while it is hidden, so
+-- a restore also undoes a hide that an earlier call never got to undo. Returns a short JSON count.
 type Arguments = {
 	mapId: string,
 	mapsFolderName: string,
 	ceilingTag: string,
 	originalTransparencyAttribute: string,
 	hidden: boolean,
+	wallPrefixes: { string },
 }
 
 local arguments: Arguments = ...
@@ -44,11 +46,22 @@ local function restore(part: BasePart)
 	part:SetAttribute(ATTRIBUTE, nil)
 end
 
+local function isNamedWall(part: BasePart): boolean
+	for _, prefix in arguments.wallPrefixes do
+		if string.sub(part.Name, 1, #prefix) == prefix then
+			return true
+		end
+	end
+	return false
+end
+
 local model = findMapModel()
 local changed = 0
-for _, instance in CollectionService:GetTagged(arguments.ceilingTag) do
-	if instance:IsA("BasePart") and instance:IsDescendantOf(model) then
-		if arguments.hidden then
+for _, instance in model:GetDescendants() do
+	if instance:IsA("BasePart") then
+		local hidden = arguments.hidden
+			and (CollectionService:HasTag(instance, arguments.ceilingTag) or isNamedWall(instance))
+		if hidden then
 			hide(instance)
 			changed += 1
 		elseif instance:GetAttribute(ATTRIBUTE) ~= nil then

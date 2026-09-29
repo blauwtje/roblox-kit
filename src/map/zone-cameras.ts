@@ -60,6 +60,12 @@ function framedShot(zone: ZoneBounds, side: 1 | -1, pitchDegrees: number): ZoneS
   };
 }
 
+/**
+ * The wall side each view hides for its shot: view `a` looks from +Z over the zone's south wall, which would
+ * otherwise hide the strip of floor behind it; view `b` and `top` hide no wall.
+ */
+export const nearWallSideOfView: Partial<Record<ShotView, "south">> = { a: "south" };
+
 /** The single angled shot of one zone, from the +Z side at `config.zoneShotPitchDegrees`. */
 export function zoneShot(zone: ZoneBounds): ZoneShot {
   return framedShot(zone, 1, config.zoneShotPitchDegrees);

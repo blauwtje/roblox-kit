@@ -11,6 +11,7 @@ const accent = "#f5cd30";
 const roomTypes = {
   platform: { setPieces: ["track-bed", "platform-edge"], signLabel: "Platform 1" },
   "ticket-hall": { setPieces: ["counter"], signLabel: "Tickets" },
+  concourse: { setPieces: ["departure-board", "clock", "departure-board"], signLabel: "Concourse" },
 };
 
 const northYaw = 0;
@@ -108,10 +109,73 @@ await test("every door of a typed room gets a sign with the room type's label an
   assert.equal(platformSign.pivot.x, 5);
   assert.ok(platformSign.pivot.z < 20 && platformSign.pivot.z > 15, "inside the south wall");
   assert.equal(platformSign.yaw, northYaw);
-  const eastSign = signs.at(-1);
+});
+
+await test("a sign at an east or west door sticks out beside the doorway with its faces north and south", () => {
+  const eastSign = piecesOf("sign", place(stationSpec)).at(-1);
   assert.ok(eastSign);
-  assert.ok(eastSign.pivot.x < 115 && eastSign.pivot.x > 110, "inside the east wall");
-  assert.equal(eastSign.yaw, 90);
+  const eastInnerFace = 100 + 15 - 1;
+  assert.equal(eastSign.pivot.x, eastInnerFace - propDimensions.sign.x / 2);
+  // Clear of the 6-stud doorway at offset 0: half the door, the clearance and half the sign's thickness.
+  assert.equal(eastSign.pivot.z, -(3 + propDimensions.clearanceStuds + propDimensions.sign.z / 2));
+  assert.equal(eastSign.yaw, northYaw);
+});
+
+await test("an east door with no wall space beside it gets its sign hung in the doorway", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "narrow",
+    rooms: [
+      {
+        name: "hall",
+        roomType: "ticket-hall",
+        x: 0,
+        z: 0,
+        width: 30,
+        depth: 10,
+        doors: [{ side: "east", offset: 0 }],
+      },
+    ],
+  });
+  const [sign] = piecesOf("sign", place(spec));
+  assert.ok(sign);
+  assert.equal(sign.pivot.z, 0);
+  assert.equal(sign.yaw, 90);
+});
+
+await test("a departure board and a clock stand free a quarter width from center, faces north and south", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "concourse",
+    rooms: [
+      {
+        name: "concourse",
+        roomType: "concourse",
+        x: 0,
+        z: 400,
+        width: 60,
+        depth: 40,
+        doors: [{ side: "west", offset: 0 }],
+      },
+    ],
+  });
+  const pieces = place(spec);
+  const [board] = piecesOf("departure-board", pieces);
+  const [clock] = piecesOf("clock", pieces);
+  assert.ok(board && clock);
+  assert.deepEqual([board.pivot.x, board.pivot.z, board.yaw], [-14.5, 400, northYaw]);
+  assert.deepEqual([clock.pivot.x, clock.pivot.z, clock.yaw], [14.5, 400, northYaw]);
+  assert.equal(board.pivot.y, propDimensions["departure-board"].y / 2);
+  assert.deepEqual(warningsOf(spec), [
+    'Room "concourse" already holds 2 standing pieces, so departure-board has no spot left. The departure-board is skipped.',
+  ]);
+});
+
+await test("a standing piece a narrow room cannot keep out of its doorway strips is skipped", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "kiosk",
+    rooms: [{ name: "kiosk", roomType: "concourse", x: 0, z: 0, width: 30, depth: 30 }],
+  });
+  assert.deepEqual(piecesOf("departure-board", place(spec)), []);
+  assert.match(warningsOf(spec)[0] ?? "", /"kiosk" is too small for its set piece departure-board/);
 });
 
 await test("the same spec gives the same set pieces", () => {

@@ -22,6 +22,9 @@ export const propKinds = [
   "control-console",
   "crate-stack",
   "fireplace",
+  "departure-board",
+  "clock",
+  "ticket-counter",
 ] as const;
 
 export type PropKind = (typeof propKinds)[number];
@@ -59,12 +62,15 @@ export const propDimensions = Object.freeze({
   "track-bed": { x: 16, y: 1, z: 5 },
   "platform-edge": { x: 16, y: 0.5, z: 2 },
   counter: { x: 8, y: 3.5, z: 2.5 },
-  sign: { x: 4, y: 1.5, z: 0.3 },
+  sign: { x: 8, y: 2.5, z: 0.4 },
   "lab-bench": { x: 7, y: 3.2, z: 2.5 },
   "cell-bars": { x: 8, y: 9, z: 0.5 },
   "control-console": { x: 6, y: 3.5, z: 3.5 },
   "crate-stack": { x: 4, y: 4, z: 2.5 },
   fireplace: { x: 6, y: 5, z: 2 },
+  "departure-board": { x: 12, y: 10, z: 1 },
+  clock: { x: 5, y: 11, z: 1.2 },
+  "ticket-counter": { x: 14, y: 8, z: 3 },
 });
 
 const sides: Side[] = ["north", "south", "east", "west"];

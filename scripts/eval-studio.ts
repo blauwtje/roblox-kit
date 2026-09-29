@@ -1,19 +1,23 @@
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { config } from "../src/config.ts";
+import { blindPlaceCheck } from "../src/eval/blind-place-check.ts";
+import type { PlaceCheckResult } from "../src/eval/blind-place-check.ts";
 import { codeScoreOf } from "../src/eval/code-score.ts";
 import { buildMapTool } from "../src/map/build-map-tool.ts";
 import { captureZonesTool } from "../src/map/capture-zones-tool.ts";
 import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
+import type { RelationMapSpec } from "../src/map/map-spec.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
 
 /**
- * Builds, checks and captures each benchmark in `eval/benchmarks/` in the open Studio and appends one
- * JSON line per benchmark to `eval/results.jsonl`; images go to `eval/captures/<benchmark>/`.
+ * Builds, checks and captures each benchmark in `eval/benchmarks/` in the open Studio, runs the blind place
+ * check on each typed room, and appends one JSON line per benchmark to `eval/results.jsonl`; images go to
+ * `eval/captures/<benchmark>/`. The run fails when a place check fails, after every benchmark is recorded.
  * The built maps stay in the place (named `benchmark-*`, replaced on the next run) so they can be looked at.
  */
 const benchmarksUrl = new URL("../eval/benchmarks/", import.meta.url);
@@ -64,6 +68,33 @@ async function saveCaptures(
   return paths;
 }
 
+/**
+ * The blind place check (skills/visual-judge SKILL.md step 5) of each typed room of a styled benchmark, from
+ * the room zone's saved view a and view b images; a benchmark without a style has no typed rooms.
+ */
+async function placeChecks(spec: RelationMapSpec, captures: string[]): Promise<PlaceCheckResult[]> {
+  const genre = spec.style?.preset;
+  if (genre === undefined) {
+    return [];
+  }
+  const typedRooms = spec.rooms.flatMap((room) =>
+    room.roomType === undefined ? [] : [{ name: room.name, roomType: room.roomType }],
+  );
+  return Promise.all(
+    typedRooms.map(({ name, roomType }) => {
+      const views = ["a", "b"].map((view) =>
+        captures.find((path) => path.split("/").at(-1)?.startsWith(`${name}-${view}.`)),
+      );
+      const imagePaths = views.filter((path) => path !== undefined);
+      if (imagePaths.length !== views.length) {
+        const error = `Room "${name}" has no view a and view b capture to place-check.`;
+        return Promise.resolve({ room: name, genre, roomType, error, passed: false });
+      }
+      return blindPlaceCheck(name, genre, roomType, imagePaths);
+    }),
+  );
+}
+
 /** Builds, checks and captures one benchmark spec; returns its result line. */
 async function evaluate(file: string, connection: StudioConnection) {
   const benchmark = file.replace(/\.json$/, "");
@@ -97,6 +128,7 @@ async function evaluate(file: string, connection: StudioConnection) {
     zones = captured.output.remainingZones;
   } while (zones.length > 0);
   const captures = [...capturePaths];
+  const placeCheck = await placeChecks(spec, captures);
   const budget = spec.performanceBudget;
   return {
     benchmark,
@@ -115,6 +147,8 @@ async function evaluate(file: string, connection: StudioConnection) {
     zoneCount: checked.output.zoneCount,
     captures,
     captureWarnings,
+    placeCheck,
+    placeCheckPassed: placeCheck.every((check) => check.passed),
   };
 }
 
@@ -124,12 +158,30 @@ const connection = new StudioMcpClient({
 });
 try {
   const files = (await readdir(benchmarksUrl)).filter((name) => name.endsWith(".json")).sort();
+  const failedPlaceChecks: string[] = [];
   for (const file of files) {
     const line = await evaluate(file, connection);
     await appendFile(resultsUrl, `${JSON.stringify(line)}\n`);
     console.log(
-      `${line.benchmark}: codeScore ${String(line.codeScore)}, passed ${String(line.passed)}, ${String(line.captures.length)} images`,
+      `${line.benchmark}: codeScore ${String(line.codeScore)}, passed ${String(line.passed)}, ${String(line.captures.length)} images, place check ${line.placeCheckPassed ? "passed" : "FAILED"}`,
     );
+    for (const check of line.placeCheck) {
+      const named =
+        check.answer === undefined
+          ? `nothing (${String(check.error)})`
+          : `${check.answer.genre} / ${check.answer.room}`;
+      console.log(
+        `  ${check.room} (${check.roomType}): named ${named}: ${check.passed ? "pass" : "fail"}`,
+      );
+      if (!check.passed) {
+        failedPlaceChecks.push(
+          `${line.benchmark} ${check.room}: named ${named}, not ${check.genre} / ${check.roomType}`,
+        );
+      }
+    }
+  }
+  if (failedPlaceChecks.length > 0) {
+    throw new Error(`The blind place check failed:\n${failedPlaceChecks.join("\n")}`);
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

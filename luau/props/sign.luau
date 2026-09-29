@@ -1,6 +1,7 @@
 --!strict
--- ProceduralModel generator source for a wall sign: a dark board with an accent frame and the Label as text.
--- Params.Size is (width, height, thickness); the text faces -Z and the output stays inside Size.
+-- ProceduralModel generator source for a hanging sign: a dark board with an accent frame and the Label as text.
+-- Params.Size is (width, height, thickness); the text and frame are on both the -Z and +Z faces, so the sign
+-- reads from either side, and the output stays inside Size.
 -- Label is the room type name and AccentColor the preset accent; an empty Label leaves the board blank.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
@@ -37,10 +38,10 @@ local function addPart(
 	return part
 end
 
-local function addLabel(board: Part, text: string, color: Color3)
+local function addLabel(board: Part, face: Enum.NormalId, text: string, color: Color3)
 	local surface = Instance.new("SurfaceGui")
-	surface.Name = "LabelSurface"
-	surface.Face = Enum.NormalId.Front
+	surface.Name = `LabelSurface{face.Name}`
+	surface.Face = face
 	surface.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	surface.PixelsPerStud = 50
 	surface.CanvasSize = Vector2.new(board.Size.X * 50, board.Size.Y * 50)
@@ -69,41 +70,48 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local board = addPart(targetContainer, "Board", size, Vector3.zero, BOARD_COLOR, Enum.Material.SmoothPlastic)
 	local horizontalSize = Vector3.new(size.X, FRAME_WIDTH, frameThickness)
 	local verticalSize = Vector3.new(FRAME_WIDTH, size.Y - FRAME_WIDTH * 2, frameThickness)
-	local frontZ = -size.Z / 2 + frameThickness / 2
-	addPart(
-		targetContainer,
-		"FrameTop",
-		horizontalSize,
-		Vector3.new(0, size.Y / 2 - FRAME_WIDTH / 2, frontZ),
-		accent,
-		Enum.Material.SmoothPlastic
-	)
-	addPart(
-		targetContainer,
-		"FrameBottom",
-		horizontalSize,
-		Vector3.new(0, -size.Y / 2 + FRAME_WIDTH / 2, frontZ),
-		accent,
-		Enum.Material.SmoothPlastic
-	)
-	addPart(
-		targetContainer,
-		"FrameLeft",
-		verticalSize,
-		Vector3.new(-size.X / 2 + FRAME_WIDTH / 2, 0, frontZ),
-		accent,
-		Enum.Material.SmoothPlastic
-	)
-	addPart(
-		targetContainer,
-		"FrameRight",
-		verticalSize,
-		Vector3.new(size.X / 2 - FRAME_WIDTH / 2, 0, frontZ),
-		accent,
-		Enum.Material.SmoothPlastic
-	)
+	for _, face in
+		{
+			{ name = "Front", z = -size.Z / 2 + frameThickness / 2 },
+			{ name = "Back", z = size.Z / 2 - frameThickness / 2 },
+		}
+	do
+		addPart(
+			targetContainer,
+			`Frame{face.name}Top`,
+			horizontalSize,
+			Vector3.new(0, size.Y / 2 - FRAME_WIDTH / 2, face.z),
+			accent,
+			Enum.Material.SmoothPlastic
+		)
+		addPart(
+			targetContainer,
+			`Frame{face.name}Bottom`,
+			horizontalSize,
+			Vector3.new(0, -size.Y / 2 + FRAME_WIDTH / 2, face.z),
+			accent,
+			Enum.Material.SmoothPlastic
+		)
+		addPart(
+			targetContainer,
+			`Frame{face.name}Left`,
+			verticalSize,
+			Vector3.new(-size.X / 2 + FRAME_WIDTH / 2, 0, face.z),
+			accent,
+			Enum.Material.SmoothPlastic
+		)
+		addPart(
+			targetContainer,
+			`Frame{face.name}Right`,
+			verticalSize,
+			Vector3.new(size.X / 2 - FRAME_WIDTH / 2, 0, face.z),
+			accent,
+			Enum.Material.SmoothPlastic
+		)
+	end
 	if label ~= "" then
-		addLabel(board, label, accent)
+		addLabel(board, Enum.NormalId.Front, label, accent)
+		addLabel(board, Enum.NormalId.Back, label, accent)
 	end
 	params:Pause()
 end
