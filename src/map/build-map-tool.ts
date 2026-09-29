@@ -82,7 +82,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
-    `replaces the Model and clears the terrain its previous build filled, and the whole build is one undo step in Studio. ` +
+    `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
     `Returns { mapId, partCount, bounds, zones }: the studs bounds of the whole map and of each room (zone).`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
