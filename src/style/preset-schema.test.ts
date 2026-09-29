@@ -138,3 +138,59 @@ await test("presetOverridesSchema accepts a room types override", () => {
   const overrides = { roomTypes: { shop: { setPieces: ["counter"], signLabel: "SHOP" } } };
   assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
 });
+
+const concourse = {
+  setPieces: [],
+  signLabel: "CONCOURSE",
+  arrangements: [
+    { shape: "grid", piece: "pillar", spacing: 20 },
+    { shape: "rows", piece: "bench", spacing: 8, perRow: 3 },
+    {
+      shape: "along-walls",
+      piece: "ticket-machine",
+      spacing: 5,
+      walls: "doorless",
+      inset: 2,
+      max: 6,
+    },
+    { shape: "along-length", piece: "lamp", spacing: 12 },
+    { shape: "along-length", piece: "pillar", spacing: 15, inset: 4 },
+  ],
+  roomNames: ["waiting area", "hall"],
+};
+
+await test("presetSchema accepts every arrangement shape and accepted room names", () => {
+  const preset = { ...validPreset(), roomTypes: { concourse } };
+  assert.equal(presetSchema.safeParse(preset).success, true);
+});
+
+await test("presetSchema rejects an unknown arrangement shape", () => {
+  const unknownShape = {
+    ...concourse,
+    arrangements: [{ shape: "spiral", piece: "pillar", spacing: 20 }],
+  };
+  const preset = { ...validPreset(), roomTypes: { concourse: unknownShape } };
+  assert.equal(presetSchema.safeParse(preset).success, false);
+});
+
+await test("presetSchema rejects an arrangement missing a field of its shape or carrying another shape's", () => {
+  const cases = [
+    { shape: "rows", piece: "bench", spacing: 8 },
+    { shape: "along-walls", piece: "bench", spacing: 8, walls: "doorless" },
+    { shape: "along-walls", piece: "bench", spacing: 8, walls: "some", inset: 1 },
+    { shape: "grid", piece: "pillar", spacing: 20, perRow: 3 },
+    { shape: "grid", piece: "pillar", spacing: 0 },
+    { shape: "grid", piece: "pillar", spacing: 20, max: 0 },
+    { shape: "grid", piece: "", spacing: 20 },
+  ];
+  for (const badArrangement of cases) {
+    const roomTypes = { concourse: { ...concourse, arrangements: [badArrangement] } };
+    const preset = { ...validPreset(), roomTypes };
+    assert.equal(presetSchema.safeParse(preset).success, false, JSON.stringify(badArrangement));
+  }
+});
+
+await test("presetSchema rejects an empty accepted room name", () => {
+  const roomTypes = { concourse: { ...concourse, roomNames: [""] } };
+  assert.equal(presetSchema.safeParse({ ...validPreset(), roomTypes }).success, false);
+});

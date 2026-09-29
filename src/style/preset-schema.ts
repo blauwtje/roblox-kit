@@ -53,11 +53,50 @@ const lighting = z.strictObject({
   Bloom: bloom,
 });
 
-/** What a room of one type shows: the set pieces that identify it and the text its signs carry. */
+/** Fields every arrangement shares: the piece it repeats and an optional cap on how many it places. */
+const arrangementBase = {
+  /** Kind of the piece placed at each slot. */
+  piece: z.string().min(1),
+  /** Studs between neighboring pieces. */
+  spacing: z.number().positive(),
+  /** Caps the piece count so a large room stays inside its performance budget. */
+  max: z.number().int().positive().optional(),
+};
+
+/** How a room type fills floor space, discriminated by `shape`; counts grow with the room's floor area. */
+const arrangement = z.discriminatedUnion("shape", [
+  /** A piece every `spacing` studs both ways. */
+  z.strictObject({ shape: z.literal("grid"), ...arrangementBase }),
+  /** Rows of `perRow` pieces, a row every `spacing` studs along the long axis. */
+  z.strictObject({
+    shape: z.literal("rows"),
+    ...arrangementBase,
+    perRow: z.number().int().positive(),
+  }),
+  /** A piece every `spacing` studs along each doorless wall or every wall, `inset` studs from it. */
+  z.strictObject({
+    shape: z.literal("along-walls"),
+    ...arrangementBase,
+    walls: z.enum(["doorless", "all"]),
+    inset: z.number().nonnegative(),
+  }),
+  /** A line down the long axis, `inset` studs from the long wall the track bed is not on; the center line without `inset`. */
+  z.strictObject({
+    shape: z.literal("along-length"),
+    ...arrangementBase,
+    inset: z.number().nonnegative().optional(),
+  }),
+]);
+
+/** What a room of one type shows: the set pieces that identify it, the arrangements that fill it, the text its signs carry and the room names a reviewer may call it. */
 const roomType = z.strictObject({
   /** Set-piece kinds placed in a room of this type. */
   setPieces: z.array(z.string().min(1)),
+  /** Arrangements that fill the space the set pieces leave. */
+  arrangements: z.array(arrangement).optional(),
   signLabel: z.string().min(1),
+  /** Room names, besides the type name, that the blind place check accepts for this type. */
+  roomNames: z.array(z.string().min(1)).optional(),
 });
 
 /** One genre preset: palette, surface roles, lighting recipe, light roles, prop kit, room types and size rules. */
