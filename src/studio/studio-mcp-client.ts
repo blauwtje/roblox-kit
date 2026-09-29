@@ -5,7 +5,9 @@ import {
   type Transport,
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
+import { config } from "../config.ts";
 import type { StudioConnection, StudioInfo, StudioToolRequest } from "./studio-connection.ts";
 import { studioMcpCommand } from "./studio-mcp-command.ts";
 
@@ -22,6 +24,10 @@ export interface StudioMcpClientOptions {
   clientInfo: Implementation;
   /** Upper bound of the connect handshake and of every tool call. */
   timeoutMs: number;
+  /** How long `listStudios` keeps asking on one connection while the list is empty. */
+  discoveryTimeoutMs?: number;
+  /** Pause between two asks while the list is empty. */
+  discoveryPollIntervalMs?: number;
   /** Spawns a fresh transport per connection; defaults to Studio's own StudioMCP process. */
   createTransport?: () => Transport;
 }
@@ -48,7 +54,25 @@ export class StudioMcpClient implements StudioConnection {
     this.#options = options;
   }
 
+  /**
+   * A fresh StudioMCP connection first lists no Studio and lists the open place seconds later, on
+   * the same connection only (research R3e), so an empty list is asked again until the discovery
+   * timeout and only then returned empty.
+   */
   async listStudios(): Promise<StudioInfo[]> {
+    const discoveryTimeoutMs = this.#options.discoveryTimeoutMs ?? config.studioDiscoveryTimeoutMs;
+    const pollIntervalMs =
+      this.#options.discoveryPollIntervalMs ?? config.studioDiscoveryPollIntervalMs;
+    const deadline = Date.now() + discoveryTimeoutMs;
+    let studios = await this.#askStudios();
+    while (studios.length === 0 && Date.now() < deadline) {
+      await sleep(pollIntervalMs);
+      studios = await this.#askStudios();
+    }
+    return studios;
+  }
+
+  async #askStudios(): Promise<StudioInfo[]> {
     const result = await this.#callUpstream(listStudiosToolName, {});
     const text = result.content.find((block) => block.type === "text");
     if (result.isError || text === undefined) {

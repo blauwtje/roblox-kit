@@ -10,6 +10,13 @@ export const config = Object.freeze({
   serverVersion: "0.1.0",
   /** Upper bound of the StudioMCP handshake and of every call to it. */
   upstreamTimeoutMs: 60_000,
+  /** How long an empty Studio list is re-asked on one connection: a fresh StudioMCP lists nothing at first. */
+  studioDiscoveryTimeoutMs: 15_000,
+  studioDiscoveryPollIntervalMs: 1000,
+  /** Characters of text `execute_luau` returns before Studio cuts it; the smoke probe fails if Studio changes this. */
+  executeLuauMaxResultChars: 100_000,
+  /** What Studio appends to an `execute_luau` result it cut. */
+  executeLuauTruncationMarker: "... (truncated)",
 
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",

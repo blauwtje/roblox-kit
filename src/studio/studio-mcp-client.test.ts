@@ -10,9 +10,15 @@ import { StudioMcpClient } from "./studio-mcp-client.ts";
 const clientInfo = { name: "roblox-kit-test", version: "0.0.0" };
 const studioList = { studios: [{ id: "studio-a", name: "Place A" }] };
 
-/** A stand-in StudioMCP: an SDK server behind a linked in-memory transport, one per connection. */
-function fakeStudioMcpServers() {
+const emptyStudioList = { studios: [] };
+
+/**
+ * A stand-in StudioMCP: an SDK server behind a linked in-memory transport, one per connection.
+ * Its `list_roblox_studios` answers `listAnswers` in turn, then repeats the last one.
+ */
+function fakeStudioMcpServers(listAnswers: object[] = [studioList]) {
   const servers: StdioServerHandle[] = [];
+  let listCalls = 0;
   const receivedStudioIds: string[] = [];
   const createTransport = () => {
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
@@ -20,9 +26,11 @@ function fakeStudioMcpServers() {
       serveStdio(
         () => {
           const server = new McpServer({ name: "RobloxStudio", version: "1.0.0" });
-          server.registerTool("list_roblox_studios", {}, () => ({
-            content: [{ type: "text", text: JSON.stringify(studioList) }],
-          }));
+          server.registerTool("list_roblox_studios", {}, () => {
+            const answer = listAnswers[Math.min(listCalls, listAnswers.length - 1)];
+            listCalls += 1;
+            return { content: [{ type: "text", text: JSON.stringify(answer) }] };
+          });
           server.registerTool(
             "execute_luau",
             { inputSchema: z.object({ code: z.string(), studio_id: z.string() }) },
@@ -38,7 +46,7 @@ function fakeStudioMcpServers() {
     );
     return clientSide;
   };
-  return { servers, receivedStudioIds, createTransport };
+  return { servers, receivedStudioIds, createTransport, listCallCount: () => listCalls };
 }
 
 await test("connects lazily, lists Studios and adds studio_id to a tool call", async () => {
@@ -77,6 +85,38 @@ await test("starts a new StudioMCP for the next call after the first one exits",
 
   assert.deepEqual(await client.listStudios(), studioList.studios);
   assert.equal(fake.servers.length, 2);
+  await client.close();
+});
+
+await test("keeps asking on the same connection while the Studio list is empty", async () => {
+  const fake = fakeStudioMcpServers([emptyStudioList, emptyStudioList, studioList]);
+  const client = new StudioMcpClient({
+    clientInfo,
+    timeoutMs: 5000,
+    discoveryTimeoutMs: 5000,
+    discoveryPollIntervalMs: 1,
+    createTransport: fake.createTransport,
+  });
+
+  assert.deepEqual(await client.listStudios(), studioList.studios);
+  assert.equal(fake.listCallCount(), 3);
+  assert.equal(fake.servers.length, 1);
+  await client.close();
+});
+
+await test("returns the empty list once the discovery timeout has passed", async () => {
+  const fake = fakeStudioMcpServers([emptyStudioList]);
+  const client = new StudioMcpClient({
+    clientInfo,
+    timeoutMs: 5000,
+    discoveryTimeoutMs: 50,
+    discoveryPollIntervalMs: 10,
+    createTransport: fake.createTransport,
+  });
+
+  assert.deepEqual(await client.listStudios(), []);
+  assert.ok(fake.listCallCount() > 1);
+  assert.equal(fake.servers.length, 1);
   await client.close();
 });
 
