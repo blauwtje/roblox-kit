@@ -19,6 +19,9 @@ const captureZonesInput = z.strictObject({
   studioId: z.string().min(1).optional(),
 });
 
+/** What `set-ceilings-hidden.luau` reports: how many ceilings it hid or restored. */
+const ceilingsChangedSchema = z.strictObject({ changed: z.number() });
+
 const captureZonesOutput = z.strictObject({
   mapId: z.string(),
   /** One entry per image block that follows the text block, in the same order. */
@@ -61,6 +64,29 @@ function selectZones(
   return available.filter((zone) => requested.includes(zone.name));
 }
 
+/** Hides or restores the tagged ceilings of the map, so a top-down shot sees into the rooms. */
+async function setCeilingsHidden(
+  connection: StudioConnection,
+  studioId: string,
+  mapId: string,
+  hidden: boolean,
+): Promise<void> {
+  await runLuauFile({
+    connection,
+    studioId,
+    fileName: "set-ceilings-hidden.luau",
+    datamodelType: "Edit",
+    arguments: {
+      mapId,
+      mapsFolderName: config.mapsFolderName,
+      ceilingTag: config.ceilingTag,
+      originalTransparencyAttribute: config.ceilingOriginalTransparencyAttribute,
+      hidden,
+    },
+    resultSchema: ceilingsChangedSchema,
+  });
+}
+
 /** Captures one shot through StudioMCP's `screen_capture`; the camera is set for that capture only. */
 async function captureShot(
   connection: StudioConnection,
@@ -95,7 +121,7 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       `Screenshots each zone (room) of a map built by build_map, one angled shot per zone at ${String(config.zoneShotPitchDegrees)} degrees pitch, framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Optional zones lists the zone names to capture (default: all; each image costs context, so pass a few for large maps). ` +
-      `Read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, cameraPosition, lookAt }] } in studs, followed by one image content block per shot in the same order.`,
+      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, cameraPosition, lookAt }] } in studs, followed by one image content block per shot in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -106,6 +132,8 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     },
     async handler(input, context) {
       const studioId = await selectStudio(context.studio, input.studioId);
+      // A call that died before its restore left ceilings hidden; this puts them back first.
+      await setCeilingsHidden(context.studio, studioId, input.mapId, false);
       const mapZones = await runLuauFile({
         connection: context.studio,
         studioId,
@@ -126,8 +154,13 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       );
       // One at a time: every capture moves the same Studio camera.
       const images: ImageBlock[] = [];
-      for (const shot of shots) {
-        images.push(await captureShot(context.studio, studioId, input.mapId, shot));
+      try {
+        await setCeilingsHidden(context.studio, studioId, input.mapId, true);
+        for (const shot of shots) {
+          images.push(await captureShot(context.studio, studioId, input.mapId, shot));
+        }
+      } finally {
+        await setCeilingsHidden(context.studio, studioId, input.mapId, false);
       }
       return toolResult({ mapId: input.mapId, shots }, images);
     },

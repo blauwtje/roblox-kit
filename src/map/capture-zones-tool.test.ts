@@ -21,9 +21,20 @@ const okImage = (data: string): CallToolResult => ({
   content: [{ type: "image", data, mimeType: "image/png" }],
 });
 
+const ceilingsChanged = (changed: number): CallToolResult => ({
+  content: [{ type: "text", text: JSON.stringify({ changed }) }],
+});
+
+/** The arguments of a set-ceilings-hidden call carry `hidden`; a zones read carries none. */
+const isCeilingsCall = (request: { arguments: Record<string, unknown> }) =>
+  String(request.arguments["code"]).includes('"hidden":');
+
 function studioWith(captures: (captureId: string) => CallToolResult, zonesText = mapZones()) {
   return new FakeStudioConnection(studios, {
-    execute_luau: () => ({ content: [{ type: "text", text: zonesText }] }),
+    execute_luau: (request) =>
+      isCeilingsCall(request)
+        ? ceilingsChanged(2)
+        : { content: [{ type: "text", text: zonesText }] },
     screen_capture: (request) => captures(String(request.arguments["capture_id"])),
   });
 }
@@ -44,7 +55,9 @@ await test("each zone is captured with its computed camera and returned as an im
   const studio = studioWith((captureId) => okImage(`png-of-${captureId}`));
   const result = await run(studio, { mapId: "arena" });
 
-  const [readRequest, ...captureRequests] = studio.requests;
+  const luauRequests = studio.requests.filter((request) => request.name === "execute_luau");
+  const readRequest = luauRequests.find((request) => !isCeilingsCall(request));
+  const captureRequests = studio.requests.filter((request) => request.name === "screen_capture");
   assert.equal(readRequest?.name, "execute_luau");
   assert.equal(readRequest.arguments["datamodel_type"], "Edit");
   const code = String(readRequest.arguments["code"]);
@@ -114,4 +127,46 @@ await test("a map with no zones, a missing map or a capture without an image fai
     run(noImage, { mapId: "arena" }),
     /zone "start" returned no image: viewport closed/,
   );
+});
+
+/** Every call in order, as "restore", "hide", "capture" or "read". */
+function callKinds(studio: FakeStudioConnection): string[] {
+  return studio.requests.map((request) => {
+    if (request.name === "screen_capture") {
+      return "capture";
+    }
+    if (!isCeilingsCall(request)) {
+      return "read";
+    }
+    return String(request.arguments["code"]).includes('"hidden":true') ? "hide" : "restore";
+  });
+}
+
+await test("ceilings are restored at call start, hidden for the captures and restored after them", async () => {
+  const studio = studioWith((captureId) => okImage(captureId));
+  await run(studio, { mapId: "arena" });
+  assert.deepEqual(callKinds(studio), ["restore", "read", "hide", "capture", "capture", "restore"]);
+
+  const hideCode = String(studio.requests[2]?.arguments["code"]);
+  assert.ok(hideCode.includes(`"ceilingTag":"${config.ceilingTag}"`));
+  assert.ok(
+    hideCode.includes(
+      `"originalTransparencyAttribute":"${config.ceilingOriginalTransparencyAttribute}"`,
+    ),
+  );
+});
+
+await test("ceilings are restored when a capture fails", async () => {
+  const studio = studioWith(() => ({
+    content: [{ type: "text", text: "viewport closed" }],
+    isError: true,
+  }));
+  await assert.rejects(run(studio, { mapId: "arena" }), /returned no image/);
+  assert.deepEqual(callKinds(studio), ["restore", "read", "hide", "capture", "restore"]);
+});
+
+await test("a bad zone name fails before any ceiling is hidden", async () => {
+  const studio = studioWith((captureId) => okImage(captureId));
+  await assert.rejects(run(studio, { mapId: "arena", zones: ["attic"] }), /"attic"/);
+  assert.deepEqual(callKinds(studio), ["restore", "read"]);
 });

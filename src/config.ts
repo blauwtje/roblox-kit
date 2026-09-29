@@ -25,6 +25,8 @@ export const config = Object.freeze({
   ceilingNameSuffix: "-ceiling",
   /** CollectionService tag on every ceiling part; capture_zones hides the parts by it. */
   ceilingTag: "RobloxKitCeiling",
+  /** Part attribute that holds a hidden ceiling's own Transparency until capture_zones restores it. */
+  ceilingOriginalTransparencyAttribute: "RobloxKitOriginalTransparency",
 
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",
