@@ -109,3 +109,32 @@ await test("presetOverridesSchema keeps the preset ranges and strictness on part
   const unknownNested = { lighting: { Fog: 1 } };
   assert.equal(presetOverridesSchema.safeParse(unknownNested).success, false);
 });
+
+await test("presetSchema accepts room types with set pieces and a sign label, and works without them", () => {
+  const preset = {
+    ...validPreset(),
+    roomTypes: { platform: { setPieces: ["track-bed", "platform-edge"], signLabel: "PLATFORM 1" } },
+  };
+  assert.equal(presetSchema.safeParse(preset).success, true);
+  assert.equal(presetSchema.safeParse(validPreset()).success, true);
+});
+
+await test("presetSchema rejects a room type without a sign label or with an unknown field", () => {
+  const noLabel = { ...validPreset(), roomTypes: { platform: { setPieces: ["track-bed"] } } };
+  assert.equal(presetSchema.safeParse(noLabel).success, false);
+  const emptyLabel = {
+    ...validPreset(),
+    roomTypes: { platform: { setPieces: [], signLabel: "" } },
+  };
+  assert.equal(presetSchema.safeParse(emptyLabel).success, false);
+  const extra = {
+    ...validPreset(),
+    roomTypes: { platform: { setPieces: [], signLabel: "A", banner: "x" } },
+  };
+  assert.equal(presetSchema.safeParse(extra).success, false);
+});
+
+await test("presetOverridesSchema accepts a room types override", () => {
+  const overrides = { roomTypes: { shop: { setPieces: ["counter"], signLabel: "SHOP" } } };
+  assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
+});

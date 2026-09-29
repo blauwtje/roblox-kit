@@ -53,7 +53,14 @@ const lighting = z.strictObject({
   Bloom: bloom,
 });
 
-/** One genre preset: palette, surface roles, lighting recipe, light roles, prop kit and size rules. */
+/** What a room of one type shows: the set pieces that identify it and the text its signs carry. */
+const roomType = z.strictObject({
+  /** Set-piece kinds placed in a room of this type. */
+  setPieces: z.array(z.string().min(1)),
+  signLabel: z.string().min(1),
+});
+
+/** One genre preset: palette, surface roles, lighting recipe, light roles, prop kit, room types and size rules. */
 export const presetSchema = z.strictObject({
   palette: z.strictObject({
     colors: z.array(hexColor).min(3).max(4),
@@ -75,6 +82,8 @@ export const presetSchema = z.strictObject({
   }),
   /** Names of the props this genre may place. */
   propKit: z.array(z.string().min(1)).min(1),
+  /** Room types this genre offers, keyed by type name; a room without a type keeps the plain prop kit. */
+  roomTypes: z.record(z.string().min(1), roomType).optional(),
   sizeRules: z.strictObject({
     agentRadius: z.number().positive(),
     agentHeight: z.number().positive(),
