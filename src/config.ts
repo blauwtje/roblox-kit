@@ -5,6 +5,12 @@ export const config = Object.freeze({
   /** URI prefix of the full check reports served as resource links. */
   checkReportUriPrefix: "roblox-kit://check-reports/",
 
+  /** Name and version this server reports in the MCP handshake, to its client and to StudioMCP. */
+  serverName: "roblox-kit",
+  serverVersion: "0.1.0",
+  /** Upper bound of the StudioMCP handshake and of every call to it. */
+  upstreamTimeoutMs: 60_000,
+
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",
   defaultWallHeightStuds: 12,
