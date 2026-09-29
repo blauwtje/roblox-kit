@@ -5,7 +5,7 @@
   "wallHeight": 16,
   "doorWidth": 10,
   "rooms": [
-    { "name": "concourse", "x": 0, "z": 0, "width": 60, "depth": 40, "spawn": true },
+    { "name": "concourse", "x": 0, "z": 400, "width": 60, "depth": 40, "spawn": true },
     {
       "name": "platform",
       "width": 60,
@@ -29,5 +29,5 @@
       }
     }
   ],
-  "objectives": [{ "name": "platform-edge", "x": 0, "y": 3, "z": 55 }]
+  "objectives": [{ "name": "platform-edge", "x": 0, "y": 3, "z": 455 }]
 }

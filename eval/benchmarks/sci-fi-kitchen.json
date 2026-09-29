@@ -5,7 +5,7 @@
   "wallHeight": 14,
   "doorWidth": 10,
   "rooms": [
-    { "name": "prep-area", "x": 0, "z": 0, "width": 40, "depth": 30, "spawn": true },
+    { "name": "prep-area", "x": 0, "z": 200, "width": 40, "depth": 30, "spawn": true },
     {
       "name": "cooking-line",
       "width": 50,
@@ -29,5 +29,5 @@
       }
     }
   ],
-  "objectives": [{ "name": "chef-station", "x": 55, "y": 3, "z": 0 }]
+  "objectives": [{ "name": "chef-station", "x": 55, "y": 3, "z": 200 }]
 }
