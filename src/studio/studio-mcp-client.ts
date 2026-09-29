@@ -15,9 +15,16 @@ import { studioMcpCommand } from "./studio-mcp-command.ts";
 const pinnedProtocolVersion = "2026-07-28";
 const listStudiosToolName = "list_roblox_studios";
 
-/** `list_roblox_studios` answers with JSON text; entries carry an `id` and a `name` (tool description). */
+/**
+ * `list_roblox_studios` answers with JSON text; entries carry an `id` and a `name`, which is null
+ * for a place that has no name yet. A null name becomes "Studio <id>" so every message names the id.
+ */
 const listStudiosSchema = z.object({
-  studios: z.array(z.object({ id: z.string(), name: z.string() })),
+  studios: z.array(
+    z
+      .object({ id: z.string(), name: z.string().nullable() })
+      .transform(({ id, name }): StudioInfo => ({ id, name: name ?? `Studio ${id}` })),
+  ),
 });
 
 export interface StudioMcpClientOptions {
