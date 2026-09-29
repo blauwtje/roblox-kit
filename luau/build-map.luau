@@ -1,0 +1,152 @@
+--!strict
+-- Builds one map as a Model named after its id under a Workspace folder, replacing the Model of
+-- the same id and the terrain it filled. Reports the number of parts built.
+type Vector = { x: number, y: number, z: number }
+
+type PartRecord = {
+	name: string,
+	kind: string,
+	position: Vector,
+	size: Vector,
+	material: string,
+}
+
+type TerrainFill = {
+	shape: string,
+	center: Vector,
+	size: Vector?,
+	radius: number?,
+	material: string,
+}
+
+type Arguments = {
+	mapId: string,
+	mapsFolderName: string,
+	parts: { PartRecord },
+	terrainFills: { TerrainFill },
+}
+
+-- Attribute on the map Model holding the terrain fills of its build as JSON, so a rebuild can clear them.
+local TERRAIN_ATTRIBUTE_NAME = "RobloxKitTerrainFills"
+
+local arguments: Arguments = ...
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
+local HttpService = game:GetService("HttpService")
+
+local function toVector3(vector: Vector): Vector3
+	return Vector3.new(vector.x, vector.y, vector.z)
+end
+
+-- Names the materials that Enum.Material does not know, so nothing is built from a bad spec.
+local function assertMaterialsExist()
+	local unknown: { string } = {}
+	local function check(materialName: string)
+		if Enum.Material:FromName(materialName) == nil and not table.find(unknown, materialName) then
+			table.insert(unknown, materialName)
+		end
+	end
+	for _, part in arguments.parts do
+		check(part.material)
+	end
+	for _, fill in arguments.terrainFills do
+		check(fill.material)
+	end
+	if #unknown > 0 then
+		error(
+			`Unknown Roblox material name(s): {table.concat(unknown, ", ")}. Use names from Enum.Material, such as Concrete or Grass.`,
+			0
+		)
+	end
+end
+
+local function materialNamed(materialName: string): Enum.Material
+	return (Enum.Material:FromName(materialName) :: any) :: Enum.Material
+end
+
+local function fillTerrain(fill: TerrainFill, material: Enum.Material)
+	local size = fill.size
+	local radius = fill.radius
+	if size then
+		workspace.Terrain:FillBlock(CFrame.new(toVector3(fill.center)), toVector3(size), material)
+	elseif radius then
+		workspace.Terrain:FillBall(toVector3(fill.center), radius, material)
+	end
+end
+
+local function clearTerrainOf(oldModel: Model)
+	local encoded = oldModel:GetAttribute(TERRAIN_ATTRIBUTE_NAME)
+	if typeof(encoded) ~= "string" then
+		return
+	end
+	local oldFills = HttpService:JSONDecode(encoded) :: { TerrainFill }
+	for _, fill in oldFills do
+		fillTerrain(fill, Enum.Material.Air)
+	end
+end
+
+local function mapsFolder(): Instance
+	local existing = workspace:FindFirstChild(arguments.mapsFolderName)
+	if existing then
+		return existing
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = arguments.mapsFolderName
+	folder.Parent = workspace
+	return folder
+end
+
+local function newPart(record: PartRecord): BasePart
+	local part: BasePart = if record.kind == "spawn" then Instance.new("SpawnLocation") else Instance.new("Part")
+	part.Name = record.name
+	part.Anchored = true
+	part.Size = toVector3(record.size)
+	part.Position = toVector3(record.position)
+	part.Material = materialNamed(record.material)
+	return part
+end
+
+-- Returns whether a map of this id was replaced and how many parts the new one holds.
+local function build(): (boolean, number)
+	local folder = mapsFolder()
+	local oldModel = folder:FindFirstChild(arguments.mapId)
+	if oldModel and oldModel:IsA("Model") then
+		clearTerrainOf(oldModel)
+	end
+	if oldModel then
+		oldModel:Destroy()
+	end
+
+	local model = Instance.new("Model")
+	model.Name = arguments.mapId
+	for _, record in arguments.parts do
+		newPart(record).Parent = model
+	end
+	for _, fill in arguments.terrainFills do
+		fillTerrain(fill, materialNamed(fill.material))
+	end
+	model:SetAttribute(TERRAIN_ATTRIBUTE_NAME, HttpService:JSONEncode(arguments.terrainFills))
+	model.Parent = folder
+	return oldModel ~= nil, #model:GetChildren()
+end
+
+assertMaterialsExist()
+
+-- nil when Studio refuses a recording, such as while another one is open; the build then still runs.
+local recordingStarted, recordingId = pcall(function()
+	return ChangeHistoryService:TryBeginRecording("roblox-kit build_map", "Build map " .. arguments.mapId)
+end)
+local recording: string? = if recordingStarted and typeof(recordingId) == "string" then recordingId else nil
+
+local built, replacedOrError, partCount = pcall(build)
+if recording then
+	local operation = if built then Enum.FinishRecordingOperation.Commit else Enum.FinishRecordingOperation.Cancel
+	ChangeHistoryService:FinishRecording(recording, operation)
+end
+if not built then
+	local undoNote = if recording
+		then "The build was cancelled and undone."
+		else "No undo recording was open, so nothing was undone."
+	error(`Building map "{arguments.mapId}" failed: {tostring(replacedOrError)}. {undoNote}`, 0)
+end
+
+return HttpService:JSONEncode({ partCount = partCount, replaced = replacedOrError })

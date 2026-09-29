@@ -1,0 +1,107 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { test } from "node:test";
+import { config } from "../config.ts";
+import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
+import { tools } from "../server/main.ts";
+import { buildMapTool } from "./build-map-tool.ts";
+
+const studios = [{ id: "studio-a", name: "Place A" }];
+
+const twoRoomSpec = {
+  mapId: "two-rooms",
+  rooms: [
+    { name: "start", x: 0, z: 0, width: 40, depth: 40, spawn: true, doors: [{ side: "east" }] },
+    { name: "hall", x: 40, z: 0, width: 40, depth: 40, doors: [{ side: "west" }] },
+  ],
+  terrain: [
+    {
+      shape: "block",
+      center: { x: 0, y: -20, z: 0 },
+      size: { x: 200, y: 20, z: 200 },
+      material: "Grass",
+    },
+    { shape: "ball", center: { x: 150, y: 0, z: 0 }, radius: 10, material: "Water" },
+  ],
+};
+
+function studioReturning(text: string, isError = false) {
+  return new FakeStudioConnection(studios, {
+    execute_luau: () => ({ content: [{ type: "text", text }], isError }),
+  });
+}
+
+function run(studio: FakeStudioConnection, spec: object) {
+  return buildMapTool.handler(buildMapTool.inputSchema.parse(spec), { studio });
+}
+
+await test("build_map is registered with a strict schema and the mapId lifetime in its description", () => {
+  assert.ok(tools.includes(buildMapTool));
+  assert.match(buildMapTool.description, /mapId is the handle/);
+  assert.match(buildMapTool.description, /replaces the Model/);
+  assert.equal(buildMapTool.annotations.readOnlyHint, false);
+  assert.throws(() => buildMapTool.inputSchema.parse({ ...twoRoomSpec, extra: 1 }));
+});
+
+await test("sends the laid-out parts and fills to Studio and returns the map handle with bounds and zones", async () => {
+  const studio = studioReturning('{"partCount":14,"replaced":false}');
+  const result = await run(studio, twoRoomSpec);
+
+  const [request] = studio.requests;
+  assert.equal(request?.name, "execute_luau");
+  assert.equal(request.arguments["datamodel_type"], "Edit");
+  const code = String(request.arguments["code"]);
+  assert.ok(code.includes(`"mapsFolderName":"${config.mapsFolderName}"`));
+  assert.ok(code.includes('"mapId":"two-rooms"'));
+  assert.ok(code.includes('"start-spawn"'));
+  assert.ok(code.includes('"shape":"ball"'));
+
+  assert.equal(result.isError, undefined);
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.equal(structured.mapId, "two-rooms");
+  assert.equal(structured.partCount, 14);
+  assert.deepEqual(structured.bounds, {
+    min: { x: -100, y: -30, z: -100 },
+    max: { x: 160, y: 12, z: 100 },
+  });
+  assert.deepEqual(
+    structured.zones.map((zone) => zone.name),
+    ["start", "hall"],
+  );
+  assert.deepEqual(structured.zones[1]?.bounds, {
+    min: { x: 20, y: -1, z: -20 },
+    max: { x: 60, y: 12, z: 20 },
+  });
+  const [text] = result.content;
+  assert.equal(text?.type, "text");
+  assert.deepEqual(JSON.parse(text.text), structured);
+});
+
+await test("a spec that cannot be laid out fails before Studio is asked", async () => {
+  const studio = studioReturning("{}");
+  const tinyRoom = { mapId: "tiny", rooms: [{ name: "closet", x: 0, z: 0, width: 2, depth: 2 }] };
+  await assert.rejects(run(studio, tinyRoom), /Room "closet"/);
+  assert.equal(studio.requests.length, 0);
+});
+
+await test("passes Studio's error text on, such as an unknown material", async () => {
+  const message = "Unknown Roblox material name(s): Marbel. Use names from Enum.Material.";
+  await assert.rejects(
+    run(studioReturning(message, true), twoRoomSpec),
+    /Unknown Roblox material name\(s\): Marbel/,
+  );
+});
+
+await test("asks for a studioId when several Studios are connected", async () => {
+  const studio = new FakeStudioConnection([...studios, { id: "studio-b", name: "Place B" }]);
+  await assert.rejects(run(studio, twoRoomSpec), /Pass studioId as one of/);
+  assert.equal(studio.requests.length, 0);
+});
+
+await test("build-map.luau is strict, guards its build with a recording and checks materials first", async () => {
+  const source = await readFile(new URL("../../luau/build-map.luau", import.meta.url), "utf8");
+  assert.ok(source.startsWith("--!strict"));
+  assert.ok(source.includes("TryBeginRecording"));
+  assert.ok(source.includes("Enum.FinishRecordingOperation.Cancel"));
+  assert.ok(source.indexOf("assertMaterialsExist()") < source.indexOf("TryBeginRecording"));
+});

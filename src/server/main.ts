@@ -1,13 +1,14 @@
 import { McpServer, type Implementation, type Transport } from "@modelcontextprotocol/server";
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { config } from "../config.ts";
+import { buildMapTool } from "../map/build-map-tool.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
 import { StudioMcpClient } from "../studio/studio-mcp-client.ts";
 import type { ToolDefinition } from "./tool-definition.ts";
 import { toolErrorResult } from "./tool-error.ts";
 
 /** The server's tools in `tools/list` order; each tool module adds its definition here. */
-export const tools: readonly ToolDefinition[] = [];
+export const tools: readonly ToolDefinition[] = [buildMapTool];
 
 export interface ServerOptions {
   serverInfo: Implementation;
