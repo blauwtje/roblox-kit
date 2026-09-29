@@ -22,9 +22,13 @@ export const config = Object.freeze({
   floorNameSuffix: "-floor",
   spawnNameSuffix: "-spawn",
   wallNameInfix: "-wall-",
+  ceilingNameSuffix: "-ceiling",
+  /** CollectionService tag on every ceiling part; capture_zones hides the parts by it. */
+  ceilingTag: "RobloxKitCeiling",
 
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",
+  defaultCeilingMaterial: "Concrete",
   defaultWallHeightStuds: 12,
   defaultWallThicknessStuds: 1,
   defaultDoorWidthStuds: 6,

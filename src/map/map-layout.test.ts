@@ -226,3 +226,42 @@ await test("a style's surface material fills in where the room and the map name 
   const withoutMapMaterial = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
   assert.equal(partNamed(withoutMapMaterial.parts, "hall-wall-north-1").material, "Brick");
 });
+
+await test("a layout without the ceilings option has no ceiling part", () => {
+  const { parts } = layoutOf(threeRoomInput);
+  assert.equal(parts.filter((part) => part.kind === "ceiling").length, 0);
+});
+
+await test("ceilings add one slab per room on top of the walls, with shipped defaults", () => {
+  const spec = mapSpecSchema.parse({ ...threeRoomInput, wallHeight: 10, wallThickness: 2 });
+  const { parts } = layoutMap(spec, undefined, { ceilings: true });
+  const ceilings = parts.filter((part) => part.kind === "ceiling");
+  assert.deepEqual(
+    ceilings.map((part) => part.name),
+    ["start", "hall", "vault"].map((room) => `${room}${config.ceilingNameSuffix}`),
+  );
+  const ceiling = partNamed(parts, "hall-ceiling");
+  assert.equal(ceiling.room, "hall");
+  assert.equal(ceiling.role, "ceiling");
+  assert.equal(ceiling.material, config.defaultCeilingMaterial);
+  assert.deepEqual(ceiling.position, { x: 40, y: 11, z: 0 });
+  assert.deepEqual(ceiling.size, { x: 40, y: 2, z: 40 });
+  const wall = partNamed(parts, "hall-wall-north-1");
+  assert.equal(ceiling.position.y - ceiling.size.y / 2, wall.position.y + wall.size.y / 2);
+  assert.equal(new Set(parts.map((part) => part.name)).size, parts.length);
+});
+
+await test("ceilings take the style's ceiling color and material", () => {
+  const surfaces = {
+    floor: { color: "#112233" },
+    wall: { color: "#445566" },
+    ceiling: { color: "#778899", material: "Metal" },
+  };
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces, { ceilings: true });
+  assert.equal(partNamed(parts, "vault-ceiling").color, "#778899");
+  assert.equal(partNamed(parts, "vault-ceiling").material, "Metal");
+});
+
+await test("the ceiling tag is a non-empty config name", () => {
+  assert.ok(config.ceilingTag.length > 0);
+});
