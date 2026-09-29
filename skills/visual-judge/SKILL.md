@@ -19,10 +19,11 @@ An author who built a map reads its screenshots as the map they meant, not the m
 2. **Run `check_map` first and fix what it reports.** A failed check is a code fact, so the judge never spends an image on it.
 3. **Dispatch a fresh subagent to capture and judge.** Give it only the `mapId`, the intent lines, the preset's palette, surfaces and lighting as the rubric, the `check_map` JSON and the `zones` to look at. It calls `capture_zones` itself, so the images stay out of your context and it never sees your reasoning.
 4. **Ask for one finding per issue, reasoning before verdict.** Each finding validates against `finding.schema.json`; reject one without an image-based `evidence.visible`, because it is a guess. "No findings" is a valid answer: a judge pushed to find something invents defects.
-5. **Log the round.** Append one line to `.roblox-kit/judge-log.jsonl` in the user's project: `{ "round", "date", "mapId", "zones", "findings" }`. Add `.roblox-kit/` to that project's `.gitignore` when missing.
-6. **Send only `blocker` and `major` findings to the builder.** Edit the `build_map` spec at `specField` and rebuild with the same `mapId`; a hand patch in Studio is erased by the next rebuild. `minor` findings go in the final report.
-7. **Judge the changed zones again with a new subagent after `check_map`.** A fix can open a gap or an overlap, and a reused judge already knows what to expect.
-8. **Stop on a round with no `blocker` or `major`, after round 3, or when a finding repeats.** A repeat is the same `type`, `specField` and `imageId` in two rounds. Report open findings in the judge's words and ask the user before another round, because past that the loop chases taste.
+5. **Run the place check on each typed room's zone, with its own fresh subagent.** Skip a map whose intent names no genre. Brief it with `place-check-prompt.md` only: the zone and nothing about the map, so it cannot borrow the intent. Compare its `genre` and `room` with the map's `style.preset` and that room's `roomType` (both spelled as in the spec). A differing value, or `unknown`, is one `unidentified-place` `blocker` finding on the room's `<zone>:<view>` image; put the subagent's `clues` in `evidence.visible` and the room's `roomType` in `specField` as `rooms[<index>].roomType`. A map built without a style has no `style.preset` or `roomType` to match, so it fails here; use `style` as `specField`. No `blocker` from this step is a pass; it costs no model call beyond the subagent.
+6. **Log the round.** Append one line to `.roblox-kit/judge-log.jsonl` in the user's project: `{ "round", "date", "mapId", "zones", "findings" }`. Add `.roblox-kit/` to that project's `.gitignore` when missing.
+7. **Send only `blocker` and `major` findings to the builder.** Edit the `build_map` spec at `specField`. For `unidentified-place`, fix the style and room type so the room gets its set pieces and sign, not its size, and rebuild with the same `mapId`; a hand patch in Studio is erased by the next rebuild. `minor` findings go in the final report.
+8. **Judge the changed zones again with a new subagent after `check_map`.** A fix can open a gap or an overlap, and a reused judge already knows what to expect.
+9. **Stop on a round with no `blocker` or `major`, after round 3, or when a finding repeats.** A repeat is the same `type`, `specField` and `imageId` in two rounds. Report open findings in the judge's words and ask the user before another round, because past that the loop chases taste.
 
 ## Limits
 
@@ -31,9 +32,10 @@ An author who built a map reads its screenshots as the map they meant, not the m
 
 ## References
 
-| File                  | Read it when                                                              |
-| --------------------- | ------------------------------------------------------------------------- |
-| `finding.schema.json` | Step 4, when writing the judge's brief or checking a finding it returned. |
+| File                    | Read it when                                                                     |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `finding.schema.json`   | Steps 4 and 5, when writing the judge's brief or checking a finding it returned. |
+| `place-check-prompt.md` | Step 5, when briefing the image-only place-check subagent.                       |
 
 ## Judgment
 

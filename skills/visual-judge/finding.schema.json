@@ -5,6 +5,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "severity", "evidence", "reasoning", "verdict"],
+  "if": { "properties": { "type": { "const": "unidentified-place" } } },
+  "then": { "properties": { "severity": { "const": "blocker" } } },
   "properties": {
     "type": {
       "description": "What kind of issue this is.",
@@ -17,7 +19,8 @@
         "palette",
         "lighting",
         "spec-miss",
-        "visual"
+        "visual",
+        "unidentified-place"
       ]
     },
     "severity": {
