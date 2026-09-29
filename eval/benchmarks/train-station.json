@@ -1,0 +1,33 @@
+{
+  "mapId": "benchmark-train-station",
+  "style": { "preset": "train-station" },
+  "seed": 101,
+  "wallHeight": 16,
+  "doorWidth": 10,
+  "rooms": [
+    { "name": "concourse", "x": 0, "z": 0, "width": 60, "depth": 40, "spawn": true },
+    {
+      "name": "platform",
+      "width": 60,
+      "depth": 30,
+      "relation": {
+        "to": "concourse",
+        "direction": "south",
+        "hallwayLength": 15,
+        "hallwayWidth": 12
+      }
+    },
+    {
+      "name": "ticket-hall",
+      "width": 30,
+      "depth": 30,
+      "relation": {
+        "to": "concourse",
+        "direction": "west",
+        "hallwayLength": 15,
+        "hallwayWidth": 12
+      }
+    }
+  ],
+  "objectives": [{ "name": "platform-edge", "x": 0, "y": 3, "z": 55 }]
+}

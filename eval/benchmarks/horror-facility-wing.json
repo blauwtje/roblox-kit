@@ -1,0 +1,34 @@
+{
+  "mapId": "benchmark-horror-facility-wing",
+  "style": { "preset": "horror-facility" },
+  "seed": 202,
+  "wallHeight": 14,
+  "doorWidth": 10,
+  "rooms": [
+    { "name": "security-office", "x": 0, "z": 0, "width": 30, "depth": 30, "spawn": true },
+    {
+      "name": "lab",
+      "width": 40,
+      "depth": 30,
+      "relation": {
+        "to": "security-office",
+        "direction": "east",
+        "hallwayLength": 20,
+        "hallwayWidth": 12
+      }
+    },
+    {
+      "name": "morgue",
+      "width": 30,
+      "depth": 25,
+      "relation": { "to": "lab", "direction": "south", "hallwayLength": 15, "hallwayWidth": 12 }
+    },
+    {
+      "name": "generator-room",
+      "width": 30,
+      "depth": 30,
+      "relation": { "to": "lab", "direction": "east", "hallwayLength": 20, "hallwayWidth": 12 }
+    }
+  ],
+  "objectives": [{ "name": "generator", "x": 110, "y": 3, "z": 0 }]
+}
