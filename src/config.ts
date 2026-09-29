@@ -31,6 +31,11 @@ export const config = Object.freeze({
   /** Seed of a map spec that sets none. */
   defaultSeed: 1,
 
+  /** How far below the ceiling a room light hangs. */
+  lightCeilingDropStuds: 1,
+  /** Height above the floor of the focal light over a spawn pad. */
+  focalLightHeightStuds: 6,
+
   /** Penetration below this depth is face contact, not an overlap. */
   overlapToleranceStuds: 0.05,
   pathfindingAgentRadiusStuds: 2,
