@@ -10,6 +10,8 @@ import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
 import type { RelationMapSpec } from "../src/map/map-spec.ts";
+import { loadPresets } from "../src/style/load-preset.ts";
+import { resolveStyle } from "../src/style/resolve-style.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
@@ -73,10 +75,11 @@ async function saveCaptures(
  * the room zone's saved view a and view b images; a benchmark without a style has no typed rooms.
  */
 async function placeChecks(spec: RelationMapSpec, captures: string[]): Promise<PlaceCheckResult[]> {
-  const genre = spec.style?.preset;
-  if (genre === undefined) {
+  if (spec.style === undefined) {
     return [];
   }
+  const genre = spec.style.preset;
+  const roomTypes = resolveStyle(await loadPresets(), spec.style).roomTypes ?? {};
   const typedRooms = spec.rooms.flatMap((room) =>
     room.roomType === undefined ? [] : [{ name: room.name, roomType: room.roomType }],
   );
@@ -90,7 +93,8 @@ async function placeChecks(spec: RelationMapSpec, captures: string[]): Promise<P
         const error = `Room "${name}" has no view a and view b capture to place-check.`;
         return Promise.resolve({ room: name, genre, roomType, error, passed: false });
       }
-      return blindPlaceCheck(name, genre, roomType, imagePaths);
+      const acceptedNames = roomTypes[roomType]?.roomNames ?? [];
+      return blindPlaceCheck(name, genre, roomType, acceptedNames, imagePaths);
     }),
   );
 }

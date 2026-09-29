@@ -69,9 +69,21 @@ function normalizedRoom(name: string): string {
     .replace(/[\s-]+/g, "-");
 }
 
-/** Whether the reviewer named the spec's genre and room type (SKILL.md step 5); `unknown` never matches. */
-export function placeMatches(answer: PlaceAnswer, genre: string, roomType: string): boolean {
-  return answer.genre === genre && normalizedRoom(answer.room) === normalizedRoom(roomType);
+/**
+ * Whether the reviewer named the spec's genre and either the room type or one of its `acceptedNames`
+ * (SKILL.md step 5); `unknown` never matches.
+ */
+export function placeMatches(
+  answer: PlaceAnswer,
+  genre: string,
+  roomType: string,
+  acceptedNames: string[],
+): boolean {
+  const named = normalizedRoom(answer.room);
+  return (
+    answer.genre === genre &&
+    [roomType, ...acceptedNames].some((accepted) => normalizedRoom(accepted) === named)
+  );
 }
 
 const run = promisify(execFile);
@@ -126,18 +138,26 @@ async function askReviewer(imagePaths: string[]): Promise<PlaceAnswer> {
 }
 
 /**
- * Runs the blind place check on one typed room from its view a and view b images. A reviewer that fails,
+ * Runs the blind place check on one typed room from its view a and view b images, accepting the room type
+ * and its `acceptedNames`. A reviewer that fails,
  * times out or answers off-schema fails the check with its error, so one room cannot stop the others.
  */
 export async function blindPlaceCheck(
   room: string,
   genre: string,
   roomType: string,
+  acceptedNames: string[],
   imagePaths: string[],
 ): Promise<PlaceCheckResult> {
   try {
     const answer = await askReviewer(imagePaths);
-    return { room, genre, roomType, answer, passed: placeMatches(answer, genre, roomType) };
+    return {
+      room,
+      genre,
+      roomType,
+      answer,
+      passed: placeMatches(answer, genre, roomType, acceptedNames),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { room, genre, roomType, error: message, passed: false };

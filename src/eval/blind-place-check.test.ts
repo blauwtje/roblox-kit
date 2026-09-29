@@ -21,10 +21,22 @@ await test("a prompt without the eval source line is rejected", () => {
 
 await test("the room matches ignoring case, spaces and hyphens; another genre or unknown does not", () => {
   const answer = { clues: "", genre: "train-station", room: "Ticket Hall" };
-  assert.equal(placeMatches(answer, "train-station", "ticket-hall"), true);
-  assert.equal(placeMatches(answer, "train-station", "platform"), false);
+  assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), true);
+  assert.equal(placeMatches(answer, "train-station", "platform", []), false);
   assert.equal(
-    placeMatches({ ...answer, genre: "unknown" }, "train-station", "ticket-hall"),
+    placeMatches({ ...answer, genre: "unknown" }, "train-station", "ticket-hall", []),
+    false,
+  );
+});
+
+await test("a name the room type lists matches, ignoring case, spaces and hyphens; an unlisted one does not", () => {
+  const answer = { clues: "", genre: "train-station", room: "Main Concourse" };
+  assert.equal(placeMatches(answer, "train-station", "ticket-hall", ["main-concourse"]), true);
+  assert.equal(placeMatches(answer, "train-station", "ticket-hall", ["waiting room"]), false);
+  assert.equal(
+    placeMatches({ ...answer, genre: "airport" }, "train-station", "ticket-hall", [
+      "main-concourse",
+    ]),
     false,
   );
 });
