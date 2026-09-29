@@ -30,7 +30,7 @@
       "required": ["imageId", "visible"],
       "properties": {
         "imageId": {
-          "description": "The zone name of the capture_zones shot the finding rests on.",
+          "description": "The capture_zones image the finding rests on, as `<zone>:<view>`, such as `kitchen:a`; the cutaway is `<mapId>:top`.",
           "type": "string",
           "minLength": 1
         },

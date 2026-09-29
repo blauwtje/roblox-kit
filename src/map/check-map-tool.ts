@@ -33,7 +33,7 @@ const issueCountsSchema = luauCountsSchema.extend({ sizeRule: z.number().int() }
 const checkMapInput = z.strictObject({
   /** The mapId that `build_map` returned. */
   mapId: z.string().min(1),
-  /** Points in studs that every spawn must be able to walk to, as in the build_map spec. */
+  /** Points in studs that every spawn must be able to walk to; they replace the objectives of `spec`. */
   objectives: z
     .array(z.strictObject({ name: z.string().min(1), x: z.number(), y: z.number(), z: z.number() }))
     .optional(),
@@ -195,7 +195,7 @@ export function createCheckMapTool(
           agentRadiusStuds: agent.radius,
           agentHeightStuds: agent.height,
           maxPathStuds: MAX_PATH_STUDS,
-          objectives: input.objectives ?? [],
+          objectives: input.objectives ?? input.spec?.objectives ?? [],
         },
         resultSchema: checkedMapSchema,
       });

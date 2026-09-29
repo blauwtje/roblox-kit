@@ -74,7 +74,7 @@ const styleSchema = z.strictObject({
   overrides: presetOverridesSchema.optional(),
 });
 
-/** A named point that check_map's reachability pass reaches from every spawn. */
+/** A named point of the map that a spawn should reach. */
 const objectiveSchema = z.strictObject({
   name: z.string().min(1),
   x: stud,
@@ -82,7 +82,7 @@ const objectiveSchema = z.strictObject({
   z: stud,
 });
 
-/** Scene limits per zone camera that check_map reports against; unset ones fall back to `config`. */
+/** Scene limits per zone camera; unset ones fall back to `config`. */
 const performanceBudgetSchema = z.strictObject({
   maxDrawCalls: z.int().positive().default(config.maxDrawCalls),
   maxTriangles: z.int().positive().default(config.maxTriangles),

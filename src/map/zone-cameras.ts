@@ -31,11 +31,8 @@ export interface ViewedZoneShot extends ZoneShot {
   view: ShotView;
 }
 
-/**
- * The top view pitches to just short of straight down: a camera looking exactly along the world up
- * axis has no defined roll in Studio. Lift it to 90 only with an explicit up vector in the capture call.
- */
-const topViewPitchDegrees = 89;
+/** The top view puts the camera straight above the center. */
+const topViewPitchDegrees = 90;
 
 /**
  * The shot that frames one zone. The camera looks at the center of the zone's bounds from the

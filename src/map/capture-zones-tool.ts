@@ -15,6 +15,8 @@ const captureZonesInput = z.strictObject({
   mapId: z.string().min(1),
   /** Zone names to capture; all zones of the map when omitted. */
   zones: z.array(z.string().min(1)).min(1).optional(),
+  /** False in a follow-up call for `remainingZones`, which already has the cutaway from the first call. */
+  cutaway: z.boolean().default(true),
   /** Which Studio holds the map; optional while exactly one is connected. */
   studioId: z.string().min(1).optional(),
 });
@@ -177,7 +179,7 @@ function unionBounds(zones: MapZone[]): Bounds {
 const viewsPerZone = 2;
 
 /**
- * The shots of one call: the top-down cutaway of the whole map first, then the view pair of each
+ * The shots of one call: the top-down cutaway of the whole map first (unless `withCutaway` is false), then the view pair of each
  * selected zone in order while the images fit `config.maxImagesPerCall`; the zones that do not fit
  * are returned by name and are never captured half.
  */
@@ -185,9 +187,10 @@ function planShots(
   mapId: string,
   allZones: MapZone[],
   selected: MapZone[],
+  withCutaway: boolean,
 ): { plannedShots: ViewedZoneShot[]; remainingZones: string[] } {
   const wholeMap = zoneShots({ name: mapId, bounds: unionBounds(allZones) });
-  const cutaway = wholeMap.filter((shot) => shot.view === "top");
+  const cutaway = withCutaway ? wholeMap.filter((shot) => shot.view === "top") : [];
   const zoneCapacity = Math.floor((config.maxImagesPerCall - cutaway.length) / viewsPerZone);
   const chosen = selected.slice(0, zoneCapacity);
   const remainingZones = selected.slice(zoneCapacity).map((zone) => zone.name);
@@ -255,7 +258,7 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     description:
       `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top, named by the mapId), then two views per zone (room) from opposite sides (views a and b, at ${String(config.zoneShotPitchDegrees)} degrees pitch), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with both its views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call). ` +
+      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with both its views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call, which passes cutaway false to skip the repeated cutaway). ` +
       `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
@@ -284,7 +287,12 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         resultSchema: mapZonesSchema,
       });
       const selected = selectZones(input.mapId, mapZones.zones, input.zones);
-      const { plannedShots, remainingZones } = planShots(input.mapId, mapZones.zones, selected);
+      const { plannedShots, remainingZones } = planShots(
+        input.mapId,
+        mapZones.zones,
+        selected,
+        input.cutaway,
+      );
       // One at a time: every capture moves the same Studio camera.
       const captured: { shot: ViewedZoneShot; image: ImageBlock }[] = [];
       try {
