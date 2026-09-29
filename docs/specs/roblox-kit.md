@@ -110,15 +110,15 @@ Depends on: 27 | Files: `luau/build-map.luau`, `src/map/build-map-tool.ts`, `src
 ### Task 29: feat(lighting): apply a lighting recipe with a restorable snapshot
 Depends on: 28 | Files: `luau/apply-lighting.luau`, `src/lighting/apply-lighting.ts`, `src/lighting/apply-lighting.test.ts` | Data: a JSON attribute `{ lighting, atmosphere, bloom, created }` on the map Model, carried over on rebuild | Proof: npm run check
 ### Task 30: feat(lighting): place hero, focal and zone-marker lights from light roles
-Depends on: 29 | Files: `src/lighting/light-placement.ts`, `src/lighting/light-placement.test.ts` | Data: one `{ role, position, range, shadows }` record per light, shadows only for hero | Proof: npm run check
+Depends on: 29 | Files: `src/lighting/light-placement.ts`, `src/lighting/light-placement.test.ts`, `src/config.ts` | Data: one `{ role, position, range, shadows }` record per light, shadows only for hero | Proof: npm run check
 ### Task 31: feat(map): light the map from build_map
-Depends on: 30 | Files: `luau/build-map.luau`, `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `scripts/smoke-studio.ts` | Data: light records instantiated under their zone's parts, recipe applied after geometry | Proof: npm run smoke:studio
+Depends on: 30 | Files: `luau/build-map.luau`, `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `src/map/map-layout.ts`, `src/map/map-layout.test.ts`, `scripts/smoke-studio.ts` | Data: light records instantiated under their zone's parts, recipe applied after geometry | Proof: npm run smoke:studio
 ### Task 32: feat(map): accept relation-placed rooms in the map spec
 Depends on: 31 | Files: `src/map/map-spec.ts`, `src/map/map-spec.test.ts` | Data: a room with either `x`/`z` or `relation: { to, direction, hallwayLength, hallwayWidth }` | Proof: npm run check
 ### Task 33: feat(map): resolve relations to grid-snapped rooms and hallways
 Depends on: 32 | Files: `src/map/relation-solver.ts`, `src/map/relation-solver.test.ts`, `src/config.ts` | Data: a rooms array in dependency order with hallway rooms and matching doors appended, `config.gridStuds` = 5 | Proof: npm run check
 ### Task 34: feat(map): build relation-placed maps
-Depends on: 33 | Files: `src/map/map-layout.ts`, `src/map/map-layout.test.ts`, `scripts/smoke-studio.ts` | Data: the solver's rooms array fed to the existing layout | Proof: npm run smoke:studio
+Depends on: 33 | Files: `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `scripts/smoke-studio.ts` | Data: the solver's rooms array fed to the existing layout | Proof: npm run smoke:studio
 ### Task 35: feat(shared): add a seeded pseudo-random number generator
 Depends on: 34 | Files: `src/shared/seeded-random.ts`, `src/shared/seeded-random.test.ts` | Data: a closure over a 32-bit state returning floats in [0, 1) | Proof: npm run check
 ### Task 36: feat(map): add optional ceilings tagged for hiding
