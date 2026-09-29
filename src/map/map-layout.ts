@@ -102,7 +102,7 @@ function wallParts(room: RoomSpec, style: RoomStyle): PartRecord[] {
       const alongCenter = (stretch.start + stretch.end) / 2;
       const acrossOffset = sign * ((runsAlongX ? room.depth : room.width) / 2 - thickness / 2);
       parts.push({
-        name: `${room.name}-wall-${side}-${String(index + 1)}`,
+        name: `${room.name}${config.wallNameInfix}${side}-${String(index + 1)}`,
         room: room.name,
         kind: "wall",
         position: {
@@ -124,7 +124,7 @@ function wallParts(room: RoomSpec, style: RoomStyle): PartRecord[] {
 
 function floorPart(room: RoomSpec, style: RoomStyle): PartRecord {
   return {
-    name: `${room.name}-floor`,
+    name: `${room.name}${config.floorNameSuffix}`,
     room: room.name,
     kind: "floor",
     position: { x: room.x, y: -style.wallThickness / 2, z: room.z },
@@ -136,7 +136,7 @@ function floorPart(room: RoomSpec, style: RoomStyle): PartRecord {
 /** A pad as wide as a door, standing on the floor at the room center. */
 function spawnPart(room: RoomSpec, style: RoomStyle): PartRecord {
   return {
-    name: `${room.name}-spawn`,
+    name: `${room.name}${config.spawnNameSuffix}`,
     room: room.name,
     kind: "spawn",
     position: { x: room.x, y: style.wallThickness / 2, z: room.z },

@@ -86,7 +86,11 @@ export class StudioMcpClient implements StudioConnection {
   }
 
   callTool(request: StudioToolRequest): Promise<CallToolResult> {
-    return this.#callUpstream(request.name, { ...request.arguments, studio_id: request.studioId });
+    return this.#callUpstream(
+      request.name,
+      { ...request.arguments, studio_id: request.studioId },
+      request.timeoutMs,
+    );
   }
 
   async close(): Promise<void> {
@@ -95,9 +99,13 @@ export class StudioMcpClient implements StudioConnection {
     await (await session)?.close();
   }
 
-  async #callUpstream(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
+  async #callUpstream(
+    name: string,
+    args: Record<string, unknown>,
+    timeoutMs: number = this.#options.timeoutMs,
+  ): Promise<CallToolResult> {
     const client = await this.#connectedClient();
-    return client.callTool({ name, arguments: args }, { timeout: this.#options.timeoutMs });
+    return client.callTool({ name, arguments: args }, { timeout: timeoutMs });
   }
 
   #connectedClient(): Promise<Client> {

@@ -12,6 +12,8 @@ export interface StudioToolRequest {
   studioId: string;
   /** Tool arguments without `studio_id`, which the connection adds. */
   arguments: Record<string, unknown>;
+  /** Upper bound of this call; defaults to the connection's own timeout. */
+  timeoutMs?: number;
 }
 
 /** The only way this server reaches Studio; the real one wraps StudioMCP, tests use a fake. */

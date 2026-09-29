@@ -86,11 +86,11 @@ Runs your Luau checks in a Studio playtest. It inserts a server harness `Script`
 | `players`        | integer 1 to 8, default 2                      | Clients of a `multiplayer` session. Allowed only with `multiplayer`.             |
 | `serverChecks`   | string, optional                               | Body of `runChecks(check, expectedClients)`, run on the server.                  |
 | `clientChecks`   | string, optional                               | Body of `runChecks(check, player)`, run on every client. Not allowed with `run`. |
-| `timeoutSeconds` | integer 1 to 50, default 50                    | How long the harness waits. A client that has not reported by then is an error.  |
+| `timeoutSeconds` | integer 1 to 300, default 60                   | How long the harness waits. A client that has not reported by then is an error.  |
 
 Give at least one of `serverChecks` and `clientChecks`. Inside a body, call `check(name, passed, detail)` for each result. A body that throws becomes a failed check.
 
-The timeout is capped at 50 seconds because every call to Studio is cut off after 60 seconds, and 10 seconds are reserved for starting the session, sending the report and removing the scripts.
+The session call to Studio may run 10 seconds past the timeout, for starting the session, sending the report and removing the scripts. StudioMCP itself did not cut an `execute_luau` call that ran 70 seconds.
 
 Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the server first, then each client by player name, each with its checks (`name`, `passed`, `detail`). `checks` counts `total`, `passed` and `failed` over all peers. `errors` lists problems outside single checks, such as clients that never reported.
 
@@ -98,7 +98,7 @@ Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the serve
 
 - `execute_luau` (a built-in Studio tool) returns at most 100,000 characters of output and ends a longer result with `... (truncated)`. `build_map`, `check_map` and `capture_zones` report a cut result as an error.
 - `build_map` is not one undo step.
-- `run_playtest` waits at most 50 seconds.
+- `run_playtest` waits at most 300 seconds.
 - `check_map` reports are kept in memory and are gone when the server restarts.
 - Studio's MCP server exists only on macOS and Windows.
 

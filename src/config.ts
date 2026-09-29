@@ -8,7 +8,7 @@ export const config = Object.freeze({
   /** Name and version this server reports in the MCP handshake, to its client and to StudioMCP. */
   serverName: "roblox-kit",
   serverVersion: "0.1.0",
-  /** Upper bound of the StudioMCP handshake and of every call to it. */
+  /** Upper bound of the StudioMCP handshake and of a call to it that sets no timeout of its own. */
   upstreamTimeoutMs: 60_000,
   /** How long an empty Studio list is re-asked on one connection: a fresh StudioMCP lists nothing at first. */
   studioDiscoveryTimeoutMs: 15_000,
@@ -17,6 +17,11 @@ export const config = Object.freeze({
   executeLuauMaxResultChars: 100_000,
   /** What Studio appends to an `execute_luau` result it cut. */
   executeLuauTruncationMarker: "... (truncated)",
+
+  /** Part names build_map gives a room `<room>` + suffix; the Luau readers find zones by them. */
+  floorNameSuffix: "-floor",
+  spawnNameSuffix: "-spawn",
+  wallNameInfix: "-wall-",
 
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",
@@ -29,12 +34,22 @@ export const config = Object.freeze({
   pathfindingAgentRadiusStuds: 2,
   pathfindingAgentHeightStuds: 5,
 
+  /** Issues check_map returns inline; the rest is behind the report resource link. */
+  maxInlineIssues: 20,
+  /** Issues check_map keeps per kind in the full report; counts stay exact. */
+  maxIssuesPerKind: 100,
+
+  /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
+  cameraCoordinateDecimals: 2,
   zoneShotPitchDegrees: 55,
   /** Studio's default camera field of view. */
   studioFieldOfViewDegrees: 70,
 
+  defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,
   maxPlaytestPlayers: 8,
   defaultPlaytestTimeoutSeconds: 60,
   maxPlaytestTimeoutSeconds: 300,
+  /** Seconds one playtest session call may take beyond the harness timeout: starting, reporting, cleanup. */
+  playtestCallMarginSeconds: 10,
 });

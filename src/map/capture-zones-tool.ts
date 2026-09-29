@@ -5,7 +5,7 @@ import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
-import { zoneCameras, type ZoneShot } from "./zone-cameras.ts";
+import { zoneShot, type ZoneShot } from "./zone-cameras.ts";
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const coordinatesSchema = z.tuple([z.number(), z.number(), z.number()]);
@@ -46,7 +46,7 @@ function selectZones(
   const names = available.map((zone) => zone.name);
   if (names.length === 0) {
     throw new Error(
-      `Map "${mapId}" has no zones (no part named "<room>-floor"). Build it with build_map first.`,
+      `Map "${mapId}" has no zones (no part named "<room>${config.floorNameSuffix}"). Build it with build_map first.`,
     );
   }
   if (requested === undefined) {
@@ -111,12 +111,18 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         studioId,
         fileName: "read-map-zones.luau",
         datamodelType: "Edit",
-        arguments: { mapId: input.mapId, mapsFolderName: config.mapsFolderName },
+        arguments: {
+          mapId: input.mapId,
+          mapsFolderName: config.mapsFolderName,
+          floorNameSuffix: config.floorNameSuffix,
+          spawnNameSuffix: config.spawnNameSuffix,
+          wallNameInfix: config.wallNameInfix,
+        },
         resultSchema: mapZonesSchema,
       });
       const chosen = selectZones(input.mapId, mapZones.zones, input.zones);
-      const shots = zoneCameras(
-        chosen.map((zone) => ({ name: zone.name, bounds: { min: zone.min, max: zone.max } })),
+      const shots = chosen.map((zone) =>
+        zoneShot({ name: zone.name, bounds: { min: zone.min, max: zone.max } }),
       );
       // One at a time: every capture moves the same Studio camera.
       const images: ImageBlock[] = [];

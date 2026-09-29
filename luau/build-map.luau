@@ -131,7 +131,8 @@ end
 
 assertMaterialsExist()
 
--- nil when Studio refuses a recording, such as while another one is open; the build then still runs.
+-- Under execute_luau ChangeHistoryService is disabled and this is nil (research: TryBeginRecording returns nil), so the
+-- build runs unrecorded; the recording is kept for a Studio that allows it.
 local recordingStarted, recordingId = pcall(function()
 	return ChangeHistoryService:TryBeginRecording("roblox-kit build_map", "Build map " .. arguments.mapId)
 end)

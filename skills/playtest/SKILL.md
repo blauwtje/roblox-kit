@@ -18,7 +18,7 @@ A playtest proves something only when a check states a fact and a report says wh
 1. **Pick the smallest mode.** `run` is the server only, `play` (the default) adds one player, `multiplayer` adds `players` clients from 1 to 8, default 2. `players` outside `multiplayer` and `clientChecks` in `run` fail the call, because they could never take effect.
 2. **Write check bodies, not functions.** `serverChecks` is the body of `runChecks(check, expectedClients)`. `clientChecks` is the body of `runChecks(check, player)` and every client runs it once. A call with neither fails.
 3. **Record one fact per `check(name, passed, detail)`.** Put the measured value in `detail`, an optional string, so a failure explains itself. Put server-owned facts in `serverChecks` and `LocalPlayer` or `PlayerGui` facts in `clientChecks`, because each runs in its own script.
-4. **Keep `timeoutSeconds` short.** It runs 1 to 50 and defaults to 50, because Studio calls are cut at 60 s and the tool keeps a 10 s margin. It bounds the server checks and the wait for every client report. Split a longer scenario into several calls.
+4. **Keep `timeoutSeconds` short.** It runs 1 to 300 and defaults to 60; the tool keeps a 10 s margin on top. It bounds the server checks and the wait for every client report. Split a longer scenario into several calls.
 5. **Read `errors` before `peers`.** `passed` is true only with no `errors`, no failed check and at least one recorded check. The server comes first in `peers`, then each client by player name. `checks` counts `total`, `passed` and `failed` over all peers.
 6. **Know the failures.**
    - A body that throws becomes a failed check, "server checks ran to the end" or "client checks ran to the end", and earlier checks stay.

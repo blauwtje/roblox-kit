@@ -4,6 +4,9 @@
 type Arguments = {
 	mapId: string,
 	mapsFolderName: string,
+	floorNameSuffix: string,
+	spawnNameSuffix: string,
+	wallNameInfix: string,
 }
 
 type Position = { x: number, y: number, z: number }
@@ -14,12 +17,11 @@ type Zone = {
 	max: Position,
 }
 
--- Suffixes and prefix that build_map gives the parts of a room: the floor names the zone.
-local FLOOR_NAME_SUFFIX = "-floor"
-local SPAWN_NAME_SUFFIX = "-spawn"
-local WALL_NAME_INFIX = "-wall-"
-
+-- The part names build_map gives a room come in through the arguments: the floor names the zone.
 local arguments: Arguments = ...
+local FLOOR_NAME_SUFFIX = arguments.floorNameSuffix
+local SPAWN_NAME_SUFFIX = arguments.spawnNameSuffix
+local WALL_NAME_INFIX = arguments.wallNameInfix
 local HttpService = game:GetService("HttpService")
 
 local function findMapModel(): Model

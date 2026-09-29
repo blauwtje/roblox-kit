@@ -17,11 +17,8 @@ export interface ZoneShot {
   lookAt: [number, number, number];
 }
 
-/** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
-const COORDINATE_DECIMALS = 2;
-
 function roundCoordinate(value: number): number {
-  const factor = 10 ** COORDINATE_DECIMALS;
+  const factor = 10 ** config.cameraCoordinateDecimals;
   return Math.round(value * factor) / factor;
 }
 
@@ -51,9 +48,4 @@ export function zoneShot(zone: ZoneBounds): ZoneShot {
     ],
     lookAt: [roundCoordinate(center.x), roundCoordinate(center.y), roundCoordinate(center.z)],
   };
-}
-
-/** One shot per zone, in the order given. */
-export function zoneCameras(zones: readonly ZoneBounds[]): ZoneShot[] {
-  return zones.map(zoneShot);
 }

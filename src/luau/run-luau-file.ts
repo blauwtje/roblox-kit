@@ -16,6 +16,8 @@ export interface RunLuauFileRequest<Schema extends z.ZodType> {
   arguments: unknown;
   /** Shape of the JSON string the file returns. */
   resultSchema: Schema;
+  /** Upper bound of the `execute_luau` call; defaults to the connection's own timeout. */
+  timeoutMs?: number;
 }
 
 /** The shortest long-bracket opener whose closer does not occur inside the text. */
@@ -56,6 +58,7 @@ export async function runLuauFile<Schema extends z.ZodType>(
     name: "execute_luau",
     studioId: request.studioId,
     arguments: { code, datamodel_type: request.datamodelType },
+    timeoutMs: request.timeoutMs,
   });
   const text = resultText(toolResult);
   if (toolResult.isError === true) {

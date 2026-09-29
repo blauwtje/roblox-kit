@@ -5,6 +5,8 @@ type Arguments = {
 	mapId: string,
 	mapsFolderName: string,
 	overlapToleranceStuds: number,
+	maxIssuesPerKind: number,
+	floorNameSuffix: string,
 	agentRadiusStuds: number,
 	agentHeightStuds: number,
 }
@@ -24,15 +26,12 @@ type Box = {
 	max: Vector3,
 }
 
--- Most issues returned per kind; the counts stay exact. 100 issues of each kind fit well under the result limit.
-local MAX_ISSUES_PER_KIND = 100
--- Suffix that build_map gives the floor part of each room, which names a zone.
-local FLOOR_NAME_SUFFIX = "-floor"
-
 -- Side of a Terrain voxel, which ReadVoxels takes as its resolution.
 local TERRAIN_VOXEL_STUDS = 4
 
 local arguments: Arguments = ...
+local MAX_ISSUES_PER_KIND = arguments.maxIssuesPerKind
+local FLOOR_NAME_SUFFIX = arguments.floorNameSuffix
 local PathfindingService = game:GetService("PathfindingService")
 local HttpService = game:GetService("HttpService")
 

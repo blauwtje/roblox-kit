@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
-import { zoneCameras, zoneShot, type Bounds } from "./zone-cameras.ts";
+import { zoneShot, type Bounds } from "./zone-cameras.ts";
 
 const room: Bounds = { min: { x: 0, y: 0, z: 0 }, max: { x: 40, y: 12, z: 30 } };
 const degrees = (radians: number): number => (radians * 180) / Math.PI;
@@ -45,10 +45,10 @@ await test("every corner of the zone lies inside the field of view, and the zone
 
 await test("a larger zone gets a camera farther away, and shots follow the input order", () => {
   const big: Bounds = { min: { x: 0, y: 0, z: 0 }, max: { x: 200, y: 12, z: 200 } };
-  const [first, second] = zoneCameras([
+  const [first, second] = [
     { name: "hall", bounds: big },
     { name: "closet", bounds: { min: { x: 0, y: 0, z: 0 }, max: { x: 10, y: 12, z: 10 } } },
-  ]);
+  ].map(zoneShot);
   assert.deepEqual([first?.zone, second?.zone], ["hall", "closet"]);
   const heightAbove = (shot: typeof first) =>
     (shot?.cameraPosition[1] ?? 0) - (shot?.lookAt[1] ?? 0);

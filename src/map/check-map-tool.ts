@@ -11,9 +11,6 @@ import {
   type CheckReportStore,
 } from "./check-report-store.ts";
 
-/** Issues returned inline; the rest of the report is behind the resource link. */
-const MAX_INLINE_ISSUES = 20;
-
 const issueCountsSchema = z.strictObject({
   overlapping: z.number().int(),
   floating: z.number().int(),
@@ -66,8 +63,8 @@ export function createCheckMapTool(
     description:
       `Checks a map built by build_map for overlapping parts, floating parts (not connected to the ground or terrain) and zones a walk from the first SpawnLocation cannot reach (Studio pathfinding). ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, issues, issuesOmitted }: counts are exact, issues list the first ${String(MAX_INLINE_ISSUES)} with part paths and stud positions, ` +
-      `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to 100 issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
+      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, issues, issuesOmitted }: counts are exact, issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
+      `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
     inputSchema: checkMapInput,
     outputSchema: checkMapOutput,
     annotations: {
@@ -87,6 +84,8 @@ export function createCheckMapTool(
           mapId: input.mapId,
           mapsFolderName: config.mapsFolderName,
           overlapToleranceStuds: config.overlapToleranceStuds,
+          maxIssuesPerKind: config.maxIssuesPerKind,
+          floorNameSuffix: config.floorNameSuffix,
           agentRadiusStuds: config.pathfindingAgentRadiusStuds,
           agentHeightStuds: config.pathfindingAgentHeightStuds,
         },
@@ -101,7 +100,7 @@ export function createCheckMapTool(
       const uri = checkReportUri(report.reportId);
       const totalIssues =
         checked.counts.overlapping + checked.counts.floating + checked.counts.unreachable;
-      const inlineIssues = issues.slice(0, MAX_INLINE_ISSUES);
+      const inlineIssues = issues.slice(0, config.maxInlineIssues);
       return toolResult(
         {
           reportId: report.reportId,

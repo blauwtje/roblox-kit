@@ -206,6 +206,6 @@ await test("the input schema bounds players and timeout", () => {
   assert.ok(!tool.inputSchema.safeParse({ players: 9 }).success);
   assert.ok(!tool.inputSchema.safeParse({ players: 0 }).success);
   assert.ok(!tool.inputSchema.safeParse({ timeoutSeconds: 0 }).success);
-  assert.ok(!tool.inputSchema.safeParse({ timeoutSeconds: 51 }).success);
+  assert.ok(!tool.inputSchema.safeParse({ timeoutSeconds: 301 }).success);
   assert.ok(!tool.inputSchema.safeParse({ unknown: 1 }).success);
 });
