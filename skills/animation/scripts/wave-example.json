@@ -1,0 +1,18 @@
+{
+  "fps": 30,
+  "bones": {
+    "RightUpperArm": [
+      { "frame": 1, "rotation": [0, 0, 0] },
+      { "frame": 15, "rotation": [0, 0, 150] },
+      { "frame": 30, "rotation": [0, 0, 150] },
+      { "frame": 45, "rotation": [0, 0, 0] }
+    ],
+    "RightLowerArm": [
+      { "frame": 1, "rotation": [0, 0, 0] },
+      { "frame": 15, "rotation": [0, 0, 0] },
+      { "frame": 22, "rotation": [0, 0, 35] },
+      { "frame": 30, "rotation": [0, 0, -35] },
+      { "frame": 45, "rotation": [0, 0, 0] }
+    ]
+  }
+}
