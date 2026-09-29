@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
@@ -64,8 +64,21 @@ function studioWith(captures: (captureId: string) => CallToolResult, zonesText =
   });
 }
 
-function run(studio: FakeStudioConnection, input: object) {
-  return captureZonesTool.handler(captureZonesTool.inputSchema.parse(input), { studio });
+/** Lets the settle wait of every capture pass at once, so a test does not wait config.captureSettleMs per image. */
+mock.timers.enable({ apis: ["setTimeout"] });
+
+async function run(studio: FakeStudioConnection, input: object) {
+  const call = captureZonesTool.handler(captureZonesTool.inputSchema.parse(input), { studio });
+  const state = { finished: false };
+  const markFinished = () => {
+    state.finished = true;
+  };
+  call.then(markFinished, markFinished);
+  while (!state.finished) {
+    mock.timers.tick(config.captureSettleMs);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  return call;
 }
 
 await test("capture_zones has a strict schema, read-only annotations and the mapId lifetime in its description", () => {
@@ -319,4 +332,36 @@ await test("a bad zone name fails before any ceiling is hidden", async () => {
   const studio = studioWith(() => okImage());
   await assert.rejects(run(studio, { mapId: "arena", zones: ["attic"] }), /"attic"/);
   assert.deepEqual(callKinds(studio), ["restore", "read"]);
+});
+
+await test("each screen_capture waits config.captureSettleMs after the previous request", async () => {
+  const studio = studioWith(() => okImage());
+  const call = captureZonesTool.handler(
+    captureZonesTool.inputSchema.parse({ mapId: "arena", zones: ["start"] }),
+    { studio },
+  );
+  const capturesSoFar = () =>
+    studio.requests.filter((request) => request.name === "screen_capture").length;
+  // The call reads Luau files from disk before its first timer, so it needs several event-loop turns.
+  const flush = async () => {
+    for (let turn = 0; turn < 50; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+
+  await flush();
+  assert.equal(capturesSoFar(), 0);
+  mock.timers.tick(config.captureSettleMs - 1);
+  await flush();
+  assert.equal(capturesSoFar(), 0);
+  mock.timers.tick(1);
+  await flush();
+  assert.equal(capturesSoFar(), 1);
+  mock.timers.tick(config.captureSettleMs);
+  await flush();
+  assert.equal(capturesSoFar(), 2);
+  mock.timers.tick(config.captureSettleMs);
+  await flush();
+  assert.equal(capturesSoFar(), 3);
+  await call;
 });

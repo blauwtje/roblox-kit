@@ -62,6 +62,9 @@ export const config = Object.freeze({
   /** Seconds one stats sampling call may take beyond the settle time of its cameras. */
   statsCallMarginSeconds: 10,
 
+  /** Milliseconds capture_zones waits before each screen_capture: a capture right after a build or a lighting change reads the scene's unsettled light, far brighter or darker than a later one. */
+  captureSettleMs: 3000,
+
   /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
   cameraCoordinateDecimals: 2,
   zoneShotPitchDegrees: 55,
