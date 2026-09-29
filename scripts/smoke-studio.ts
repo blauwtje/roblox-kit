@@ -8,7 +8,8 @@ import { createCheckMapTool } from "../src/map/check-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
-import { placeProps } from "../src/map/prop-placement.ts";
+import { placeProps, type PropRecord } from "../src/map/prop-placement.ts";
+import { placeSetPieces, type SetPieceRecord } from "../src/map/set-piece-placement.ts";
 import { buildRoomDetails } from "../src/map/room-details.ts";
 import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
@@ -99,7 +100,8 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
 /**
  * A fixed 3-room map far from the place's Baseplate (x and z near 2000), so everything the smoke
  * builds, fills and removes lies outside what the place owns. The vault and the yard are placed by
- * relation, so the map also has two hallway zones.
+ * relation, so the map also has two hallway zones. The hall, vault and yard take the train-station room
+ * types concourse, ticket-hall and platform, so the map also has set pieces.
  */
 /** No bundled preset sets a MaterialVariant, so the smoke asks for one to probe that build_map applies it. */
 const smokeWallVariant = { baseMaterial: "Brick", studsPerTile: 8 };
@@ -115,15 +117,17 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
   wallHeight: 16,
   doorWidth: 10,
   rooms: [
-    { name: "hall", x: 2000, z: 2000, width: 20, depth: 20, spawn: true },
+    { name: "hall", x: 2000, z: 2000, width: 20, depth: 20, spawn: true, roomType: "concourse" },
     {
       name: "vault",
+      roomType: "ticket-hall",
       width: 20,
       depth: 20,
       relation: { to: "hall", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
     },
     {
       name: "yard",
+      roomType: "platform",
       width: 20,
       depth: 20,
       relation: { to: "vault", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
@@ -319,7 +323,16 @@ function styledSmokeMap() {
   }
   const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
   const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
-  const props = placeProps(smokeMapSpec, preset.propKit, smokeMapSpec.seed ?? config.defaultSeed);
+  const seed = smokeMapSpec.seed ?? config.defaultSeed;
+  // The same split build_map makes: kit props in plain rooms, set pieces in typed ones.
+  const plainSpec = {
+    ...smokeMapSpec,
+    rooms: smokeMapSpec.rooms.filter((room) => room.roomType === undefined),
+  };
+  const props = [
+    ...placeProps(plainSpec, preset.propKit, seed),
+    ...placeSetPieces(smokeMapSpec, preset.roomTypes, preset.palette.accent, seed),
+  ];
   return { layout, details, props };
 }
 
@@ -362,6 +375,8 @@ for _, descendant in model:GetDescendants() do
     end
     table.insert(proceduralModels, {
       name = descendant.Name, generationError = descendant.GenerationError, generator = if descendant.Generator then descendant.Generator.Name else "", generatedParts = generated,
+      label = descendant:GetAttribute("Label"), accent = if descendant:GetAttribute("AccentColor") then (descendant:GetAttribute("AccentColor") :: Color3):ToHex() else nil,
+      yaw = math.round(math.deg(math.atan2(-descendant:GetPivot().LookVector.X, -descendant:GetPivot().LookVector.Z))),
     })
   end
 end
@@ -379,6 +394,9 @@ const mapDecorSchema = z.object({
       generationError: z.string(),
       generator: z.string(),
       generatedParts: z.number(),
+      label: z.string().optional(),
+      accent: z.string().optional(),
+      yaw: z.number(),
     }),
   ),
   baseParts: z.number(),
@@ -387,6 +405,37 @@ const mapDecorSchema = z.object({
 async function readMapDecor(connection: StudioConnection) {
   const studioId = await selectStudio(connection, undefined);
   return mapDecorSchema.parse(JSON.parse(await executeLuau(connection, studioId, mapDecorLuau)));
+}
+
+/** Proves each set piece in Studio faces its `yaw` and carries its sign's `Label` and `AccentColor`. */
+function expectSetPiecesTurnedAndLabeled(
+  props: (PropRecord | SetPieceRecord)[],
+  names: string[],
+  built: z.output<typeof mapDecorSchema>["proceduralModels"],
+) {
+  const builtByName = new Map(built.map((model) => [model.name, model]));
+  let setPieceCount = 0;
+  for (const [index, prop] of props.entries()) {
+    if (!("yaw" in prop)) {
+      continue;
+    }
+    setPieceCount += 1;
+    const name = names[index] ?? "";
+    const model = builtByName.get(name);
+    expectEqual(`${name} yaw`, ((model?.yaw ?? NaN) + 360) % 360, prop.yaw);
+    expectEqual(`${name} Label`, model?.label, prop.attributes["Label"]);
+    expectEqual(
+      `${name} AccentColor`,
+      model?.accent,
+      prop.attributes["AccentColor"]?.replace("#", "").toLowerCase(),
+    );
+  }
+  expectEqual("the smoke map has set pieces", setPieceCount > 0, true);
+  expectEqual(
+    "the smoke map has a sign per typed room door",
+    built.some((model) => model.name.startsWith("sign-") && model.label !== undefined),
+    true,
+  );
 }
 
 /** Proves ceilings carry the tag, one generator per prop kind exists and every prop generated parts without error. */
@@ -420,7 +469,7 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
   expectEqual(
     "ProceduralModel names",
     decor.proceduralModels.map((model) => model.name),
-    expectedNames.sort(),
+    [...expectedNames].sort(),
   );
   for (const model of decor.proceduralModels) {
     expectEqual(`${model.name} GenerationError`, model.generationError, "");
@@ -431,6 +480,7 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
     );
     expectEqual(`${model.name} generated parts`, model.generatedParts > 0, true);
   }
+  expectSetPiecesTurnedAndLabeled(props, expectedNames, decor.proceduralModels);
   return `${String(decor.ceilings.length)} ceilings tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
 }
 

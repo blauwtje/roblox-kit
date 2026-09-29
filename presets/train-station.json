@@ -67,6 +67,11 @@
     }
   },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
+  "roomTypes": {
+    "concourse": { "setPieces": ["bench"], "signLabel": "CONCOURSE" },
+    "platform": { "setPieces": ["track-bed", "platform-edge"], "signLabel": "PLATFORM 1" },
+    "ticket-hall": { "setPieces": ["counter"], "signLabel": "TICKETS" }
+  },
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,

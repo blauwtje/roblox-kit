@@ -27,6 +27,9 @@ type PropRecord = {
 	pivot: Vector,
 	size: Vector,
 	seed: number,
+	-- A set piece also turns by `yaw` degrees about Y and sets its `attributes`; a name ending in "Color" holds a hex color.
+	yaw: number?,
+	attributes: { [string]: string }?,
 }
 
 type Variant = {
@@ -213,7 +216,11 @@ local function addProps(model: Model, generators: { [string]: ModuleScript }): {
 		proceduralModel.Generator = generator
 		proceduralModel.Size = toVector3(record.size)
 		proceduralModel:SetAttribute("Seed", record.seed)
-		proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)))
+		for name, value in record.attributes or {} do
+			proceduralModel:SetAttribute(name, if string.match(name, "Color$") then Color3.fromHex(value) else value)
+		end
+		local turn = CFrame.Angles(0, math.rad(record.yaw or 0), 0)
+		proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)) * turn)
 		proceduralModel.Parent = model
 		table.insert(proceduralModels, proceduralModel)
 	end

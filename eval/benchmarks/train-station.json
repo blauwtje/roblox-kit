@@ -5,9 +5,18 @@
   "wallHeight": 16,
   "doorWidth": 10,
   "rooms": [
-    { "name": "concourse", "x": 0, "z": 400, "width": 60, "depth": 40, "spawn": true },
+    {
+      "name": "concourse",
+      "x": 0,
+      "z": 400,
+      "width": 60,
+      "depth": 40,
+      "spawn": true,
+      "roomType": "concourse"
+    },
     {
       "name": "platform",
+      "roomType": "platform",
       "width": 60,
       "depth": 30,
       "relation": {
@@ -19,6 +28,7 @@
     },
     {
       "name": "ticket-hall",
+      "roomType": "ticket-hall",
       "width": 30,
       "depth": 30,
       "relation": {
