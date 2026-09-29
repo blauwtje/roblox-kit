@@ -67,6 +67,11 @@ export const config = Object.freeze({
   zoneShotPitchDegrees: 55,
   /** Studio's default camera field of view. */
   studioFieldOfViewDegrees: 70,
+  /** Long-edge range in pixels a capture is expected to fall in; capture_zones warns outside it. */
+  imageLongEdgeMin: 1000,
+  imageLongEdgeMax: 1568,
+  /** Images capture_zones returns per call (1,924 tokens each at 1456x1030 under 25,000 output tokens); further zones go to remainingZones. */
+  maxImagesPerCall: 11,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,

@@ -30,8 +30,15 @@ const captureZonesOutput = z.strictObject({
       zone: z.string(),
       cameraPosition: coordinatesSchema,
       lookAt: coordinatesSchema,
+      /** Pixels of the image, read from the image itself. */
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
     }),
   ),
+  /** Zones left out by the per-call image cap; pass them as `zones` in a follow-up call. */
+  remainingZones: z.array(z.string()),
+  /** One entry per image whose long edge is outside the expected range. */
+  warnings: z.array(z.string()),
 });
 
 /** What `read-map-zones.luau` reports: each zone with the studs bounds of its parts. */
@@ -40,6 +47,87 @@ const mapZonesSchema = z.strictObject({
 });
 
 type ImageBlock = Extract<CallToolResult["content"][number], { type: "image" }>;
+
+interface ImageSize {
+  width: number;
+  height: number;
+}
+
+/** The PNG signature, then the IHDR chunk: 4 length bytes, "IHDR", then width and height as 32-bit big-endian. */
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const pngWidthOffset = 16;
+const pngHeaderBytes = 24;
+
+function pngSize(bytes: Buffer): ImageSize | undefined {
+  if (
+    bytes.length < pngHeaderBytes ||
+    !bytes.subarray(0, pngSignature.length).equals(pngSignature)
+  ) {
+    return undefined;
+  }
+  return {
+    width: bytes.readUInt32BE(pngWidthOffset),
+    height: bytes.readUInt32BE(pngWidthOffset + 4),
+  };
+}
+
+/** JPEG markers start with 0xFF; SOI (0xD8) opens the file and each start-of-frame marker carries the size. */
+const jpegSoiSecondByte = 0xd8;
+/** The start-of-frame markers are 0xC0 to 0xCF except 0xC4 (huffman table), 0xC8 (reserved) and 0xCC (arithmetic conditioning). */
+const jpegNonFrameMarkers = new Set([0xc4, 0xc8, 0xcc]);
+const jpegMarkerHeaderBytes = 2;
+/** Inside a start-of-frame segment after its 2 length bytes: 1 precision byte, then height and width as 16-bit big-endian. */
+const jpegHeightOffsetInSegment = 3;
+
+function isJpegFrameMarker(marker: number): boolean {
+  return marker >= 0xc0 && marker <= 0xcf && !jpegNonFrameMarkers.has(marker);
+}
+
+function jpegSize(bytes: Buffer): ImageSize | undefined {
+  if (bytes[0] !== 0xff || bytes[1] !== jpegSoiSecondByte) {
+    return undefined;
+  }
+  let offset = jpegMarkerHeaderBytes;
+  while (offset + jpegMarkerHeaderBytes + 2 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      return undefined;
+    }
+    const marker = bytes[offset + 1] ?? 0;
+    const segmentStart = offset + jpegMarkerHeaderBytes;
+    if (isJpegFrameMarker(marker)) {
+      const heightAt = segmentStart + jpegHeightOffsetInSegment;
+      if (heightAt + 4 > bytes.length) {
+        return undefined;
+      }
+      return { height: bytes.readUInt16BE(heightAt), width: bytes.readUInt16BE(heightAt + 2) };
+    }
+    offset = segmentStart + bytes.readUInt16BE(segmentStart);
+  }
+  return undefined;
+}
+
+/** Reads the pixel size from a PNG or JPEG image block's header; no image library needed for two integers. */
+function imageSize(image: ImageBlock, zone: string): ImageSize {
+  const bytes = Buffer.from(image.data, "base64");
+  const size = pngSize(bytes) ?? jpegSize(bytes);
+  if (size === undefined) {
+    throw new Error(
+      `screen_capture of zone "${zone}" returned ${image.mimeType} data that is neither a readable PNG nor a readable JPEG, so its size is unknown.`,
+    );
+  }
+  return size;
+}
+
+function longEdgeWarning(
+  zone: string,
+  size: { width: number; height: number },
+): string | undefined {
+  const longEdge = Math.max(size.width, size.height);
+  if (longEdge >= config.imageLongEdgeMin && longEdge <= config.imageLongEdgeMax) {
+    return undefined;
+  }
+  return `Image of zone "${zone}" is ${String(size.width)}x${String(size.height)}: its long edge ${String(longEdge)} is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. Resize the Studio viewport so the images stay legible without being downscaled by the model.`;
+}
 
 function selectZones(
   mapId: string,
@@ -120,8 +208,8 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     description:
       `Screenshots each zone (room) of a map built by build_map, one angled shot per zone at ${String(config.zoneShotPitchDegrees)} degrees pitch, framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Optional zones lists the zone names to capture (default: all; each image costs context, so pass a few for large maps). ` +
-      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, cameraPosition, lookAt }] } in studs, followed by one image content block per shot in the same order.`,
+      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call and the zones beyond that are listed in remainingZones for a follow-up call). ` +
+      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -148,20 +236,31 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         },
         resultSchema: mapZonesSchema,
       });
-      const chosen = selectZones(input.mapId, mapZones.zones, input.zones);
-      const shots = chosen.map((zone) =>
+      const selected = selectZones(input.mapId, mapZones.zones, input.zones);
+      const chosen = selected.slice(0, config.maxImagesPerCall);
+      const remainingZones = selected.slice(config.maxImagesPerCall).map((zone) => zone.name);
+      const plannedShots = chosen.map((zone) =>
         zoneShot({ name: zone.name, bounds: { min: zone.min, max: zone.max } }),
       );
       // One at a time: every capture moves the same Studio camera.
-      const images: ImageBlock[] = [];
+      const captured: { shot: ZoneShot; image: ImageBlock }[] = [];
       try {
         await setCeilingsHidden(context.studio, studioId, input.mapId, true);
-        for (const shot of shots) {
-          images.push(await captureShot(context.studio, studioId, input.mapId, shot));
+        for (const shot of plannedShots) {
+          const image = await captureShot(context.studio, studioId, input.mapId, shot);
+          captured.push({ shot, image });
         }
       } finally {
         await setCeilingsHidden(context.studio, studioId, input.mapId, false);
       }
-      return toolResult({ mapId: input.mapId, shots }, images);
+      const shots = captured.map(({ shot, image }) => ({
+        ...shot,
+        ...imageSize(image, shot.zone),
+      }));
+      const warnings = shots.flatMap((shot) => longEdgeWarning(shot.zone, shot) ?? []);
+      return toolResult(
+        { mapId: input.mapId, shots, remainingZones, warnings },
+        captured.map(({ image }) => image),
+      );
     },
   };

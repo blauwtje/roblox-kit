@@ -625,7 +625,10 @@ async function probeCaptureZones(connection: StudioConnection): Promise<string> 
     smokeMapSpec.rooms.map((room) => room.name).sort(),
   );
   expectEqual("capture_zones image count", images.length, smokeMapSpec.rooms.length);
-  return `${String(images.length)} images, one per zone`;
+  expectEqual("capture_zones remainingZones", output.remainingZones, []);
+  // The output schema already requires a positive integer width and height per shot.
+  const sizes = output.shots.map((shot) => `${String(shot.width)}x${String(shot.height)}`);
+  return `${String(images.length)} images, one per zone, sizes ${sizes.join(" ")}, warnings ${JSON.stringify(output.warnings)}`;
 }
 
 const playServerChecks = `
