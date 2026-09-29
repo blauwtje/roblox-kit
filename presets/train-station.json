@@ -1,0 +1,88 @@
+{
+  "palette": {
+    "colors": ["#3b3f45", "#8a7f70", "#c9c2b4", "#2a4a3c"],
+    "accent": "#d9a441"
+  },
+  "surfaces": {
+    "floor": {
+      "material": "Slate",
+      "color": "#3b3f45"
+    },
+    "wall": {
+      "material": "Brick",
+      "color": "#8a7f70",
+      "variant": {
+        "baseMaterial": "Brick",
+        "studsPerTile": 8
+      }
+    },
+    "trim": {
+      "material": "Metal",
+      "color": "#2a4a3c"
+    },
+    "ceiling": {
+      "material": "Concrete",
+      "color": "#c9c2b4"
+    },
+    "accent": {
+      "material": "Metal",
+      "color": "#d9a441"
+    }
+  },
+  "lighting": {
+    "LightingStyle": "Realistic",
+    "PrioritizeLightingQuality": true,
+    "Ambient": "#4a4740",
+    "OutdoorAmbient": "#6b7280",
+    "Brightness": 3,
+    "ExposureCompensation": 0.2,
+    "EnvironmentDiffuseScale": 0.6,
+    "EnvironmentSpecularScale": 0.5,
+    "ShadowSoftness": 0.3,
+    "Atmosphere": {
+      "Density": 0.25,
+      "Offset": 0.1,
+      "Color": "#c9c2b4",
+      "Decay": "#8a7f70",
+      "Glare": 0.1,
+      "Haze": 1
+    },
+    "Bloom": {
+      "Intensity": 0.3,
+      "Size": 20,
+      "Threshold": 1.6
+    }
+  },
+  "lightRoles": {
+    "zoneMarker": {
+      "range": 30,
+      "brightness": 1.2,
+      "color": "#f2d9a0"
+    },
+    "focal": {
+      "range": 45,
+      "brightness": 1.8,
+      "color": "#ffe6b0"
+    },
+    "hero": {
+      "range": 80,
+      "brightness": 2.5,
+      "color": "#fff1cf"
+    }
+  },
+  "propKit": [
+    "bench",
+    "ticket-booth",
+    "platform-clock",
+    "lamp-post",
+    "luggage-cart",
+    "timetable-board"
+  ],
+  "sizeRules": {
+    "agentRadius": 2,
+    "agentHeight": 5,
+    "minDoorwayWidth": 10,
+    "minHallwayWidth": 12,
+    "minWallHeight": 16
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "palette": {
+    "colors": ["#e6ebf0", "#9aa7b4", "#3a4656", "#141b26"],
+    "accent": "#2ec4ff"
+  },
+  "surfaces": {
+    "floor": {
+      "material": "SmoothPlastic",
+      "color": "#3a4656"
+    },
+    "wall": {
+      "material": "SmoothPlastic",
+      "color": "#e6ebf0",
+      "variant": {
+        "baseMaterial": "SmoothPlastic",
+        "studsPerTile": 6
+      }
+    },
+    "trim": {
+      "material": "Metal",
+      "color": "#9aa7b4"
+    },
+    "ceiling": {
+      "material": "Metal",
+      "color": "#141b26"
+    },
+    "accent": {
+      "material": "Neon",
+      "color": "#2ec4ff"
+    }
+  },
+  "lighting": {
+    "LightingStyle": "Soft",
+    "PrioritizeLightingQuality": true,
+    "Ambient": "#2a3444",
+    "OutdoorAmbient": "#3c4a5e",
+    "Brightness": 2.5,
+    "ExposureCompensation": 0.3,
+    "EnvironmentDiffuseScale": 0.7,
+    "EnvironmentSpecularScale": 0.8,
+    "ShadowSoftness": 0.15,
+    "Atmosphere": {
+      "Density": 0.15,
+      "Offset": 0.2,
+      "Color": "#9aa7b4",
+      "Decay": "#3a4656",
+      "Glare": 0.2,
+      "Haze": 0.5
+    },
+    "Bloom": {
+      "Intensity": 0.7,
+      "Size": 32,
+      "Threshold": 1.1
+    }
+  },
+  "lightRoles": {
+    "zoneMarker": {
+      "range": 28,
+      "brightness": 1.4,
+      "color": "#7fdcff"
+    },
+    "focal": {
+      "range": 40,
+      "brightness": 2,
+      "color": "#d5f3ff"
+    },
+    "hero": {
+      "range": 75,
+      "brightness": 3,
+      "color": "#ffffff"
+    }
+  },
+  "propKit": ["console", "cryo-pod", "cargo-crate", "holo-table", "pipe-run", "status-panel"],
+  "sizeRules": {
+    "agentRadius": 2,
+    "agentHeight": 5,
+    "minDoorwayWidth": 10,
+    "minHallwayWidth": 10,
+    "minWallHeight": 12
+  }
+}

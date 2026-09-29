@@ -1,0 +1,81 @@
+{
+  "palette": {
+    "colors": ["#1c1f1d", "#3a4340", "#5b6660", "#2b1d1d"],
+    "accent": "#b3261e"
+  },
+  "surfaces": {
+    "floor": {
+      "material": "DiamondPlate",
+      "color": "#1c1f1d"
+    },
+    "wall": {
+      "material": "Concrete",
+      "color": "#3a4340",
+      "variant": {
+        "baseMaterial": "Concrete",
+        "studsPerTile": 10
+      }
+    },
+    "trim": {
+      "material": "Metal",
+      "color": "#5b6660"
+    },
+    "ceiling": {
+      "material": "Concrete",
+      "color": "#2b1d1d"
+    },
+    "accent": {
+      "material": "Neon",
+      "color": "#b3261e"
+    }
+  },
+  "lighting": {
+    "LightingStyle": "Realistic",
+    "PrioritizeLightingQuality": true,
+    "Ambient": "#0d1210",
+    "OutdoorAmbient": "#141a18",
+    "Brightness": 1,
+    "ExposureCompensation": -0.8,
+    "EnvironmentDiffuseScale": 0.2,
+    "EnvironmentSpecularScale": 0.3,
+    "ShadowSoftness": 0.6,
+    "Atmosphere": {
+      "Density": 0.45,
+      "Offset": 0,
+      "Color": "#3a4340",
+      "Decay": "#1c1f1d",
+      "Glare": 0,
+      "Haze": 2.5
+    },
+    "Bloom": {
+      "Intensity": 0.5,
+      "Size": 28,
+      "Threshold": 1.2
+    }
+  },
+  "lightRoles": {
+    "zoneMarker": {
+      "range": 22,
+      "brightness": 0.8,
+      "color": "#9fb8aa"
+    },
+    "focal": {
+      "range": 32,
+      "brightness": 1.5,
+      "color": "#c7d9cf"
+    },
+    "hero": {
+      "range": 60,
+      "brightness": 2.2,
+      "color": "#d94a3d"
+    }
+  },
+  "propKit": ["gurney", "locker", "crate", "wall-vent", "hazard-barrel", "flickering-lamp"],
+  "sizeRules": {
+    "agentRadius": 2,
+    "agentHeight": 5,
+    "minDoorwayWidth": 10,
+    "minHallwayWidth": 10,
+    "minWallHeight": 12
+  }
+}
