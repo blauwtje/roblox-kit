@@ -10,6 +10,7 @@ import { buildMapTool } from "../map/build-map-tool.ts";
 import { captureZonesTool } from "../map/capture-zones-tool.ts";
 import { createCheckMapTool } from "../map/check-map-tool.ts";
 import { CheckReportStore } from "../map/check-report-store.ts";
+import { createRunPlaytestTool } from "../playtest/run-playtest-tool.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
 import { StudioMcpClient } from "../studio/studio-mcp-client.ts";
 import type { ToolDefinition } from "./tool-definition.ts";
@@ -23,6 +24,7 @@ export const tools: readonly ToolDefinition[] = [
   buildMapTool,
   createCheckMapTool(checkReports),
   captureZonesTool,
+  createRunPlaytestTool(),
 ];
 
 export interface ServerOptions {
