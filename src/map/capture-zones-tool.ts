@@ -5,7 +5,7 @@ import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
-import { zoneShot, type ZoneShot } from "./zone-cameras.ts";
+import { zoneShots, type Bounds, type ViewedZoneShot } from "./zone-cameras.ts";
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const coordinatesSchema = z.tuple([z.number(), z.number(), z.number()]);
@@ -27,7 +27,10 @@ const captureZonesOutput = z.strictObject({
   /** One entry per image block that follows the text block, in the same order. */
   shots: z.array(
     z.strictObject({
+      /** The zone name; the top-down cutaway of the whole map carries the mapId. */
       zone: z.string(),
+      /** `a` and `b` look at the zone from opposite sides; `top` is the cutaway of the whole map from above. */
+      view: z.enum(["a", "b", "top"]),
       cameraPosition: coordinatesSchema,
       lookAt: coordinatesSchema,
       /** Pixels of the image, read from the image itself. */
@@ -107,26 +110,26 @@ function jpegSize(bytes: Buffer): ImageSize | undefined {
 }
 
 /** Reads the pixel size from a PNG or JPEG image block's header; no image library needed for two integers. */
-function imageSize(image: ImageBlock, zone: string): ImageSize {
+function imageSize(image: ImageBlock, shot: ViewedZoneShot): ImageSize {
   const bytes = Buffer.from(image.data, "base64");
   const size = pngSize(bytes) ?? jpegSize(bytes);
   if (size === undefined) {
     throw new Error(
-      `screen_capture of zone "${zone}" returned ${image.mimeType} data that is neither a readable PNG nor a readable JPEG, so its size is unknown.`,
+      `screen_capture of zone "${shot.zone}" view ${shot.view} returned ${image.mimeType} data that is neither a readable PNG nor a readable JPEG, so its size is unknown.`,
     );
   }
   return size;
 }
 
 function longEdgeWarning(
-  zone: string,
+  shot: ViewedZoneShot,
   size: { width: number; height: number },
 ): string | undefined {
   const longEdge = Math.max(size.width, size.height);
   if (longEdge >= config.imageLongEdgeMin && longEdge <= config.imageLongEdgeMax) {
     return undefined;
   }
-  return `Image of zone "${zone}" is ${String(size.width)}x${String(size.height)}: its long edge ${String(longEdge)} is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. Resize the Studio viewport so the images stay legible without being downscaled by the model.`;
+  return `Image of zone "${shot.zone}" view ${shot.view} is ${String(size.width)}x${String(size.height)}: its long edge ${String(longEdge)} is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. Resize the Studio viewport so the images stay legible without being downscaled by the model.`;
 }
 
 function selectZones(
@@ -150,6 +153,50 @@ function selectZones(
     );
   }
   return available.filter((zone) => requested.includes(zone.name));
+}
+
+type MapZone = z.output<typeof mapZonesSchema>["zones"][number];
+
+/** The smallest bounds holding every zone. */
+function unionBounds(zones: MapZone[]): Bounds {
+  return {
+    min: {
+      x: Math.min(...zones.map((zone) => zone.min.x)),
+      y: Math.min(...zones.map((zone) => zone.min.y)),
+      z: Math.min(...zones.map((zone) => zone.min.z)),
+    },
+    max: {
+      x: Math.max(...zones.map((zone) => zone.max.x)),
+      y: Math.max(...zones.map((zone) => zone.max.y)),
+      z: Math.max(...zones.map((zone) => zone.max.z)),
+    },
+  };
+}
+
+/** Views `a` and `b` of one zone: two images. */
+const viewsPerZone = 2;
+
+/**
+ * The shots of one call: the top-down cutaway of the whole map first, then the view pair of each
+ * selected zone in order while the images fit `config.maxImagesPerCall`; the zones that do not fit
+ * are returned by name and are never captured half.
+ */
+function planShots(
+  mapId: string,
+  allZones: MapZone[],
+  selected: MapZone[],
+): { plannedShots: ViewedZoneShot[]; remainingZones: string[] } {
+  const wholeMap = zoneShots({ name: mapId, bounds: unionBounds(allZones) });
+  const cutaway = wholeMap.filter((shot) => shot.view === "top");
+  const zoneCapacity = Math.floor((config.maxImagesPerCall - cutaway.length) / viewsPerZone);
+  const chosen = selected.slice(0, zoneCapacity);
+  const remainingZones = selected.slice(zoneCapacity).map((zone) => zone.name);
+  const pairs = chosen.flatMap((zone) =>
+    zoneShots({ name: zone.name, bounds: { min: zone.min, max: zone.max } }).filter(
+      (shot) => shot.view !== "top",
+    ),
+  );
+  return { plannedShots: [...cutaway, ...pairs], remainingZones };
 }
 
 /** Hides or restores the tagged ceilings of the map, so a top-down shot sees into the rooms. */
@@ -180,13 +227,13 @@ async function captureShot(
   connection: StudioConnection,
   studioId: string,
   mapId: string,
-  shot: ZoneShot,
+  shot: ViewedZoneShot,
 ): Promise<ImageBlock> {
   const result = await connection.callTool({
     name: "screen_capture",
     studioId,
     arguments: {
-      capture_id: `roblox-kit-${mapId}-${shot.zone}`,
+      capture_id: `roblox-kit-${mapId}-${shot.zone}-${shot.view}`,
       camera_position: shot.cameraPosition,
       look_at_position: shot.lookAt,
     },
@@ -195,7 +242,7 @@ async function captureShot(
   if (result.isError === true || image === undefined) {
     const detail = result.content.map((block) => (block.type === "text" ? block.text : block.type));
     throw new Error(
-      `screen_capture of zone "${shot.zone}" returned no image: ${detail.join(" ")}. Check that a Studio viewport is open on the place, then retry.`,
+      `screen_capture of zone "${shot.zone}" view ${shot.view} returned no image: ${detail.join(" ")}. Check that a Studio viewport is open on the place, then retry.`,
     );
   }
   return image;
@@ -206,10 +253,10 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     name: "capture_zones",
     title: "Capture zones",
     description:
-      `Screenshots each zone (room) of a map built by build_map, one angled shot per zone at ${String(config.zoneShotPitchDegrees)} degrees pitch, framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
+      `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top, named by the mapId), then two views per zone (room) from opposite sides (views a and b, at ${String(config.zoneShotPitchDegrees)} degrees pitch), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call and the zones beyond that are listed in remainingZones for a follow-up call). ` +
-      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
+      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with both its views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call). ` +
+      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures and restored afterwards, also when a capture fails; a call that finds ceilings a crashed call left hidden restores them first. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -237,13 +284,9 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         resultSchema: mapZonesSchema,
       });
       const selected = selectZones(input.mapId, mapZones.zones, input.zones);
-      const chosen = selected.slice(0, config.maxImagesPerCall);
-      const remainingZones = selected.slice(config.maxImagesPerCall).map((zone) => zone.name);
-      const plannedShots = chosen.map((zone) =>
-        zoneShot({ name: zone.name, bounds: { min: zone.min, max: zone.max } }),
-      );
+      const { plannedShots, remainingZones } = planShots(input.mapId, mapZones.zones, selected);
       // One at a time: every capture moves the same Studio camera.
-      const captured: { shot: ZoneShot; image: ImageBlock }[] = [];
+      const captured: { shot: ViewedZoneShot; image: ImageBlock }[] = [];
       try {
         await setCeilingsHidden(context.studio, studioId, input.mapId, true);
         for (const shot of plannedShots) {
@@ -255,9 +298,9 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       }
       const shots = captured.map(({ shot, image }) => ({
         ...shot,
-        ...imageSize(image, shot.zone),
+        ...imageSize(image, shot),
       }));
-      const warnings = shots.flatMap((shot) => longEdgeWarning(shot.zone, shot) ?? []);
+      const warnings = shots.flatMap((shot) => longEdgeWarning(shot, shot) ?? []);
       return toolResult(
         { mapId: input.mapId, shots, remainingZones, warnings },
         captured.map(({ image }) => image),

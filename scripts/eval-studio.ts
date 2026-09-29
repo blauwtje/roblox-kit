@@ -36,29 +36,30 @@ async function callTool<Input extends z.ZodObject, Output extends z.ZodObject>(
   return { output: tool.outputSchema.parse(result.structuredContent), content: result.content };
 }
 
-/** Writes each captured image to `eval/captures/<benchmark>/<zone>.<ext>` and returns the paths. */
+/** Writes each captured image to `eval/captures/<benchmark>/<zone>-<view>.<ext>` and returns the paths. */
 async function saveCaptures(
   benchmark: string,
-  zones: string[],
+  shots: { zone: string; view: string }[],
   content: { type: string; data?: string; mimeType?: string }[],
 ): Promise<string[]> {
   const directory = new URL(`${benchmark}/`, capturesUrl);
   await mkdir(directory, { recursive: true });
   const images = content.filter((block) => block.type === "image");
-  if (images.length !== zones.length) {
+  if (images.length !== shots.length) {
     throw new Error(
-      `${benchmark}: ${String(images.length)} images for ${String(zones.length)} zones.`,
+      `${benchmark}: ${String(images.length)} images for ${String(shots.length)} shots.`,
     );
   }
   const paths: string[] = [];
   for (const [index, image] of images.entries()) {
-    const zone = String(zones[index]);
+    const shot = shots[index];
+    const name = `${String(shot?.zone)}-${String(shot?.view)}`;
     const extension = imageExtensions[image.mimeType ?? ""];
     if (extension === undefined || image.data === undefined) {
-      throw new Error(`${benchmark}: image of zone "${zone}" has type ${String(image.mimeType)}.`);
+      throw new Error(`${benchmark}: image "${name}" has type ${String(image.mimeType)}.`);
     }
-    await writeFile(new URL(`${zone}.${extension}`, directory), Buffer.from(image.data, "base64"));
-    paths.push(`eval/captures/${benchmark}/${zone}.${extension}`);
+    await writeFile(new URL(`${name}.${extension}`, directory), Buffer.from(image.data, "base64"));
+    paths.push(`eval/captures/${benchmark}/${name}.${extension}`);
   }
   return paths;
 }
@@ -85,11 +86,7 @@ async function evaluate(file: string, connection: StudioConnection) {
       `${benchmark}: zones left uncaptured: ${captured.output.remainingZones.join(", ")}.`,
     );
   }
-  const captures = await saveCaptures(
-    benchmark,
-    captured.output.shots.map((shot) => shot.zone),
-    captured.content,
-  );
+  const captures = await saveCaptures(benchmark, captured.output.shots, captured.content);
   const budget = spec.performanceBudget;
   return {
     benchmark,

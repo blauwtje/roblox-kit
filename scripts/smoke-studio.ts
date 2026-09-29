@@ -619,16 +619,18 @@ async function probeCaptureZones(connection: StudioConnection): Promise<string> 
     connection,
   );
   const images = content.filter((block) => block.type === "image");
+  const zoneNames = smokeMapSpec.rooms.map((room) => room.name).sort();
+  // The cutaway of the whole map comes first, then views a and b of each zone.
   expectEqual(
-    "capture_zones shot zones",
-    output.shots.map((shot) => shot.zone),
-    smokeMapSpec.rooms.map((room) => room.name).sort(),
+    "capture_zones shots",
+    output.shots.map((shot) => `${shot.zone}:${shot.view}`),
+    [`${smokeMapSpec.mapId}:top`, ...zoneNames.flatMap((name) => [`${name}:a`, `${name}:b`])],
   );
-  expectEqual("capture_zones image count", images.length, smokeMapSpec.rooms.length);
+  expectEqual("capture_zones image count", images.length, 1 + zoneNames.length * 2);
   expectEqual("capture_zones remainingZones", output.remainingZones, []);
   // The output schema already requires a positive integer width and height per shot.
   const sizes = output.shots.map((shot) => `${String(shot.width)}x${String(shot.height)}`);
-  return `${String(images.length)} images, one per zone, sizes ${sizes.join(" ")}, warnings ${JSON.stringify(output.warnings)}`;
+  return `${String(images.length)} images, the top-down cutaway then two views per zone, sizes ${sizes.join(" ")}, warnings ${JSON.stringify(output.warnings)}`;
 }
 
 const playServerChecks = `

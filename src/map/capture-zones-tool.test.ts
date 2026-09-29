@@ -76,7 +76,7 @@ await test("capture_zones has a strict schema, read-only annotations and the map
   assert.throws(() => captureZonesTool.inputSchema.parse({ mapId: "arena", zones: [] }));
 });
 
-await test("each zone is captured with its computed camera and returned as an image block", async () => {
+await test("the top-down cutaway comes first, then views a and b of each zone, each with its computed camera as an image block", async () => {
   const studio = studioWith(() => okImage());
   const result = await run(studio, { mapId: "arena" });
 
@@ -89,13 +89,34 @@ await test("each zone is captured with its computed camera and returned as an im
   assert.ok(code.includes('"mapId":"arena"'));
   assert.ok(code.includes(`"mapsFolderName":"${config.mapsFolderName}"`));
 
-  assert.equal(captureRequests.length, 2);
+  assert.equal(captureRequests.length, 5);
   const structured = captureZonesTool.outputSchema.parse(result.structuredContent);
   assert.deepEqual(
-    structured.shots.map((shot) => shot.zone),
-    ["start", "vault"],
+    structured.shots.map((shot) => [shot.zone, shot.view]),
+    [
+      ["arena", "top"],
+      ["start", "a"],
+      ["start", "b"],
+      ["vault", "a"],
+      ["vault", "b"],
+    ],
   );
-  assert.deepEqual(structured.shots[0]?.lookAt, [20, 6, 20]);
+  assert.deepEqual(
+    captureRequests.map((request) => request.arguments["capture_id"]),
+    [
+      "roblox-kit-arena-arena-top",
+      "roblox-kit-arena-start-a",
+      "roblox-kit-arena-start-b",
+      "roblox-kit-arena-vault-a",
+      "roblox-kit-arena-vault-b",
+    ],
+  );
+  assert.deepEqual(
+    structured.shots[0]?.lookAt,
+    [30, 6, 20],
+    "the cutaway centers on the whole map",
+  );
+  assert.deepEqual(structured.shots[1]?.lookAt, [20, 6, 20]);
   for (const [index, request] of captureRequests.entries()) {
     assert.equal(request.name, "screen_capture");
     assert.deepEqual(request.arguments["camera_position"], structured.shots[index]?.cameraPosition);
@@ -107,22 +128,25 @@ await test("each zone is captured with its computed camera and returned as an im
   assert.deepEqual(JSON.parse(text?.type === "text" ? text.text : ""), structured);
   assert.deepEqual(
     images.map((block) => (block.type === "image" ? block.data : block.type)),
-    [viewportImage, viewportImage],
+    Array.from({ length: 5 }, () => viewportImage),
   );
 });
 
 await test("each shot reports its image size and an in-range size adds no warning", async () => {
   const studio = studioWith((captureId) =>
-    okImage(captureId.endsWith("vault") ? pngHeader(1568, 900) : viewportImage),
+    okImage(captureId.endsWith("vault-a") ? pngHeader(1568, 900) : viewportImage),
   );
   const structured = captureZonesTool.outputSchema.parse(
     (await run(studio, { mapId: "arena" })).structuredContent,
   );
   assert.deepEqual(
-    structured.shots.map(({ zone, width, height }) => ({ zone, width, height })),
+    structured.shots.map(({ zone, view, width, height }) => ({ zone, view, width, height })),
     [
-      { zone: "start", width: 1456, height: 1030 },
-      { zone: "vault", width: 1568, height: 900 },
+      { zone: "arena", view: "top", width: 1456, height: 1030 },
+      { zone: "start", view: "a", width: 1456, height: 1030 },
+      { zone: "start", view: "b", width: 1456, height: 1030 },
+      { zone: "vault", view: "a", width: 1568, height: 900 },
+      { zone: "vault", view: "b", width: 1456, height: 1030 },
     ],
   );
   assert.deepEqual(structured.warnings, []);
@@ -138,10 +162,7 @@ await test("a JPEG capture reports its size from the start-of-frame segment", as
   );
   assert.deepEqual(
     structured.shots.map(({ width, height }) => [width, height]),
-    [
-      [1456, 1030],
-      [1456, 1030],
-    ],
+    Array.from({ length: 5 }, () => [1456, 1030]),
   );
   assert.deepEqual(structured.warnings, []);
 });
@@ -150,26 +171,34 @@ await test("an image whose long edge is outside the range adds one warning namin
   const tooSmall = pngHeader(config.imageLongEdgeMin - 1, 500);
   const tooLarge = pngHeader(700, config.imageLongEdgeMax + 1);
   const studio = studioWith((captureId) =>
-    okImage(captureId.endsWith("vault") ? tooLarge : tooSmall),
+    okImage(captureId.includes("-vault-") ? tooLarge : tooSmall),
   );
   const structured = captureZonesTool.outputSchema.parse(
     (await run(studio, { mapId: "arena" })).structuredContent,
   );
-  assert.equal(structured.warnings.length, 2);
-  assert.match(structured.warnings[0] ?? "", /zone "start".*999x500/);
-  assert.match(structured.warnings[1] ?? "", /zone "vault".*700x1569/);
+  assert.equal(structured.warnings.length, 5);
+  assert.match(structured.warnings[0] ?? "", /zone "arena" view top.*999x500/);
+  assert.match(structured.warnings[1] ?? "", /zone "start" view a.*999x500/);
+  assert.match(structured.warnings[3] ?? "", /zone "vault" view a.*700x1569/);
+  assert.match(structured.warnings[4] ?? "", /zone "vault" view b.*700x1569/);
 });
 
 await test("an image that is neither a readable PNG nor a JPEG fails after the ceilings are restored", async () => {
   const studio = studioWith(() => okImage("not-a-png"));
   await assert.rejects(
     run(studio, { mapId: "arena" }),
-    /zone "start".*neither a readable PNG nor a readable JPEG/,
+    /zone "arena" view top.*neither a readable PNG nor a readable JPEG/,
   );
-  assert.deepEqual(callKinds(studio), ["restore", "read", "hide", "capture", "capture", "restore"]);
+  assert.deepEqual(callKinds(studio), [
+    "restore",
+    "read",
+    "hide",
+    ...Array.from({ length: 5 }, () => "capture"),
+    "restore",
+  ]);
 });
 
-await test("zones beyond config.maxImagesPerCall are not captured and come back in remainingZones", async () => {
+await test("a zone whose two views do not fit config.maxImagesPerCall is not captured and comes back in remainingZones", async () => {
   const names = Array.from(
     { length: config.maxImagesPerCall + 2 },
     (_, index) => `room-${String(index)}`,
@@ -182,11 +211,15 @@ await test("zones beyond config.maxImagesPerCall are not captured and come back 
   const studio = studioWith(() => okImage(), JSON.stringify({ zones }));
   const result = await run(studio, { mapId: "arena" });
   const structured = captureZonesTool.outputSchema.parse(result.structuredContent);
-  assert.equal(structured.shots.length, config.maxImagesPerCall);
-  assert.deepEqual(structured.remainingZones, names.slice(config.maxImagesPerCall));
-  assert.equal(result.content.length, config.maxImagesPerCall + 1);
+  const capturedZones = Math.floor((config.maxImagesPerCall - 1) / 2);
+  const imageCount = 1 + capturedZones * 2;
+  assert.ok(imageCount <= config.maxImagesPerCall);
+  assert.equal(structured.shots.length, imageCount);
+  assert.deepEqual(structured.shots[0]?.view, "top");
+  assert.deepEqual(structured.remainingZones, names.slice(capturedZones));
+  assert.equal(result.content.length, imageCount + 1);
   const captures = studio.requests.filter((request) => request.name === "screen_capture");
-  assert.equal(captures.length, config.maxImagesPerCall);
+  assert.equal(captures.length, imageCount);
 });
 
 await test("zones limits the shots and an unknown zone lists the real ones", async () => {
@@ -194,10 +227,14 @@ await test("zones limits the shots and an unknown zone lists the real ones", asy
   const result = await run(studio, { mapId: "arena", zones: ["vault"] });
   const structured = captureZonesTool.outputSchema.parse(result.structuredContent);
   assert.deepEqual(
-    structured.shots.map((shot) => shot.zone),
-    ["vault"],
+    structured.shots.map((shot) => [shot.zone, shot.view]),
+    [
+      ["arena", "top"],
+      ["vault", "a"],
+      ["vault", "b"],
+    ],
   );
-  assert.equal(result.content.length, 2);
+  assert.equal(result.content.length, 4);
 
   await assert.rejects(
     run(studio, { mapId: "arena", zones: ["attic"] }),
@@ -228,7 +265,7 @@ await test("a map with no zones, a missing map or a capture without an image fai
   }));
   await assert.rejects(
     run(noImage, { mapId: "arena" }),
-    /zone "start" returned no image: viewport closed/,
+    /zone "arena" view top returned no image: viewport closed/,
   );
 });
 
@@ -248,7 +285,13 @@ function callKinds(studio: FakeStudioConnection): string[] {
 await test("ceilings are restored at call start, hidden for the captures and restored after them", async () => {
   const studio = studioWith(() => okImage());
   await run(studio, { mapId: "arena" });
-  assert.deepEqual(callKinds(studio), ["restore", "read", "hide", "capture", "capture", "restore"]);
+  assert.deepEqual(callKinds(studio), [
+    "restore",
+    "read",
+    "hide",
+    ...Array.from({ length: 5 }, () => "capture"),
+    "restore",
+  ]);
 
   const hideCode = String(studio.requests[2]?.arguments["code"]);
   assert.ok(hideCode.includes(`"ceilingTag":"${config.ceilingTag}"`));
