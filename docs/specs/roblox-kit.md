@@ -164,4 +164,6 @@ Depends on: 54 | Files: `skills/visual-judge/SKILL.md`, `skills/visual-judge/fin
 ### Task 56: feat(skills): teach map-building presets, relations, seeds and phases
 Depends on: 55 | Files: `skills/map-building/SKILL.md` | Data: one SKILL.md with frontmatter | Proof: npm run check
 ### Task 57: docs(readme): update the quick start and tool reference for changed behavior
-Depends on: 56 | Files: `README.md` | Data: changed lines only where a tool's input or result changed | Proof: npm run check
+Depends on: 58 | Files: `README.md` | Data: changed lines only where a tool's input or result changed | Proof: npm run check
+### Task 58: feat(map): capture two views per zone and the top-down cutaway in capture_zones
+Depends on: 56 | Files: `src/map/capture-zones-tool.ts`, `src/map/capture-zones-tool.test.ts`, `scripts/smoke-studio.ts`, `scripts/eval-studio.ts` | Data: `zoneShots` from Task 49 drives the captures; each shot gains `view` (`a`, `b` or `top`); the one top-down cutaway comes first, then whole zones' view pairs up to `config.maxImagesPerCall` images, the rest in `remainingZones` | Proof: npm run smoke:studio
