@@ -1,5 +1,5 @@
 --!strict
--- Checks one built map for overlapping parts, floating parts and zones the spawn cannot reach.
+-- Checks one built map for overlapping parts, floating parts and zones or objectives a spawn cannot reach.
 -- Returns counts plus capped issue lists, kept short because execute_luau cuts long results.
 type Arguments = {
 	mapId: string,
@@ -9,6 +9,8 @@ type Arguments = {
 	floorNameSuffix: string,
 	agentRadiusStuds: number,
 	agentHeightStuds: number,
+	maxPathStuds: number,
+	objectives: { { name: string, x: number, y: number, z: number } },
 }
 
 type Position = { x: number, y: number, z: number }
@@ -241,7 +243,15 @@ local function standingPointOn(floor: BasePart): Vector3
 	return Vector3.new(floor.Position.X, box.max.Y, floor.Position.Z)
 end
 
-local function findUnreachableZones(boxes: { Box }): (number, boolean)
+-- A place a walk from a spawn must reach: a room floor or an objective point of the spec.
+type Target = {
+	description: string,
+	point: Vector3,
+	-- The floor part of a room target, which is skipped for a spawn standing on it; nil for an objective.
+	floor: BasePart?,
+}
+
+local function collectSpawnsAndFloors(boxes: { Box }): ({ BasePart }, { BasePart })
 	local spawns: { BasePart } = {}
 	local floors: { BasePart } = {}
 	for _, box in boxes do
@@ -254,48 +264,95 @@ local function findUnreachableZones(boxes: { Box }): (number, boolean)
 	table.sort(spawns, function(first: BasePart, second: BasePart)
 		return first.Name < second.Name
 	end)
-	local spawnPart = spawns[1]
-	if spawnPart == nil then
-		return #floors, false
+	return spawns, floors
+end
+
+local function collectTargets(floors: { BasePart }): { Target }
+	local targets: { Target } = {}
+	for _, floor in floors do
+		local zoneName = string.sub(floor.Name, 1, -#FLOOR_NAME_SUFFIX - 1)
+		table.insert(targets, {
+			description = `zone "{zoneName}"`,
+			point = standingPointOn(floor),
+			floor = floor,
+		})
 	end
+	for _, objective in arguments.objectives do
+		table.insert(targets, {
+			description = `objective "{objective.name}"`,
+			point = Vector3.new(objective.x, objective.y, objective.z),
+			floor = nil,
+		})
+	end
+	return targets
+end
+
+-- Why a walk from start to target fails, or nil when pcall(ComputeAsync) succeeds with a non-empty waypoint list.
+local function pathFailure(path: Path, start: Vector3, target: Vector3): string?
+	local computed, failure = pcall(function()
+		path:ComputeAsync(start, target)
+	end)
+	if not computed then
+		return tostring(failure)
+	end
+	if path.Status ~= Enum.PathStatus.Success then
+		return tostring(path.Status)
+	end
+	if #path:GetWaypoints() == 0 then
+		return "no waypoints"
+	end
+	return nil
+end
+
+-- Checks one { spawn, target } pair per spawn and target. A pair further apart than the straight-line limit is
+-- reported as tooFar without asking the pathfinder, which does not plan over such distances.
+local function findUnreachableTargets(spawns: { BasePart }, targets: { Target })
 	local path = PathfindingService:CreatePath({
 		AgentRadius = arguments.agentRadiusStuds,
 		AgentHeight = arguments.agentHeightStuds,
 	})
-	local start = standingPointOn(spawnPart)
-	for _, floor in floors do
-		-- The zone holding the spawn is where the walk starts, and its center may lie under the spawn pad itself.
-		if isWithinFootprint(boxOf(floor), spawnPart.Position) then
-			continue
-		end
-		local target = standingPointOn(floor)
-		local computed, failure = pcall(function()
-			path:ComputeAsync(start, target)
-		end)
-		if not computed or path.Status ~= Enum.PathStatus.Success then
-			local reason = if computed then tostring(path.Status) else tostring(failure)
-			local zoneName = string.sub(floor.Name, 1, -#FLOOR_NAME_SUFFIX - 1)
-			addIssue({
-				kind = "unreachable",
-				parts = { floor:GetFullName() },
-				position = toPosition(target),
-				detail = `no walkable path from {spawnPart:GetFullName()} to zone "{zoneName}" ({reason})`,
-			})
+	for _, spawnPart in spawns do
+		local start = standingPointOn(spawnPart)
+		for _, target in targets do
+			-- The zone holding the spawn is where the walk starts, and its center may lie under the spawn pad itself.
+			if target.floor and isWithinFootprint(boxOf(target.floor), spawnPart.Position) then
+				continue
+			end
+			local distance = (target.point - start).Magnitude
+			local failure: string?
+			if distance > arguments.maxPathStuds then
+				failure =
+					`tooFar: {string.format("%.0f", distance)} studs apart, over the {arguments.maxPathStuds} stud limit`
+			else
+				failure = pathFailure(path, start, target.point)
+			end
+			if failure then
+				local parts = { spawnPart:GetFullName() }
+				if target.floor then
+					table.insert(parts, target.floor:GetFullName())
+				end
+				addIssue({
+					kind = "unreachable",
+					parts = parts,
+					position = toPosition(target.point),
+					detail = `no walkable path from {spawnPart:GetFullName()} to {target.description} ({failure})`,
+				})
+			end
 		end
 	end
-	return #floors, true
 end
 
 local model = findMapModel()
 local boxes = collectBoxes(model)
 findOverlaps(model, boxes)
 findFloating(boxes)
-local zoneCount, reachabilityChecked = findUnreachableZones(boxes)
+local spawns, floors = collectSpawnsAndFloors(boxes)
+findUnreachableTargets(spawns, collectTargets(floors))
 
 return HttpService:JSONEncode({
 	partCount = #boxes,
-	zoneCount = zoneCount,
-	reachabilityChecked = reachabilityChecked,
+	zoneCount = #floors,
+	reachabilityChecked = #spawns > 0,
 	counts = issueCounts,
 	issues = issues,
 })

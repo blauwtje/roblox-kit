@@ -205,3 +205,42 @@ await test("check-map.luau reports a part as floating when none of five downward
   assert.ok(floatingSource.includes("if not part.CanCollide or isGround(box) then"));
   assert.ok(floatingSource.includes('kind = "floating"'));
 });
+
+await test("objectives and a preset's agent size are sent to Studio, defaults otherwise", async () => {
+  const objectives = [{ name: "flag", x: 1, y: 2, z: 3 }];
+  const plain = studioReturning(checkedMap());
+  await setup(plain).run({ mapId: "arena", objectives });
+  const plainCode = String(plain.requests[0]?.arguments["code"]);
+  assert.ok(plainCode.includes(`"objectives":${JSON.stringify(objectives)}`));
+  assert.ok(plainCode.includes('"maxPathStuds":3000'));
+  assert.ok(plainCode.includes(`"agentHeightStuds":${String(config.pathfindingAgentHeightStuds)}`));
+
+  const presetName = "horror-facility";
+  const styled = studioReturning(checkedMap());
+  await setup(styled).run({ mapId: "arena", preset: presetName });
+  const styledCode = String(styled.requests[0]?.arguments["code"]);
+  assert.ok(styledCode.includes('"objectives":[]'));
+  assert.ok(styledCode.includes('"agentRadiusStuds":'));
+});
+
+await test("an unknown preset or a malformed objective is refused before Studio is asked", async () => {
+  const studio = studioReturning(checkedMap());
+  const { run, tool } = setup(studio);
+  await assert.rejects(run({ mapId: "arena", preset: "no-such-preset" }), /Unknown preset/);
+  assert.throws(() => tool.inputSchema.parse({ mapId: "arena", objectives: [{ name: "a" }] }));
+  assert.equal(studio.requests.length, 0);
+});
+
+await test("check-map.luau walks every spawn to every room and objective and reports far pairs as tooFar", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const reachSource = source.slice(source.indexOf("local function collectTargets("));
+  assert.ok(reachSource.includes("for _, spawnPart in spawns do"));
+  assert.ok(reachSource.includes("for _, target in targets do"));
+  assert.ok(reachSource.includes("arguments.objectives"));
+  assert.ok(reachSource.includes("pcall(function()"));
+  assert.ok(reachSource.includes("path.Status ~= Enum.PathStatus.Success"));
+  assert.ok(reachSource.includes("#path:GetWaypoints() == 0"));
+  assert.ok(reachSource.includes("distance > arguments.maxPathStuds"));
+  assert.ok(reachSource.includes("tooFar"));
+  assert.ok(!source.includes("spawns[1]"));
+});
