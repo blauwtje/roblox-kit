@@ -97,7 +97,12 @@ await test("issues are listed inline up to a cap and all of them are stored unde
 
   const structured = tool.outputSchema.parse(result.structuredContent);
   assert.equal(structured.passed, false);
-  assert.deepEqual(structured.counts, { overlapping: 15, floating: 10, unreachable: 1 });
+  assert.deepEqual(structured.counts, {
+    overlapping: 15,
+    floating: 10,
+    unreachable: 1,
+    sizeRule: 0,
+  });
   assert.equal(structured.issues.length, 20);
   assert.equal(structured.issuesOmitted, 6);
   assert.deepEqual(structured.issues[0]?.parts, [partPath("wall-0")]);
@@ -243,4 +248,30 @@ await test("check-map.luau walks every spawn to every room and objective and rep
   assert.ok(reachSource.includes("distance > arguments.maxPathStuds"));
   assert.ok(reachSource.includes("tooFar"));
   assert.ok(!source.includes("spawns[1]"));
+});
+
+await test("a preset with a spec adds sizeRule issues to the counts and the report, without them none", async () => {
+  const spec = {
+    mapId: "arena",
+    rooms: [
+      { name: "a", x: 0, z: 0, width: 30, depth: 30, doors: [{ side: "east", offset: 0 }] },
+      { name: "b", x: 60, z: 0, width: 30, depth: 30, doors: [{ side: "west", offset: 0 }] },
+    ],
+  };
+  const { reports, run } = setup(studioReturning(checkedMap()));
+  const styled = (await run({ mapId: "arena", preset: "horror-facility", spec }))
+    .structuredContent as { passed: boolean; counts: { sizeRule: number }; issues: CheckIssue[] };
+  assert.equal(styled.passed, false);
+  assert.equal(styled.counts.sizeRule, 2);
+  assert.ok(styled.issues.every((issue) => issue.kind === "sizeRule"));
+  assert.equal(reports.get(String((styled as { reportId?: string }).reportId))?.issues.length, 2);
+
+  for (const input of [
+    { mapId: "arena", spec },
+    { mapId: "arena", preset: "horror-facility" },
+  ]) {
+    const plain = (await run(input)).structuredContent as { passed: boolean; counts: object };
+    assert.equal(plain.passed, true);
+    assert.deepEqual(plain.counts, { overlapping: 0, floating: 0, unreachable: 0, sizeRule: 0 });
+  }
 });
