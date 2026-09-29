@@ -7,7 +7,17 @@ import type { Vector } from "./map-layout.ts";
 type Side = RoomSpec["doors"][number]["side"];
 
 /** The generator kinds that have a source in `luau/props/`; a preset's prop kit names some of them. */
-export const propKinds = ["bench", "lamp", "pillar", "stairs", "rail"] as const;
+export const propKinds = [
+  "bench",
+  "lamp",
+  "pillar",
+  "stairs",
+  "rail",
+  "track-bed",
+  "platform-edge",
+  "counter",
+  "sign",
+] as const;
 
 export type PropKind = (typeof propKinds)[number];
 
@@ -41,6 +51,10 @@ export const propDimensions = Object.freeze({
   pillar: { x: 1.5, z: 1.5 },
   stairs: { x: 6, y: 3, z: 4 },
   rail: { x: 8, y: 3, z: 0.5 },
+  "track-bed": { x: 16, y: 1, z: 5 },
+  "platform-edge": { x: 16, y: 0.5, z: 2 },
+  counter: { x: 8, y: 3.5, z: 2.5 },
+  sign: { x: 4, y: 1.5, z: 0.3 },
 });
 
 const sides: Side[] = ["north", "south", "east", "west"];

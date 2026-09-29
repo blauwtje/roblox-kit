@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { access } from "node:fs/promises";
 import { test } from "node:test";
 import { loadPresets } from "../style/load-preset.ts";
 import { mapSpecSchema } from "./map-spec.ts";
@@ -7,6 +8,7 @@ import { placeProps, propKinds } from "./prop-placement.ts";
 import type { PropRecord } from "./prop-placement.ts";
 
 const kit = ["bench", "lamp", "pillar", "stairs", "rail"];
+const setPieceKit = ["track-bed", "platform-edge", "counter", "sign"];
 
 const hallSpec = mapSpecSchema.parse({
   mapId: "props",
@@ -131,5 +133,25 @@ await test("every bundled preset's prop kit names only kinds with a generator", 
       assert.ok((propKinds as readonly string[]).includes(entry), `${name}: ${entry}`);
     }
     assert.doesNotThrow(() => placeProps(hallSpec, preset.propKit, 1), name);
+  }
+});
+
+await test("every prop kind has a generator source in luau/props", async () => {
+  for (const kind of propKinds) {
+    await access(new URL(`../../luau/props/${kind}.luau`, import.meta.url));
+  }
+});
+
+await test("the set-piece kinds are placed inside the room like any other prop", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "set-pieces",
+    rooms: [{ name: "room", x: 0, z: 0, width: 80, depth: 80 }],
+  });
+  const props = placeProps(spec, setPieceKit, 1);
+  assert.ok(props.length > 0);
+  for (const prop of props) {
+    assert.ok(setPieceKit.includes(prop.kind), prop.kind);
+    assert.ok(Math.abs(prop.pivot.x) + prop.size.x / 2 <= 39, `${prop.kind} x`);
+    assert.ok(Math.abs(prop.pivot.z) + prop.size.z / 2 <= 39, `${prop.kind} z`);
   }
 });
