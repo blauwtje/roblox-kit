@@ -2,7 +2,7 @@ import { config } from "../config.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { CheckIssue } from "./check-report-store.ts";
 import { layoutMap, type PartRecord } from "./map-layout.ts";
-import type { RelationMapSpec } from "./map-spec.ts";
+import type { RelationMapSpec, RoomSpec } from "./map-spec.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
 /** The limits of a preset's size rules that a layout is measured against. */
@@ -126,8 +126,19 @@ function wallHeightIssues(room: RoomParts, rules: SizeRules, mapId: string): Che
   ];
 }
 
-function hallwayWidthIssues(room: RoomParts, rules: SizeRules, mapId: string): CheckIssue[] {
-  const width = Math.min(room.floor.size.x, room.floor.size.z);
+/** A hallway's doors face along its direction, so its width is the floor side across them. */
+function hallwayWidthOf(hallway: RoomSpec, floor: PartRecord): number {
+  const runsAlongX = hallway.doors.some((door) => door.side === "east" || door.side === "west");
+  return runsAlongX ? floor.size.z : floor.size.x;
+}
+
+function hallwayWidthIssues(
+  room: RoomParts,
+  hallway: RoomSpec,
+  rules: SizeRules,
+  mapId: string,
+): CheckIssue[] {
+  const width = hallwayWidthOf(hallway, room.floor);
   if (width >= rules.minHallwayWidth) {
     return [];
   }
@@ -151,15 +162,16 @@ export function findSizeRuleIssues(
   mapId: string,
 ): CheckIssue[] {
   const resolved = resolveRelations(spec);
-  const hallwayNames = new Set(resolved.rooms.map((room) => room.name));
+  const hallways = new Map(resolved.rooms.map((room) => [room.name, room]));
   for (const room of spec.rooms) {
-    hallwayNames.delete(room.name);
+    hallways.delete(room.name);
   }
   const issues: CheckIssue[] = [];
   for (const room of roomsOf(layoutMap(resolved).parts)) {
     issues.push(...doorwayIssues(room, rules, mapId), ...wallHeightIssues(room, rules, mapId));
-    if (hallwayNames.has(room.name)) {
-      issues.push(...hallwayWidthIssues(room, rules, mapId));
+    const hallway = hallways.get(room.name);
+    if (hallway !== undefined) {
+      issues.push(...hallwayWidthIssues(room, hallway, rules, mapId));
     }
   }
   return issues;

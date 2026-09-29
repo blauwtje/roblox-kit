@@ -58,3 +58,25 @@ await test("a narrow hallway is reported by width, and a wide one is not", () =>
     [],
   );
 });
+
+await test("a hallway shorter than it is wide is measured across its direction, not by its shorter side", () => {
+  const related = (direction: string, hallwayWidth: number) => [
+    hub,
+    {
+      name: "vault",
+      width: 20,
+      depth: 20,
+      relation: { to: "hub", direction, hallwayLength: 10, hallwayWidth },
+    },
+  ];
+  const hallwayIssuesOf = (direction: string, hallwayWidth: number) =>
+    issuesOf(related(direction, hallwayWidth), { doorWidth: 10, wallHeight: 12 }).filter((issue) =>
+      /Hallway/.test(issue.detail),
+    );
+  for (const direction of ["east", "north"]) {
+    assert.deepEqual(hallwayIssuesOf(direction, 14), [], `${direction}: 14 wide, 10 long`);
+    const narrow = hallwayIssuesOf(direction, 8);
+    assert.equal(narrow.length, 1, `${direction}: 8 wide`);
+    assert.match(narrow[0]?.detail ?? "", /Hallway "hub-vault-hallway" is 8 studs wide/);
+  }
+});
