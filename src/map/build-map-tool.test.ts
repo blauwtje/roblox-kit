@@ -84,6 +84,26 @@ await test("a spec that cannot be laid out fails before Studio is asked", async 
   assert.equal(studio.requests.length, 0);
 });
 
+await test("a style with overrides and a seed builds like the same spec without them", async () => {
+  const styled = {
+    ...twoRoomSpec,
+    seed: 7,
+    style: { preset: "cozy-town", overrides: { sizeRules: { minDoorwayWidth: 8 } } },
+  };
+  const result = await run(studioReturning('{"partCount":14,"replaced":false}'), styled);
+  assert.equal(result.isError, undefined);
+  assert.equal(buildMapTool.outputSchema.parse(result.structuredContent).partCount, 14);
+});
+
+await test("an unknown preset fails naming the known ones before Studio is asked", async () => {
+  const studio = studioReturning("{}");
+  await assert.rejects(
+    run(studio, { ...twoRoomSpec, style: { preset: "nowhere" } }),
+    /Unknown style preset "nowhere"; known presets: .*cozy-town/,
+  );
+  assert.equal(studio.requests.length, 0);
+});
+
 await test("passes Studio's error text on, such as an unknown material", async () => {
   const message = "Unknown Roblox material name(s): Marbel. Use names from Enum.Material.";
   await assert.rejects(

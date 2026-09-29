@@ -4,8 +4,12 @@ import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
+import { loadPresets } from "../style/load-preset.ts";
+import { resolveStyle } from "../style/resolve-style.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { mapSpecSchema, type TerrainFill } from "./map-spec.ts";
+
+const presets = await loadPresets();
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
@@ -79,7 +83,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. An optional style { preset, overrides } names a genre preset and is checked before Studio is asked; an optional seed defaults to ${String(config.defaultSeed)}. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
@@ -93,7 +97,10 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     openWorldHint: false,
   },
   async handler(input, context) {
-    // Laying out first keeps a spec that cannot be built from touching Studio.
+    // Resolving the style and laying out first keep a spec that cannot be built from touching Studio.
+    if (input.style !== undefined) {
+      resolveStyle(presets, input.style);
+    }
     const layout = layoutMap(input);
     const studioId = await selectStudio(context.studio, input.studioId);
     const built = await runLuauFile({

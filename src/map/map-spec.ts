@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { presetOverridesSchema } from "../style/preset-schema.ts";
 
 const stud = z.number();
 const positiveStud = stud.positive();
@@ -52,6 +53,12 @@ const terrainFillSchema = z.discriminatedUnion("shape", [
   }),
 ]);
 
+/** A genre preset by file name in `presets/`, and any subset of it to change. */
+const styleSchema = z.strictObject({
+  preset: z.string().min(1),
+  overrides: presetOverridesSchema.optional(),
+});
+
 /** The data spec of one map: rooms with floors, walls and doors, plus base terrain fills. */
 export const mapSpecSchema = z
   .strictObject({
@@ -59,6 +66,10 @@ export const mapSpecSchema = z
     mapId: z.string().min(1),
     rooms: z.array(roomSchema).min(1),
     terrain: z.array(terrainFillSchema).default([]),
+    /** Absent keeps the shipped defaults. */
+    style: styleSchema.optional(),
+    /** Seeds every random variation of the build; absent uses `config.defaultSeed`. */
+    seed: z.int().nonnegative().optional(),
     ...roomStyle,
   })
   .superRefine((spec, context) => {

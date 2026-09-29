@@ -95,6 +95,8 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
  */
 const smokeMapSpec = mapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
+  style: { preset: "train-station" },
+  seed: 1,
   rooms: [
     {
       name: "hall",

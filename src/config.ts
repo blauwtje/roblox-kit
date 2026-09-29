@@ -28,6 +28,8 @@ export const config = Object.freeze({
   defaultWallHeightStuds: 12,
   defaultWallThicknessStuds: 1,
   defaultDoorWidthStuds: 6,
+  /** Seed of a map spec that sets none. */
+  defaultSeed: 1,
 
   /** Penetration below this depth is face contact, not an overlap. */
   overlapToleranceStuds: 0.05,
