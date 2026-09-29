@@ -1,0 +1,33 @@
+{
+  "name": "roblox-kit",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code plugin: build, check, screenshot and playtest Roblox maps through Studio MCP.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "eslint .",
+    "lint:luau": "selene .",
+    "format:check": "prettier --check .",
+    "format:luau:check": "stylua --check .",
+    "test": "node --test",
+    "validate:plugin": "claude plugin validate .",
+    "check": "npm run typecheck && npm run lint && npm run lint:luau && npm run format:check && npm run format:luau:check && npm run test && npm run validate:plugin"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/server": "2.2.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.4",
+    "eslint": "10.11.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
+  }
+}

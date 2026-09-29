@@ -1,0 +1,12 @@
+{
+  "name": "roblox-kit",
+  "description": "Roblox Studio map building, checking and playtesting for Claude Code",
+  "owner": { "name": "Thomas Hoogteijling" },
+  "plugins": [
+    {
+      "name": "roblox-kit",
+      "source": "./",
+      "description": "Build, check, screenshot and playtest Roblox maps through Studio MCP, with a Roblox skill kit."
+    }
+  ]
+}

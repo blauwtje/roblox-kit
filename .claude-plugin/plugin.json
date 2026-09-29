@@ -1,0 +1,9 @@
+{
+  "name": "roblox-kit",
+  "description": "Build a map from a data spec in Roblox Studio, check it for overlapping, floating and unreachable geometry, screenshot each zone and run solo or multiplayer playtests, next to Roblox's built-in Studio MCP tools.",
+  "author": { "name": "Thomas Hoogteijling" },
+  "homepage": "https://github.com/blauwtje/roblox-kit",
+  "repository": "https://github.com/blauwtje/roblox-kit",
+  "license": "MIT",
+  "keywords": ["roblox", "roblox-studio", "luau", "mcp", "playtest"]
+}
