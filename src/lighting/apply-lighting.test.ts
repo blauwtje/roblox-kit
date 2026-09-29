@@ -44,6 +44,16 @@ await test("sends the map handle and the whole recipe to Studio and returns whet
   assert.ok(code.includes('"Bloom":{'));
 });
 
+await test("without a recipe sends none, for a restore of the stored snapshot only", async () => {
+  const studio = studioReturning('{"snapshotTaken":false}');
+  const applied = await applyLighting({ ...request(studio), recipe: undefined });
+
+  assert.deepEqual(applied, { snapshotTaken: false });
+  const code = String(studio.requests[0]?.arguments["code"]);
+  assert.ok(code.includes('"mapId":"town"'));
+  assert.ok(!code.includes('"recipe"'));
+});
+
 await test("reports a rerun that found a stored snapshot", async () => {
   const applied = await applyLighting(request(studioReturning('{"snapshotTaken":false}')));
   assert.deepEqual(applied, { snapshotTaken: false });

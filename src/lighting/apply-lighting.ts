@@ -14,12 +14,14 @@ export interface ApplyLightingRequest {
   mapsFolderName: string;
   /** The built map whose Model holds the snapshot. */
   mapId: string;
-  recipe: Preset["lighting"];
+  /** The recipe to write; absent, the stored snapshot is restored and nothing is written. */
+  recipe?: Preset["lighting"];
 }
 
 /**
  * Applies a style's lighting recipe to Lighting in the open place. The first apply stores the
  * previous values on the map Model; later applies restore that snapshot before writing the recipe.
+ * Without a recipe it only restores the stored snapshot.
  */
 export function applyLighting(request: ApplyLightingRequest): Promise<AppliedLighting> {
   return runLuauFile({

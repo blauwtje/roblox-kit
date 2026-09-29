@@ -10,6 +10,7 @@ import { selectStudio } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
+import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
@@ -31,14 +32,19 @@ const buildMapInput = relationMapSpecSchema.safeExtend({
 const buildMapOutput = z.strictObject({
   mapId: z.string(),
   partCount: z.number().int(),
+  /** The six build phases in the order they ran, each with the number of parts it built. */
+  phases: z.array(z.strictObject({ name: z.string(), partCount: z.number().int() })),
   bounds: boundsSchema,
   zones: z.array(
     z.strictObject({ name: z.string(), partCount: z.number().int(), bounds: boundsSchema }),
   ),
 });
 
-/** What `build-map.luau` reports about the Model it built. */
-const builtMapSchema = z.strictObject({ partCount: z.number().int(), replaced: z.boolean() });
+/** What `build-map.luau` reports after a phase: the parts in the Model; the shell phase also says whether it replaced a map. */
+const builtPhaseSchema = z.strictObject({
+  partCount: z.number().int(),
+  replaced: z.boolean().optional(),
+});
 
 type Variant = NonNullable<Preset["surfaces"][keyof Preset["surfaces"]]["variant"]>;
 type Bounds = z.infer<typeof boundsSchema>;
@@ -152,6 +158,55 @@ function lightRecordsOf(
   });
 }
 
+/** What every phase of one build shares. */
+interface BuildContext {
+  mapId: string;
+  terrainFills: TerrainFill[];
+  variants: Record<string, Variant>;
+  generators: Record<string, string>;
+  /** Every material name of the build, checked by the shell phase before anything is built. */
+  materials: string[];
+}
+
+/** The arguments `build-map.luau` takes for one phase, beside the phase name, the map id and the maps folder. */
+function phaseArguments(
+  phase: BuildPhase<LightRecord>,
+  build: BuildContext,
+): Record<string, unknown> {
+  const base = { phase: phase.name, mapId: build.mapId, mapsFolderName: config.mapsFolderName };
+  const argumentsByPhase: Record<BuildPhaseName, Record<string, unknown>> = {
+    shell: {
+      parts: phase.parts,
+      terrainFills: build.terrainFills,
+      variants: build.variants,
+      materials: build.materials,
+    },
+    "floors and ceilings": {
+      parts: phase.parts,
+      variants: build.variants,
+      ceilingTag: config.ceilingTag,
+    },
+    openings: { parts: phase.parts, variants: build.variants },
+    surfaces: { parts: phase.parts, variants: build.variants },
+    props: { props: phase.parts, generators: build.generators },
+    lighting: { lights: phase.parts },
+  };
+  return { ...base, ...argumentsByPhase[phase.name] };
+}
+
+/** The material names of the parts, details, terrain fills and variants of a build. */
+function materialsOf(
+  parts: { material: string }[],
+  terrainFills: TerrainFill[],
+  variants: Record<string, Variant>,
+): string[] {
+  return [
+    ...parts.map((part) => part.material),
+    ...terrainFills.map((fill) => fill.material),
+    ...Object.values(variants).map((variant) => variant.baseMaterial),
+  ];
+}
+
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
   name: "build_map",
   title: "Build map",
@@ -160,7 +215,8 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
-    `Returns { mapId, partCount, bounds, zones }: the studs bounds of the whole map and of each room (zone).`,
+    `The build runs in six phases (shell, floors and ceilings, openings, surfaces, props, lighting), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
+    `Returns { mapId, partCount, phases, bounds, zones }: the parts per phase, and the studs bounds of the whole map and of each room (zone).`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
   annotations: {
@@ -180,34 +236,47 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     const props: PropRecord[] =
       style === undefined ? [] : placeProps(spec, style.propKit, spec.seed ?? config.defaultSeed);
     const generators = await generatorsOf(props);
+    const variants = variantsOf(style);
+    const lights = lightRecordsOf(spec, layout.parts, style);
+    const build: BuildContext = {
+      mapId: input.mapId,
+      terrainFills: layout.terrainFills,
+      variants,
+      generators,
+      materials: materialsOf([...layout.parts, ...details], layout.terrainFills, variants),
+    };
     const studioId = await selectStudio(context.studio, input.studioId);
-    const built = await runLuauFile({
-      connection: context.studio,
-      studioId,
-      fileName: "build-map.luau",
-      datamodelType: "Edit",
-      arguments: {
-        mapId: input.mapId,
-        mapsFolderName: config.mapsFolderName,
-        parts: layout.parts,
-        details,
-        props,
-        generators,
-        ceilingTag: config.ceilingTag,
-        terrainFills: layout.terrainFills,
-        variants: variantsOf(style),
-        lights: lightRecordsOf(spec, layout.parts, style),
-      },
-      resultSchema: builtMapSchema,
-    });
-    if (style !== undefined) {
-      await applyLighting({
-        connection: context.studio,
-        studioId,
-        mapsFolderName: config.mapsFolderName,
-        mapId: input.mapId,
-        recipe: style.lighting,
-      });
+    const phases = groupBuildPhases({ parts: layout.parts, details, props, lights });
+    let partCount = 0;
+    for (const [index, phase] of phases.entries()) {
+      try {
+        const built = await runLuauFile({
+          connection: context.studio,
+          studioId,
+          fileName: "build-map.luau",
+          datamodelType: "Edit",
+          arguments: phaseArguments(phase, build),
+          resultSchema: builtPhaseSchema,
+        });
+        partCount = built.partCount;
+        if (phase.name === "lighting") {
+          // Without a style the recipe is absent: the previous build's Lighting is restored.
+          await applyLighting({
+            connection: context.studio,
+            studioId,
+            mapsFolderName: config.mapsFolderName,
+            mapId: input.mapId,
+            recipe: style?.lighting,
+          });
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Building map "${input.mapId}" failed in the "${phase.name}" phase; the Model may be partial: ${reason}`,
+          { cause: error },
+        );
+      }
+      await context.reportProgress?.(index + 1, phases.length, phase.name);
     }
     const bounds = unionOf([
       ...[...layout.parts, ...details].map((part) => boundsOfBox(part.position, part.size)),
@@ -215,7 +284,8 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     ]);
     return toolResult({
       mapId: input.mapId,
-      partCount: built.partCount,
+      partCount,
+      phases: phases.map((phase) => ({ name: phase.name, partCount: phase.parts.length })),
       bounds,
       zones: zonesOf([...layout.parts, ...details]),
     });

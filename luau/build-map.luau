@@ -1,9 +1,13 @@
 --!strict
--- Builds one map as a Model named after its id under a Workspace folder, replacing the Model of
--- the same id and the terrain it filled. Each light record becomes a PointLight under an Attachment
--- under the floor part of its zone. Ceilings are tagged and decorative, as are the detail parts. Each prop
--- becomes a ProceduralModel running the ModuleScript of its kind under the Model, generated before the
--- build returns. Reports the number of parts built: the BaseParts that are children of the Model.
+-- Builds one phase of one map; build_map calls it once per phase, in order, with the phase name in
+-- `arguments.phase`. The shell phase replaces the Model of the same id and the terrain it filled and
+-- adds the walls and terrain; the later phases find that Model and add to it: floors, spawns and
+-- ceilings, then doorway arches, then trim details, then props, then lights. Each light record becomes
+-- a PointLight under an Attachment under the floor part of its zone. Ceilings are tagged and decorative,
+-- as are the detail parts. Each prop becomes a ProceduralModel running the ModuleScript of its kind
+-- under the Model, generated before the props phase returns. Reports the number of parts in the Model
+-- after the phase (the BaseParts that are children of the Model); the shell phase also reports
+-- whether it replaced a map.
 type Vector = { x: number, y: number, z: number }
 
 type PartRecord = {
@@ -50,18 +54,21 @@ type TerrainFill = {
 }
 
 type Arguments = {
+	phase: string,
 	mapId: string,
 	mapsFolderName: string,
-	parts: { PartRecord },
-	details: { PartRecord },
-	props: { PropRecord },
+	-- Every material name of the whole build; the shell phase checks them before anything is built.
+	materials: { string }?,
+	-- The parts this phase adds: walls, floors, spawns and ceilings, or detail parts.
+	parts: { PartRecord }?,
+	props: { PropRecord }?,
 	-- Source text of the generator of each prop kind.
-	generators: { [string]: string },
-	ceilingTag: string,
-	terrainFills: { TerrainFill },
+	generators: { [string]: string }?,
+	ceilingTag: string?,
+	terrainFills: { TerrainFill }?,
 	-- Flat MaterialVariant of each surface role that has one.
-	variants: { [string]: Variant },
-	lights: { LightRecord },
+	variants: { [string]: Variant }?,
+	lights: { LightRecord }?,
 }
 
 -- Attribute on the map Model holding the terrain fills of its build as JSON, so a rebuild can clear them.
@@ -82,22 +89,10 @@ end
 -- Names the materials that Enum.Material does not know, so nothing is built from a bad spec.
 local function assertMaterialsExist()
 	local unknown: { string } = {}
-	local function check(materialName: string)
+	for _, materialName in arguments.materials or {} do
 		if Enum.Material:FromName(materialName) == nil and not table.find(unknown, materialName) then
 			table.insert(unknown, materialName)
 		end
-	end
-	for _, part in arguments.parts do
-		check(part.material)
-	end
-	for _, part in arguments.details do
-		check(part.material)
-	end
-	for _, fill in arguments.terrainFills do
-		check(fill.material)
-	end
-	for _, variant in arguments.variants do
-		check(variant.baseMaterial)
 	end
 	if #unknown > 0 then
 		error(
@@ -159,7 +154,7 @@ end
 
 -- A variant only renders on a part whose Material is the variant's base material.
 local function applyVariant(part: BasePart, record: PartRecord)
-	local variant = arguments.variants[record.role]
+	local variant = (arguments.variants or {})[record.role]
 	if variant and variant.baseMaterial == record.material then
 		part.MaterialVariant = variantFor(record.role, variant).Name
 	end
@@ -175,7 +170,11 @@ local function newPart(record: PartRecord): BasePart
 	part.Color = Color3.fromHex(record.color)
 	applyVariant(part, record)
 	if record.kind == "ceiling" then
-		CollectionService:AddTag(part, arguments.ceilingTag)
+		local ceilingTag = arguments.ceilingTag
+		if not ceilingTag then
+			error("A ceiling part needs ceilingTag.", 0)
+		end
+		CollectionService:AddTag(part, ceilingTag)
 	end
 	if record.kind == "ceiling" or record.canCollide == false then
 		part.CanCollide = false
@@ -188,7 +187,7 @@ end
 -- One ModuleScript per prop kind in use, each holding the generator source of its kind.
 local function addGenerators(model: Model): { [string]: ModuleScript }
 	local modules: { [string]: ModuleScript } = {}
-	for kind, source in arguments.generators do
+	for kind, source in arguments.generators or {} do
 		local generator = Instance.new("ModuleScript")
 		generator.Name = `{kind}-generator`
 		generator.Source = source
@@ -202,7 +201,7 @@ end
 local function addProps(model: Model, generators: { [string]: ModuleScript }): { ProceduralModel }
 	local proceduralModels: { ProceduralModel } = {}
 	local countByKind: { [string]: number } = {}
-	for _, record in arguments.props do
+	for _, record in arguments.props or {} do
 		local generator = generators[record.kind]
 		if not generator then
 			error(`Prop kind "{record.kind}" has no generator source.`, 0)
@@ -260,8 +259,37 @@ local function addLight(model: Model, record: LightRecord)
 	light.Parent = attachment
 end
 
--- Returns whether a map of this id was replaced and how many parts the new one holds.
-local function build(): (boolean, number)
+local function findModel(): Model
+	local folder = workspace:FindFirstChild(arguments.mapsFolderName)
+	local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
+	if not model or not model:IsA("Model") then
+		error(
+			`Map "{arguments.mapId}" is not under Workspace.{arguments.mapsFolderName}; the shell phase builds it first.`,
+			0
+		)
+	end
+	return model
+end
+
+local function addLights(model: Model)
+	for _, record in arguments.lights or {} do
+		addLight(model, record)
+	end
+end
+
+local function addParts(model: Model)
+	for _, record in arguments.parts or {} do
+		newPart(record).Parent = model
+	end
+end
+
+local function addPropModels(model: Model)
+	local proceduralModels = addProps(model, addGenerators(model))
+	waitForGeneration(proceduralModels)
+end
+
+-- Replaces the map of this id with a new Model holding the walls and the terrain; returns whether it replaced one.
+local function buildShell(): (boolean, number)
 	local folder = mapsFolder()
 	local oldModel = folder:FindFirstChild(arguments.mapId)
 	if oldModel and oldModel:IsA("Model") then
@@ -277,23 +305,33 @@ local function build(): (boolean, number)
 	if typeof(lightingSnapshot) == "string" then
 		model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, lightingSnapshot)
 	end
-	for _, record in arguments.parts do
-		newPart(record).Parent = model
-	end
-	for _, record in arguments.details do
-		newPart(record).Parent = model
-	end
-	local proceduralModels = addProps(model, addGenerators(model))
-	for _, record in arguments.lights do
-		addLight(model, record)
-	end
-	for _, fill in arguments.terrainFills do
+	addParts(model)
+	local terrainFills = arguments.terrainFills or {}
+	for _, fill in terrainFills do
 		fillTerrain(fill, materialNamed(fill.material))
 	end
-	model:SetAttribute(TERRAIN_ATTRIBUTE_NAME, HttpService:JSONEncode(arguments.terrainFills))
+	model:SetAttribute(TERRAIN_ATTRIBUTE_NAME, HttpService:JSONEncode(terrainFills))
 	model.Parent = folder
-	waitForGeneration(proceduralModels)
 	return oldModel ~= nil, countPartChildren(model)
+end
+
+-- Runs the phase named in the arguments; returns whether the shell replaced a map (nil for later phases) and the Model's part count.
+local function runPhase(): (boolean?, number)
+	local phase = arguments.phase
+	if phase == "shell" then
+		return buildShell()
+	end
+	local model = findModel()
+	if phase == "floors and ceilings" or phase == "openings" or phase == "surfaces" then
+		addParts(model)
+	elseif phase == "props" then
+		addPropModels(model)
+	elseif phase == "lighting" then
+		addLights(model)
+	else
+		error(`Unknown build phase "{phase}".`, 0)
+	end
+	return nil, countPartChildren(model)
 end
 
 assertMaterialsExist()
@@ -301,20 +339,26 @@ assertMaterialsExist()
 -- Under execute_luau ChangeHistoryService is disabled and this is nil (research: TryBeginRecording returns nil), so the
 -- build runs unrecorded; the recording is kept for a Studio that allows it.
 local recordingStarted, recordingId = pcall(function()
-	return ChangeHistoryService:TryBeginRecording("roblox-kit build_map", "Build map " .. arguments.mapId)
+	return ChangeHistoryService:TryBeginRecording(
+		"roblox-kit build_map",
+		`Build map {arguments.mapId}: {arguments.phase}`
+	)
 end)
 local recording: string? = if recordingStarted and typeof(recordingId) == "string" then recordingId else nil
 
-local built, replacedOrError, partCount = pcall(build)
+local built, replacedOrError, partCount = pcall(runPhase)
 if recording then
 	local operation = if built then Enum.FinishRecordingOperation.Commit else Enum.FinishRecordingOperation.Cancel
 	ChangeHistoryService:FinishRecording(recording, operation)
 end
 if not built then
 	local undoNote = if recording
-		then "The build was cancelled and undone."
+		then "The phase was cancelled and undone."
 		else "No undo recording was open, so nothing was undone."
-	error(`Building map "{arguments.mapId}" failed: {tostring(replacedOrError)}. {undoNote}`, 0)
+	error(
+		`Building map "{arguments.mapId}" failed in the "{arguments.phase}" phase: {tostring(replacedOrError)}. {undoNote}`,
+		0
+	)
 end
 
 return HttpService:JSONEncode({ partCount = partCount, replaced = replacedOrError })

@@ -31,14 +31,36 @@ function studioReturning(text: string, isError = false) {
   });
 }
 
+/** Answers every request as a built phase, and the apply-lighting request that follows the last. */
+function phaseStudio() {
+  return new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      const text = code.includes('"phase":"') ? '{"partCount":14}' : '{"snapshotTaken":false}';
+      return { content: [{ type: "text", text }] };
+    },
+  });
+}
+
+/** The phase names in the order the tool runs them. */
+const phaseNames = ["shell", "floors and ceilings", "openings", "surfaces", "props", "lighting"];
+
+/** The arguments JSON of the request at `index`, which carries them inside its Luau code. */
+function requestArguments(connection: FakeStudioConnection, index: number) {
+  const code = String(connection.requests[index]?.arguments["code"]);
+  const argumentsJson = /JSONDecode\(\[=*\[(.*)\]=*\]\)/s.exec(code)?.[1];
+  assert.ok(argumentsJson, `request ${String(index)} carries its arguments`);
+  return JSON.parse(argumentsJson) as Record<string, unknown>;
+}
+
 /** Answers build-map.luau with a built map and apply-lighting.luau with a taken snapshot. */
 function styledStudio() {
   return new FakeStudioConnection(studios, {
     execute_luau: (request) => {
       const code = String(request.arguments["code"]);
-      const text = code.includes('"recipe"')
-        ? '{"snapshotTaken":true}'
-        : '{"partCount":14,"replaced":false}';
+      const text = code.includes('"phase":"')
+        ? '{"partCount":14,"replaced":false}'
+        : '{"snapshotTaken":true}';
       return { content: [{ type: "text", text }] };
     },
   });
@@ -56,23 +78,29 @@ await test("build_map is registered with a strict schema and the mapId lifetime 
   assert.throws(() => buildMapTool.inputSchema.parse({ ...twoRoomSpec, extra: 1 }));
 });
 
-await test("sends the laid-out parts and fills to Studio and returns the map handle with bounds and zones", async () => {
-  const studio = studioReturning('{"partCount":14,"replaced":false}');
+await test("sends the laid-out parts and fills to Studio phase by phase and returns the map handle with bounds and zones", async () => {
+  const studio = phaseStudio();
   const result = await run(studio, twoRoomSpec);
 
-  const [request] = studio.requests;
-  assert.equal(request?.name, "execute_luau");
-  assert.equal(request.arguments["datamodel_type"], "Edit");
-  const code = String(request.arguments["code"]);
-  assert.ok(code.includes(`"mapsFolderName":"${config.mapsFolderName}"`));
-  assert.ok(code.includes('"mapId":"two-rooms"'));
-  assert.ok(code.includes('"start-spawn"'));
-  assert.ok(code.includes('"shape":"ball"'));
+  assert.equal(studio.requests.length, 7);
+  for (const request of studio.requests) {
+    assert.equal(request.name, "execute_luau");
+    assert.equal(request.arguments["datamodel_type"], "Edit");
+  }
+  const [shell, floors] = studio.requests.map((request) => String(request.arguments["code"]));
+  assert.ok(shell?.includes(`"mapsFolderName":"${config.mapsFolderName}"`));
+  assert.ok(shell?.includes('"mapId":"two-rooms"'));
+  assert.ok(shell?.includes('"shape":"ball"'));
+  assert.ok(floors?.includes('"start-spawn"'));
 
   assert.equal(result.isError, undefined);
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
   assert.equal(structured.mapId, "two-rooms");
   assert.equal(structured.partCount, 14);
+  assert.deepEqual(
+    structured.phases.map((phase) => phase.name),
+    phaseNames,
+  );
   assert.deepEqual(structured.bounds, {
     min: { x: -100, y: -30, z: -100 },
     max: { x: 160, y: 12, z: 100 },
@@ -103,7 +131,7 @@ await test("a room placed by relation builds at its grid-snapped center with a h
       },
     ],
   };
-  const studio = studioReturning('{"partCount":20,"replaced":false}');
+  const studio = phaseStudio();
   const result = await run(studio, relationSpec);
 
   assert.equal(result.isError, undefined);
@@ -159,24 +187,23 @@ await test("a style sends its palette colors and role variants; without a style,
   const styledConnection = styledStudio();
   await run(styledConnection, { ...twoRoomSpec, style: { preset: "train-station" } });
   const styledCode = String(styledConnection.requests[0]?.arguments["code"]);
+  assert.ok(String(styledConnection.requests[0]?.arguments["code"]).includes('"phase":"shell"'));
   assert.ok(styledCode.includes('"color":"#8a7f70"'));
   assert.ok(styledCode.includes('"variants":{"wall":{"baseMaterial":"Brick","studsPerTile":8}}'));
 
-  const plainStudio = studioReturning('{"partCount":14,"replaced":false}');
+  const plainStudio = phaseStudio();
   await run(plainStudio, twoRoomSpec);
   const plainCode = String(plainStudio.requests[0]?.arguments["code"]);
   assert.ok(plainCode.includes('"variants":{}'));
   assert.ok(plainCode.includes('"color":"#b8b8b8"'));
 });
 
-await test("a style sends its lights per zone and applies its lighting recipe after the build", async () => {
+await test("a style sends its lights per zone and applies its lighting recipe after the lighting phase", async () => {
   const connection = styledStudio();
   await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
-  const [build, lighting] = connection.requests.map((request) => String(request.arguments["code"]));
-  assert.equal(connection.requests.length, 2);
-  const argumentsJson = /JSONDecode\(\[=*\[(.*)\]=*\]\)/s.exec(build ?? "")?.[1];
-  assert.ok(argumentsJson, "the build request carries its arguments");
-  const { lights } = JSON.parse(argumentsJson) as {
+  const lighting = String(connection.requests[6]?.arguments["code"]);
+  assert.equal(connection.requests.length, 7);
+  const { lights } = requestArguments(connection, 5) as {
     lights: { zone: string; part: string; role: string; shadows: boolean }[];
   };
   assert.deepEqual(
@@ -187,28 +214,82 @@ await test("a style sends its lights per zone and applies its lighting recipe af
       ["hall", "hall-floor", "zoneMarker", false],
     ],
   );
-  assert.ok(lighting?.includes('"recipe"'));
-  assert.ok(lighting?.includes('"mapId":"two-rooms"'));
+  assert.ok(lighting.includes('"recipe"'));
+  assert.ok(lighting.includes('"mapId":"two-rooms"'));
 });
 
-await test("without a style no lights are sent and Lighting is left alone", async () => {
-  const connection = studioReturning('{"partCount":14,"replaced":false}');
+await test("without a style no lights are sent and the last request only restores Lighting", async () => {
+  const connection = phaseStudio();
   await run(connection, twoRoomSpec);
-  assert.equal(connection.requests.length, 1);
-  assert.ok(String(connection.requests[0]?.arguments["code"]).includes('"lights":[]'));
+  assert.equal(connection.requests.length, 7);
+  assert.deepEqual(requestArguments(connection, 5)["lights"], []);
+  const restore = String(connection.requests[6]?.arguments["code"]);
+  assert.ok(restore.includes('"mapId":"two-rooms"'));
+  assert.ok(!restore.includes('"recipe"'));
 });
 
-/** The arguments JSON a build request carries to build-map.luau. */
-function buildArguments(connection: FakeStudioConnection) {
-  const build = String(connection.requests[0]?.arguments["code"]);
-  const argumentsJson = /JSONDecode\(\[=*\[(.*)\]=*\]\)/s.exec(build)?.[1];
-  assert.ok(argumentsJson, "the build request carries its arguments");
-  return JSON.parse(argumentsJson) as {
-    parts: { kind: string }[];
-    details: { name: string; canCollide: boolean }[];
-    props: { kind: string; seed: number }[];
-    generators: Record<string, string>;
-    ceilingTag: string;
+await test("each phase request names its phase and carries only what that phase builds", async () => {
+  const connection = styledStudio();
+  await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  const sent = phaseNames.map((_, index) => requestArguments(connection, index));
+
+  assert.deepEqual(
+    sent.map((phaseArguments) => phaseArguments["phase"]),
+    phaseNames,
+  );
+  const kindsOf = (phaseArguments: Record<string, unknown> | undefined) =>
+    new Set((phaseArguments?.["parts"] as { kind: string }[]).map((part) => part.kind));
+  assert.deepEqual(kindsOf(sent[0]), new Set(["wall"]));
+  assert.deepEqual(kindsOf(sent[1]), new Set(["floor", "spawn", "ceiling"]));
+  assert.deepEqual(kindsOf(sent[2]), new Set(["arch"]));
+  assert.ok(!kindsOf(sent[3]).has("arch"));
+  assert.ok(sent[0]?.["materials"]);
+  assert.ok(sent[4]?.["generators"]);
+});
+
+await test("a phase failure names the phase and keeps Studio's message", async () => {
+  const connection = new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const isSurfaces = String(request.arguments["code"]).includes('"phase":"surfaces"');
+      return {
+        content: [{ type: "text", text: isSurfaces ? "boom" : '{"partCount":1}' }],
+        isError: isSurfaces,
+      };
+    },
+  });
+  await assert.rejects(
+    run(connection, { ...twoRoomSpec, style: { preset: "train-station" } }),
+    /failed in the "surfaces" phase.*boom/,
+  );
+  assert.equal(connection.requests.length, 4);
+});
+
+await test("reports progress after each of the six phases", async () => {
+  const progress: [number, number, string][] = [];
+  await buildMapTool.handler(buildMapTool.inputSchema.parse(twoRoomSpec), {
+    studio: phaseStudio(),
+    reportProgress: (done, total, message) => {
+      progress.push([done, total, message]);
+      return Promise.resolve();
+    },
+  });
+  assert.deepEqual(
+    progress,
+    phaseNames.map((name, index) => [index + 1, 6, name]),
+  );
+});
+
+/** The layout the styled build sends, gathered from its phase requests. */
+function sentBuild(connection: FakeStudioConnection) {
+  const sent = phaseNames.map((_, index) => requestArguments(connection, index));
+  const partsOf = (index: number) =>
+    (sent[index]?.["parts"] ?? []) as { kind: string; canCollide: boolean }[];
+  return {
+    parts: [...partsOf(0), ...partsOf(1)],
+    details: [...partsOf(2), ...partsOf(3)],
+    props: (sent[4]?.["props"] ?? []) as { kind: string; seed: number }[],
+    generators: (sent[4]?.["generators"] ?? {}) as Record<string, string>,
+    ceilingTag: sent[1]?.["ceilingTag"],
   };
 }
 
@@ -223,7 +304,7 @@ await test("a style sends ceilings, details, props and one generator source per 
       { name: "hall", x: 40, z: 0, width: 40, depth: 40, doors: [{ side: "west" }] },
     ],
   });
-  const sent = buildArguments(connection);
+  const sent = sentBuild(connection);
 
   assert.equal(sent.ceilingTag, config.ceilingTag);
   assert.equal(sent.parts.filter((part) => part.kind === "ceiling").length, 2);
@@ -240,12 +321,23 @@ await test("a style sends ceilings, details, props and one generator source per 
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
   const zonedParts = structured.zones.reduce((sum, zone) => sum + zone.partCount, 0);
   assert.equal(zonedParts, sent.parts.length + sent.details.length);
+  const phaseSizes = [
+    sent.parts.filter((part) => part.kind === "wall").length,
+    sent.parts.filter((part) => part.kind !== "wall").length,
+    sent.details.filter((detail) => detail.kind === "arch").length,
+    sent.details.filter((detail) => detail.kind !== "arch").length,
+    sent.props.length,
+  ];
+  assert.deepEqual(
+    structured.phases.slice(0, 5).map((phase) => phase.partCount),
+    phaseSizes,
+  );
 });
 
 await test("without a style no ceilings, details, props or generators are sent", async () => {
-  const connection = studioReturning('{"partCount":14,"replaced":false}');
+  const connection = phaseStudio();
   await run(connection, twoRoomSpec);
-  const sent = buildArguments(connection);
+  const sent = sentBuild(connection);
 
   assert.equal(sent.parts.filter((part) => part.kind === "ceiling").length, 0);
   assert.deepEqual(sent.details, []);

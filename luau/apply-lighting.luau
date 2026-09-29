@@ -1,5 +1,6 @@
 --!strict
--- Applies a lighting recipe to Lighting and reports whether a snapshot was taken. Before the first
+-- Applies a lighting recipe to Lighting and reports whether a snapshot was taken; without a recipe it
+-- only restores the stored snapshot. Before the first
 -- write the previous values and the effects it creates are stored as a JSON attribute on the map
 -- Model; a later apply restores that snapshot first and never snapshots its own values.
 -- The deprecated Technology property is never read or written.
@@ -47,7 +48,8 @@ type Snapshot = {
 type Arguments = {
 	mapId: string,
 	mapsFolderName: string,
-	recipe: Recipe,
+	-- Absent: restore the stored snapshot only.
+	recipe: Recipe?,
 }
 
 -- Attribute on the map Model holding the Lighting snapshot as JSON.
@@ -185,16 +187,19 @@ end
 
 local model = findMapModel()
 local encoded = model:GetAttribute(SNAPSHOT_ATTRIBUTE_NAME)
-local snapshotTaken = typeof(encoded) ~= "string"
+local recipe = arguments.recipe
+local snapshotTaken = false
 if typeof(encoded) == "string" then
 	restore(HttpService:JSONDecode(encoded) :: Snapshot)
-else
+elseif recipe then
+	snapshotTaken = true
 	model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, HttpService:JSONEncode(snapshotNow()))
 end
 
-local recipe = arguments.recipe
-writeLighting(recipe)
-writeAtmosphere(effectOrNew("Atmosphere") :: Atmosphere, recipe.Atmosphere)
-writeBloom(effectOrNew("BloomEffect") :: BloomEffect, recipe.Bloom)
+if recipe then
+	writeLighting(recipe)
+	writeAtmosphere(effectOrNew("Atmosphere") :: Atmosphere, recipe.Atmosphere)
+	writeBloom(effectOrNew("BloomEffect") :: BloomEffect, recipe.Bloom)
+end
 
 return HttpService:JSONEncode({ snapshotTaken = snapshotTaken })
