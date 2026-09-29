@@ -70,7 +70,7 @@
       "color": "#d94a3d"
     }
   },
-  "propKit": ["gurney", "locker", "crate", "wall-vent", "hazard-barrel", "flickering-lamp"],
+  "propKit": ["pillar", "lamp", "stairs"],
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,

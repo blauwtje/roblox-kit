@@ -70,7 +70,7 @@
       "color": "#ffffff"
     }
   },
-  "propKit": ["console", "cryo-pod", "cargo-crate", "holo-table", "pipe-run", "status-panel"],
+  "propKit": ["pillar", "lamp", "stairs", "rail"],
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,
