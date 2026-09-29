@@ -212,3 +212,17 @@ await test("a style's surface colors replace the defaults by role", () => {
   assert.equal(partNamed(parts, "start-spawn").color, "#112233");
   assert.equal(partNamed(parts, "hall-wall-north-1").color, "#445566");
 });
+
+await test("a style's surface material fills in where the room and the map name none", () => {
+  const surfaces = {
+    floor: { color: "#112233", material: "Slate" },
+    wall: { color: "#445566", material: "Brick" },
+  };
+  const input = { ...threeRoomInput, wallMaterial: "Wood" };
+  const { parts } = layoutMap(mapSpecSchema.parse(input), surfaces);
+  assert.equal(partNamed(parts, "hall-floor").material, "Slate");
+  assert.equal(partNamed(parts, "start-spawn").material, "Slate");
+  assert.equal(partNamed(parts, "hall-wall-north-1").material, "Wood");
+  const withoutMapMaterial = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
+  assert.equal(partNamed(withoutMapMaterial.parts, "hall-wall-north-1").material, "Brick");
+});

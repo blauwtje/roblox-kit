@@ -27,8 +27,8 @@ export interface PartRecord {
 /** The surface roles a part is painted from; each names a `surfaces` entry of a preset. */
 export type SurfaceRole = keyof Preset["surfaces"];
 
-/** The colors of the surface roles a part can take; a preset's `surfaces` fits this shape. */
-export type SurfaceColors = Record<"floor" | "wall", { color: string }>;
+/** The color, and optionally the material, of the surface roles a part can take; a preset's `surfaces` fits this shape. */
+export type SurfaceColors = Record<"floor" | "wall", { color: string; material?: string }>;
 
 /** Neutral grays used when the map spec has no style. */
 const defaultSurfaceColors: SurfaceColors = {
@@ -61,11 +61,19 @@ interface Interval {
 
 const sides: Side[] = ["north", "south", "east", "west"];
 
-/** Room settings win over map settings, which win over the config defaults. */
+/** Room settings win over map settings, which win over the style's surface material, which wins over the config defaults. */
 function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): RoomStyle {
   return {
-    floorMaterial: room.floorMaterial ?? spec.floorMaterial ?? config.defaultFloorMaterial,
-    wallMaterial: room.wallMaterial ?? spec.wallMaterial ?? config.defaultWallMaterial,
+    floorMaterial:
+      room.floorMaterial ??
+      spec.floorMaterial ??
+      surfaces.floor.material ??
+      config.defaultFloorMaterial,
+    wallMaterial:
+      room.wallMaterial ??
+      spec.wallMaterial ??
+      surfaces.wall.material ??
+      config.defaultWallMaterial,
     wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
     wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
     doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,

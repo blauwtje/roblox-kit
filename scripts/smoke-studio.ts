@@ -5,6 +5,7 @@ import { buildMapTool } from "../src/map/build-map-tool.ts";
 import { captureZonesTool } from "../src/map/capture-zones-tool.ts";
 import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
+import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { mapSpecSchema } from "../src/map/map-spec.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
@@ -136,8 +137,37 @@ const smokeRegion = { min: [1960, -30, 1960], max: [2080, 30, 2040] };
 /** What must remain in Workspace once the smoke is done. */
 const placeWorkspaceChildren = ["Terrain", "Baseplate", "SpawnLocation", "Camera"];
 
+/** Puts Lighting back from the snapshot the map Model holds; it must run before the Model is destroyed. */
+const restoreLightingLuau = `
+local Lighting = game:GetService("Lighting")
+local mapsFolder = workspace:FindFirstChild("${config.mapsFolderName}")
+local mapModel = if mapsFolder then mapsFolder:FindFirstChild("${smokeMapSpec.mapId}") else nil
+local encoded = if mapModel then mapModel:GetAttribute("RobloxKitLightingSnapshot") else nil
+if typeof(encoded) == "string" then
+  local snapshot = game:GetService("HttpService"):JSONDecode(encoded)
+  for name, value in snapshot.lighting do
+    if name == "LightingStyle" then Lighting.LightingStyle = Enum.LightingStyle[value]
+    elseif name == "Ambient" or name == "OutdoorAmbient" then Lighting[name] = Color3.fromHex(value)
+    else Lighting[name] = value end
+  end
+  local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+  if atmosphere and snapshot.atmosphere then
+    for name, value in snapshot.atmosphere do
+      if name == "Color" or name == "Decay" then atmosphere[name] = Color3.fromHex(value) else atmosphere[name] = value end
+    end
+  end
+  local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+  if bloom and snapshot.bloom then
+    for name, value in snapshot.bloom do bloom[name] = value end
+  end
+  for _, className in snapshot.created do
+    local effect = Lighting:FindFirstChildOfClass(className)
+    if effect then effect:Destroy() end
+  end
+end`;
+
 /** Removes what the smoke and the tools insert: only names and the region the smoke owns. */
-const cleanupLuau = `
+const cleanupLuau = `${restoreLightingLuau}
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayerScripts = game:GetService("StarterPlayer"):FindFirstChildOfClass("StarterPlayerScripts")
 local function destroyNamed(container, name)
@@ -156,6 +186,37 @@ local min = Vector3.new(${smokeRegion.min.join(", ")})
 local max = Vector3.new(${smokeRegion.max.join(", ")})
 workspace.Terrain:FillBlock(CFrame.new((min + max) / 2), max - min, Enum.Material.Air)
 return "cleaned"`;
+
+/** Reports Lighting as JSON: the recipe's properties and effects, as the smoke compares them. */
+const lightingStateLuau = `
+local Lighting = game:GetService("Lighting")
+local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+return game:GetService("HttpService"):JSONEncode({
+  LightingStyle = Lighting.LightingStyle.Name,
+  Ambient = Lighting.Ambient:ToHex(),
+  OutdoorAmbient = Lighting.OutdoorAmbient:ToHex(),
+  Brightness = Lighting.Brightness,
+  ExposureCompensation = Lighting.ExposureCompensation,
+  ShadowSoftness = Lighting.ShadowSoftness,
+  effectCount = #Lighting:GetChildren(),
+  atmosphereDensity = if atmosphere then atmosphere.Density else -1,
+  atmosphereColor = if atmosphere then atmosphere.Color:ToHex() else "",
+  bloomIntensity = if bloom then bloom.Intensity else -1,
+})`;
+
+const lightingStateSchema = z.object({
+  LightingStyle: z.string(),
+  Ambient: z.string(),
+  OutdoorAmbient: z.string(),
+  Brightness: z.number(),
+  ExposureCompensation: z.number(),
+  ShadowSoftness: z.number(),
+  effectCount: z.number(),
+  atmosphereDensity: z.number(),
+  atmosphereColor: z.string(),
+  bloomIntensity: z.number(),
+});
 
 /** Reports the place state as one line; the smoke fails unless it is the state the place started in. */
 const placeStateLuau = `
@@ -302,6 +363,113 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
   return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
 }
 
+/** The lights the built map holds: each PointLight with its Attachment, the part above it and its world position. */
+const mapLightsLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local lights = {}
+for _, descendant in model:GetDescendants() do
+  if descendant:IsA("PointLight") then
+    local attachment = descendant.Parent :: Attachment
+    local position = attachment.WorldPosition
+    table.insert(lights, {
+      part = attachment.Parent.Name, range = descendant.Range, brightness = descendant.Brightness,
+      color = descendant.Color:ToHex(), shadows = descendant.Shadows, x = position.X, y = position.Y, z = position.Z,
+    })
+  end
+end
+table.sort(lights, function(first, second) return first.x < second.x end)
+local snapshot = model:GetAttribute("RobloxKitLightingSnapshot")
+return game:GetService("HttpService"):JSONEncode({ lights = lights, snapshot = if typeof(snapshot) == "string" then snapshot else "" })`;
+
+const mapLightsSchema = z.object({
+  lights: z.array(
+    z.object({
+      part: z.string(),
+      range: z.number(),
+      brightness: z.number(),
+      color: z.string(),
+      shadows: z.boolean(),
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
+  ),
+  snapshot: z.string(),
+});
+
+function expectClose(what: string, actual: number, expected: number): void {
+  if (Math.abs(actual - expected) > 1e-3) {
+    throw new Error(`${what}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+
+async function readMapLights(connection: StudioConnection, studioId: string) {
+  return mapLightsSchema.parse(JSON.parse(await executeLuau(connection, studioId, mapLightsLuau)));
+}
+
+/** Proves the style's lights hang under their rooms' floors, the recipe reached Lighting and a rebuild keeps the snapshot. */
+async function probeLighting(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const hex = (color: string) => color.slice(1).toLowerCase();
+  const built = await readMapLights(connection, studioId);
+  const placements = placeLights(smokeMapSpec, preset.lightRoles).sort(
+    (first, second) => first.position.x - second.position.x,
+  );
+  expectEqual("light count", built.lights.length, placements.length);
+  placements.forEach((placement, index) => {
+    const light = built.lights[index];
+    const roleValues = preset.lightRoles[placement.role];
+    const room = smokeMapSpec.rooms.find((candidate) => candidate.x === placement.position.x);
+    if (light === undefined || room === undefined) {
+      throw new Error(`No built light or room for the ${placement.role} placement.`);
+    }
+    expectEqual(`${placement.role} light floor part`, light.part, `${room.name}-floor`);
+    expectEqual(`${placement.role} light shadows`, light.shadows, placement.shadows);
+    expectEqual(`${placement.role} light color`, light.color.toLowerCase(), hex(roleValues.color));
+    expectClose(`${placement.role} light range`, light.range, placement.range);
+    expectClose(`${placement.role} light brightness`, light.brightness, roleValues.brightness);
+    expectClose(`${placement.role} light x`, light.x, placement.position.x);
+    expectClose(`${placement.role} light y`, light.y, placement.position.y);
+    expectClose(`${placement.role} light z`, light.z, placement.position.z);
+  });
+  expectEqual("snapshot stored on the map Model", built.snapshot.length > 0, true);
+
+  const recipe = preset.lighting;
+  const lighting = lightingStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+  );
+  expectEqual("Lighting LightingStyle", lighting.LightingStyle, recipe.LightingStyle);
+  expectEqual("Lighting Ambient", lighting.Ambient.toLowerCase(), hex(recipe.Ambient));
+  expectEqual(
+    "Lighting OutdoorAmbient",
+    lighting.OutdoorAmbient.toLowerCase(),
+    hex(recipe.OutdoorAmbient),
+  );
+  expectClose("Lighting Brightness", lighting.Brightness, recipe.Brightness);
+  expectClose(
+    "Lighting ExposureCompensation",
+    lighting.ExposureCompensation,
+    recipe.ExposureCompensation,
+  );
+  expectClose("Atmosphere Density", lighting.atmosphereDensity, recipe.Atmosphere.Density);
+  expectEqual(
+    "Atmosphere Color",
+    lighting.atmosphereColor.toLowerCase(),
+    hex(recipe.Atmosphere.Color),
+  );
+  expectClose("Bloom Intensity", lighting.bloomIntensity, recipe.Bloom.Intensity);
+
+  await callRealTool(buildMapTool, smokeMapSpec, connection);
+  const rebuilt = await readMapLights(connection, studioId);
+  expectEqual("light count after a rebuild", rebuilt.lights.length, placements.length);
+  expectEqual("snapshot kept across a rebuild", rebuilt.snapshot, built.snapshot);
+  return `${String(placements.length)} lights under their floors, recipe applied, snapshot kept across a rebuild`;
+}
+
 async function probeCheckMap(connection: StudioConnection): Promise<string> {
   const tool = createCheckMapTool(new CheckReportStore());
   const { output, content } = await callRealTool(tool, { mapId: smokeMapSpec.mapId }, connection);
@@ -367,10 +535,14 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   const studioId = await selectStudio(connection, undefined);
   const findings: Capability[] = [];
   await executeLuau(connection, studioId, cleanupLuau);
+  const lightingBefore = lightingStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+  );
   try {
     const steps: [string, () => Promise<string>][] = [
       ["build_map", () => probeBuildMap(connection)],
       ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
+      ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],
       [
@@ -412,8 +584,12 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   const state = placeStateSchema.parse(
     JSON.parse(await executeLuau(connection, studioId, placeStateLuau)),
   );
+  const lightingAfter = lightingStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+  );
   findings.push(
     await probeTool("place restored after the smoke", () => {
+      expectEqual("Lighting", lightingAfter, lightingBefore);
       expectEqual(
         "Workspace children",
         [...state.workspace].sort(),

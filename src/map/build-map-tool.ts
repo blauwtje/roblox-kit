@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { config } from "../config.ts";
+import { applyLighting } from "../lighting/apply-lighting.ts";
+import { placeLights } from "../lighting/light-placement.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
@@ -8,7 +10,7 @@ import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
-import { mapSpecSchema, type TerrainFill } from "./map-spec.ts";
+import { mapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
 
 const presets = await loadPresets();
 
@@ -92,11 +94,51 @@ function variantsOf(style: Preset | undefined): Record<string, Variant> {
   return variants;
 }
 
+/** One light for `build-map.luau`: hung at `position`, parented under the floor part of its zone. */
+interface LightRecord {
+  zone: string;
+  /** Name of the floor part of the zone that holds the light's Attachment. */
+  part: string;
+  role: string;
+  position: Vector;
+  range: number;
+  shadows: boolean;
+  brightness: number;
+  color: string;
+}
+
+/**
+ * The lights the style's light roles place, each tied to the floor part of the room centered where
+ * the light hangs. Placements carry no room name; the first room with that center takes it.
+ */
+function lightRecordsOf(
+  spec: MapSpec,
+  parts: PartRecord[],
+  style: Preset | undefined,
+): LightRecord[] {
+  if (style === undefined) {
+    return [];
+  }
+  return placeLights(spec, style.lightRoles).map((placement) => {
+    const room = spec.rooms.find(
+      (candidate) => candidate.x === placement.position.x && candidate.z === placement.position.z,
+    );
+    const floor = parts.find((part) => part.kind === "floor" && part.room === room?.name);
+    if (room === undefined || floor === undefined) {
+      throw new Error(
+        `No room floor found for the ${placement.role} light at ${JSON.stringify(placement.position)}.`,
+      );
+    }
+    const { brightness, color } = style.lightRoles[placement.role];
+    return { ...placement, zone: room.name, part: floor.name, brightness, color };
+  });
+}
+
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor, applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
@@ -125,9 +167,19 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
         parts: layout.parts,
         terrainFills: layout.terrainFills,
         variants: variantsOf(style),
+        lights: lightRecordsOf(input, layout.parts, style),
       },
       resultSchema: builtMapSchema,
     });
+    if (style !== undefined) {
+      await applyLighting({
+        connection: context.studio,
+        studioId,
+        mapsFolderName: config.mapsFolderName,
+        mapId: input.mapId,
+        recipe: style.lighting,
+      });
+    }
     const bounds = unionOf([
       ...layout.parts.map((part) => boundsOfBox(part.position, part.size)),
       ...layout.terrainFills.map(boundsOfFill),

@@ -1,6 +1,7 @@
 --!strict
 -- Builds one map as a Model named after its id under a Workspace folder, replacing the Model of
--- the same id and the terrain it filled. Reports the number of parts built.
+-- the same id and the terrain it filled. Each light record becomes a PointLight under an Attachment
+-- under the floor part of its zone. Reports the number of parts built.
 type Vector = { x: number, y: number, z: number }
 
 type PartRecord = {
@@ -18,6 +19,17 @@ type Variant = {
 	studsPerTile: number,
 }
 
+type LightRecord = {
+	zone: string,
+	part: string,
+	role: string,
+	position: Vector,
+	range: number,
+	shadows: boolean,
+	brightness: number,
+	color: string,
+}
+
 type TerrainFill = {
 	shape: string,
 	center: Vector,
@@ -33,10 +45,13 @@ type Arguments = {
 	terrainFills: { TerrainFill },
 	-- Flat MaterialVariant of each surface role that has one.
 	variants: { [string]: Variant },
+	lights: { LightRecord },
 }
 
 -- Attribute on the map Model holding the terrain fills of its build as JSON, so a rebuild can clear them.
 local TERRAIN_ATTRIBUTE_NAME = "RobloxKitTerrainFills"
+-- Attribute on the map Model holding the Lighting snapshot; apply-lighting.luau owns it and a rebuild carries it over.
+local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
 
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
@@ -142,6 +157,24 @@ local function newPart(record: PartRecord): BasePart
 	return part
 end
 
+-- A light hangs from an Attachment on its zone's floor part, so it adds no part to the map.
+local function addLight(model: Model, record: LightRecord)
+	local floor = model:FindFirstChild(record.part)
+	if not floor or not floor:IsA("BasePart") then
+		error(`Light "{record.role}" of zone "{record.zone}" has no floor part named "{record.part}".`, 0)
+	end
+	local attachment = Instance.new("Attachment")
+	attachment.Name = `{record.zone}-{record.role}-light`
+	attachment.Parent = floor
+	attachment.WorldPosition = toVector3(record.position)
+	local light = Instance.new("PointLight")
+	light.Range = record.range
+	light.Brightness = record.brightness
+	light.Color = Color3.fromHex(record.color)
+	light.Shadows = record.shadows
+	light.Parent = attachment
+end
+
 -- Returns whether a map of this id was replaced and how many parts the new one holds.
 local function build(): (boolean, number)
 	local folder = mapsFolder()
@@ -149,14 +182,21 @@ local function build(): (boolean, number)
 	if oldModel and oldModel:IsA("Model") then
 		clearTerrainOf(oldModel)
 	end
+	local lightingSnapshot = if oldModel then oldModel:GetAttribute(SNAPSHOT_ATTRIBUTE_NAME) else nil
 	if oldModel then
 		oldModel:Destroy()
 	end
 
 	local model = Instance.new("Model")
 	model.Name = arguments.mapId
+	if typeof(lightingSnapshot) == "string" then
+		model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, lightingSnapshot)
+	end
 	for _, record in arguments.parts do
 		newPart(record).Parent = model
+	end
+	for _, record in arguments.lights do
+		addLight(model, record)
 	end
 	for _, fill in arguments.terrainFills do
 		fillTerrain(fill, materialNamed(fill.material))

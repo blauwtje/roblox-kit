@@ -31,6 +31,19 @@ function studioReturning(text: string, isError = false) {
   });
 }
 
+/** Answers build-map.luau with a built map and apply-lighting.luau with a taken snapshot. */
+function styledStudio() {
+  return new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      const text = code.includes('"recipe"')
+        ? '{"snapshotTaken":true}'
+        : '{"partCount":14,"replaced":false}';
+      return { content: [{ type: "text", text }] };
+    },
+  });
+}
+
 function run(studio: FakeStudioConnection, spec: object) {
   return buildMapTool.handler(buildMapTool.inputSchema.parse(spec), { studio });
 }
@@ -90,15 +103,15 @@ await test("a style with overrides and a seed builds like the same spec without 
     seed: 7,
     style: { preset: "cozy-town", overrides: { sizeRules: { minDoorwayWidth: 8 } } },
   };
-  const result = await run(studioReturning('{"partCount":14,"replaced":false}'), styled);
+  const result = await run(styledStudio(), styled);
   assert.equal(result.isError, undefined);
   assert.equal(buildMapTool.outputSchema.parse(result.structuredContent).partCount, 14);
 });
 
 await test("a style sends its palette colors and role variants; without a style, defaults and no variants", async () => {
-  const styledStudio = studioReturning('{"partCount":14,"replaced":false}');
-  await run(styledStudio, { ...twoRoomSpec, style: { preset: "train-station" } });
-  const styledCode = String(styledStudio.requests[0]?.arguments["code"]);
+  const styledConnection = styledStudio();
+  await run(styledConnection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  const styledCode = String(styledConnection.requests[0]?.arguments["code"]);
   assert.ok(styledCode.includes('"color":"#8a7f70"'));
   assert.ok(styledCode.includes('"variants":{"wall":{"baseMaterial":"Brick","studsPerTile":8}}'));
 
@@ -107,6 +120,35 @@ await test("a style sends its palette colors and role variants; without a style,
   const plainCode = String(plainStudio.requests[0]?.arguments["code"]);
   assert.ok(plainCode.includes('"variants":{}'));
   assert.ok(plainCode.includes('"color":"#b8b8b8"'));
+});
+
+await test("a style sends its lights per zone and applies its lighting recipe after the build", async () => {
+  const connection = styledStudio();
+  await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  const [build, lighting] = connection.requests.map((request) => String(request.arguments["code"]));
+  assert.equal(connection.requests.length, 2);
+  const argumentsJson = /JSONDecode\(\[=*\[(.*)\]=*\]\)/s.exec(build ?? "")?.[1];
+  assert.ok(argumentsJson, "the build request carries its arguments");
+  const { lights } = JSON.parse(argumentsJson) as {
+    lights: { zone: string; part: string; role: string; shadows: boolean }[];
+  };
+  assert.deepEqual(
+    lights.map((light) => [light.zone, light.part, light.role, light.shadows]),
+    [
+      ["start", "start-floor", "hero", true],
+      ["start", "start-floor", "focal", false],
+      ["hall", "hall-floor", "zoneMarker", false],
+    ],
+  );
+  assert.ok(lighting?.includes('"recipe"'));
+  assert.ok(lighting?.includes('"mapId":"two-rooms"'));
+});
+
+await test("without a style no lights are sent and Lighting is left alone", async () => {
+  const connection = studioReturning('{"partCount":14,"replaced":false}');
+  await run(connection, twoRoomSpec);
+  assert.equal(connection.requests.length, 1);
+  assert.ok(String(connection.requests[0]?.arguments["code"]).includes('"lights":[]'));
 });
 
 await test("an unknown preset fails naming the known ones before Studio is asked", async () => {
@@ -139,5 +181,7 @@ await test("build-map.luau is strict, guards its build with a recording and chec
   assert.ok(source.includes("Enum.FinishRecordingOperation.Cancel"));
   assert.ok(source.includes("MaterialService"));
   assert.ok(source.includes("Color3.fromHex"));
+  assert.ok(source.includes("RobloxKitLightingSnapshot"));
+  assert.ok(source.includes("PointLight"));
   assert.ok(source.indexOf("assertMaterialsExist()") < source.indexOf("TryBeginRecording"));
 });
