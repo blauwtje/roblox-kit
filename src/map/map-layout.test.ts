@@ -215,7 +215,7 @@ await test("each part carries a surface role and the shipped default color when 
   const spawn = partNamed(parts, "start-spawn");
   assert.equal(floor.role, "floor");
   assert.equal(wall.role, "wall");
-  assert.equal(spawn.role, "floor");
+  assert.equal(spawn.role, "accent");
   assert.notEqual(floor.color, wall.color);
 });
 
@@ -239,6 +239,33 @@ await test("a style's surface material fills in where the room and the map name 
   assert.equal(partNamed(parts, "hall-wall-north-1").material, "Wood");
   const withoutMapMaterial = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
   assert.equal(partNamed(withoutMapMaterial.parts, "hall-wall-north-1").material, "Brick");
+});
+
+await test("the spawn pad takes the accent surface's color and material, and the floor's without one", () => {
+  const surfaces = {
+    floor: { color: "#112233", material: "Slate" },
+    wall: { color: "#445566" },
+    accent: { color: "#d9a441", material: "Neon" },
+  };
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
+  const spawn = partNamed(parts, "start-spawn");
+  assert.equal(spawn.role, "accent");
+  assert.equal(spawn.color, "#d9a441");
+  assert.equal(spawn.material, "Neon");
+  assert.equal(partNamed(parts, "start-floor").color, "#112233");
+  const withoutAccent = { floor: surfaces.floor, wall: surfaces.wall };
+  const plain = partNamed(
+    layoutMap(mapSpecSchema.parse(threeRoomInput), withoutAccent).parts,
+    "start-spawn",
+  );
+  assert.equal(plain.color, "#112233");
+  assert.equal(plain.material, "Slate");
+  const colorOnly = { ...surfaces, accent: { color: "#d9a441" } };
+  const colorOnlySpawn = partNamed(
+    layoutMap(mapSpecSchema.parse(threeRoomInput), colorOnly).parts,
+    "start-spawn",
+  );
+  assert.equal(colorOnlySpawn.material, "Slate");
 });
 
 await test("a layout without the ceilings option has no ceiling part", () => {
