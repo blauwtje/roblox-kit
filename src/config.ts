@@ -109,6 +109,10 @@ export const config = Object.freeze({
   blenderTimeoutMs: 120_000,
   /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
   heroPropSizeToleranceStuds: 0.1,
+  /** Milliseconds one hero-prop render reviewer (a headless `claude -p` reading three renders) may take. */
+  heroPropReviewTimeoutMs: 180_000,
+  /** Distinct recipe hashes of one hero-prop kind that may be reviewed; a further revision is refused. */
+  maxHeroPropRounds: 3,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,
