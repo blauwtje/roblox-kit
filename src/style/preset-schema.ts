@@ -6,6 +6,9 @@ const maxLightRange = 120;
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "expected a #rrggbb color");
 const materialName = z.string().min(1);
 
+/** The five surface roles a preset colors; a prop part takes one role's material and color. */
+const surfaceRoleName = z.enum(["floor", "wall", "trim", "ceiling", "accent"]);
+
 const surfaceRole = z.strictObject({
   /** Built-in Material name. */
   material: materialName,
@@ -22,7 +25,8 @@ const lightRole = z.strictObject({
   color: hexColor,
 });
 
-const fixtureSize = z.strictObject({
+/** Width, height and depth in studs. */
+const studDimensions = z.strictObject({
   width: z.number().positive(),
   height: z.number().positive(),
   depth: z.number().positive(),
@@ -38,13 +42,13 @@ const lightFixtures = z.discriminatedUnion("kind", [
     kind: z.literal("sconce"),
     spacing: z.number().positive(),
     height: z.number().positive(),
-    size: fixtureSize,
+    size: studDimensions,
   }),
   z.strictObject({
     kind: z.literal("pendant"),
     spacing: z.number().positive(),
     drop: z.number().positive(),
-    size: fixtureSize,
+    size: studDimensions,
   }),
 ]);
 
@@ -126,7 +130,49 @@ const propRule = z.strictObject({
   /** False keeps the prop square to its wall or row, on the 90-degree grid. */
   freeRotation: z.boolean(),
   /** The surface role whose color and material the prop's parts take; absent keeps the generator's own look. */
-  surface: z.enum(["floor", "wall", "trim", "ceiling", "accent"]).optional(),
+  surface: surfaceRoleName.optional(),
+});
+
+const studPoint = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
+
+/** Fields every hero-prop part shares: the surface role it takes and where its center sits. */
+const heroPartBase = {
+  role: surfaceRoleName,
+  /** Studs from the prop's footprint center on the floor (x across, y up, z along the depth). */
+  center: studPoint,
+};
+
+/** One shape of a hero prop; the generator joins the parts of each role into one mesh. */
+const heroPart = z.discriminatedUnion("shape", [
+  z.strictObject({ shape: z.literal("box"), ...heroPartBase, size: studDimensions }),
+  /** A cylinder whose axis runs along `axis`, `length` studs long. */
+  z.strictObject({
+    shape: z.literal("cylinder"),
+    ...heroPartBase,
+    radius: z.number().positive(),
+    length: z.number().positive(),
+    axis: z.enum(["x", "y", "z"]),
+  }),
+  /** A polygon of `points` (x across, y up) extruded `depth` studs along z, centered on `center`. */
+  z.strictObject({
+    shape: z.literal("profile"),
+    ...heroPartBase,
+    points: z.array(z.strictObject({ x: z.number(), y: z.number() })).min(3),
+    depth: z.number().positive(),
+  }),
+]);
+
+/** Most triangles a hero prop's mesh may hold, so a room's props stay inside its performance budget. */
+const maxHeroTriangles = 20000;
+
+/** A hero prop built from primitive shapes in studs: what it is, the set piece it replaces, its overall size and mesh budget. */
+const heroProp = z.strictObject({
+  description: z.string().min(1),
+  /** Kind of the set piece this prop takes the slot of. */
+  replaces: z.string().min(1),
+  size: studDimensions,
+  triangleBudget: z.number().int().positive().max(maxHeroTriangles),
+  parts: z.array(heroPart).min(1),
 });
 
 /** What a room of one type shows: the set pieces that identify it, the arrangements that fill it, the text its signs carry and the room names a reviewer may call it. */
@@ -135,6 +181,8 @@ const roomType = z.strictObject({
   setPieces: z.array(z.string().min(1)),
   /** Arrangements that fill the space the set pieces leave. */
   arrangements: z.array(arrangement).optional(),
+  /** Hero-prop kinds, declared in the preset's `heroProps`, that give the room its focal point. */
+  heroProps: z.array(z.string().min(1)).min(1).max(2).optional(),
   signLabel: z.string().min(1),
   /** Room names, besides the type name, that the blind place check accepts for this type. */
   roomNames: z.array(z.string().min(1)).optional(),
@@ -168,6 +216,8 @@ export const presetSchema = z.strictObject({
   propKit: z.array(z.string().min(1)).min(1),
   /** Scale and rotation rules keyed by prop kind, for every kind a room of this genre can place. */
   propRules: z.record(z.string().min(1), propRule),
+  /** Hero-prop recipes keyed by hero kind; absent leaves every room to its primitive set pieces. */
+  heroProps: z.record(z.string().min(1), heroProp).optional(),
   /** Room types this genre offers, keyed by type name; a room without a type keeps the plain prop kit. */
   roomTypes: z.record(z.string().min(1), roomType).optional(),
   sizeRules: z.strictObject({
