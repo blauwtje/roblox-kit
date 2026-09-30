@@ -99,6 +99,90 @@
     "platform-edge": { "heightRatio": { "min": 0.05, "max": 0.13 }, "freeRotation": false },
     "ticket-counter": { "heightRatio": { "min": 0.92, "max": 2.0 }, "freeRotation": false }
   },
+  "heroProps": {
+    "train-car": {
+      "description": "a low-poly passenger train car standing on two rails, a green-striped brick-colored body with a lit window band and a pale roof",
+      "replaces": "track-bed",
+      "size": { "width": 40, "height": 8.6, "depth": 4.2 },
+      "triangleBudget": 2000,
+      "parts": [
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.2, "z": -1.4 },
+          "size": { "width": 40, "height": 0.4, "depth": 0.3 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.2, "z": 1.4 },
+          "size": { "width": 40, "height": 0.4, "depth": 0.3 }
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -14, "y": 1.3, "z": 0 },
+          "radius": 0.9,
+          "length": 3.4,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -10, "y": 1.3, "z": 0 },
+          "radius": 0.9,
+          "length": 3.4,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 10, "y": 1.3, "z": 0 },
+          "radius": 0.9,
+          "length": 3.4,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 14, "y": 1.3, "z": 0 },
+          "radius": 0.9,
+          "length": 3.4,
+          "axis": "z"
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 2.4, "z": 0 },
+          "size": { "width": 38, "height": 0.8, "depth": 3.6 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": 0, "y": 5.3, "z": 0 },
+          "size": { "width": 40, "height": 5, "depth": 4 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 4.5, "z": 0 },
+          "size": { "width": 40, "height": 1, "depth": 4.2 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 0, "y": 6.4, "z": 0 },
+          "size": { "width": 34, "height": 1.6, "depth": 4.1 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 8.2, "z": 0 },
+          "size": { "width": 40, "height": 0.8, "depth": 3.6 }
+        }
+      ]
+    }
+  },
   "roomTypes": {
     "concourse": {
       "setPieces": ["bench", "departure-board", "clock"],
@@ -119,6 +203,7 @@
     },
     "platform": {
       "setPieces": ["track-bed", "platform-edge", "clock"],
+      "heroProps": ["train-car"],
       "arrangements": [
         { "shape": "along-length", "piece": "lamp", "spacing": 8, "inset": 1 },
         { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 5 },

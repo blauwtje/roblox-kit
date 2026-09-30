@@ -53,7 +53,8 @@ await test("every bundled preset meets the size rules check_map enforces", async
 
 const minPiecesPerQuadrant = 2;
 
-await test("the train station's concourse and ticket hall arrange at least two pieces in each quarter of the floor", async () => {
+/** The train station preset with the eval benchmark map resolved and its set pieces placed. */
+async function placeBenchmarkSetPieces() {
   const preset = (await loadPresets()).get("train-station");
   assert.ok(preset !== undefined);
   const benchmark = new URL("../../eval/benchmarks/train-station.json", import.meta.url);
@@ -62,13 +63,18 @@ await test("the train station's concourse and ticket hall arrange at least two p
   );
   const seed = spec.seed ?? 0;
   const agent = { radius: preset.sizeRules.agentRadius, height: preset.sizeRules.agentHeight };
-  const setPieces = placeSetPieces(
+  const { pieces } = placeSetPieces(
     spec,
     preset.roomTypes,
     preset.palette.accent,
     seed,
     doorwayClearanceBoxes(spec, agent),
-  ).pieces;
+  );
+  return { preset, spec, seed, setPieces: pieces };
+}
+
+await test("the train station's concourse and ticket hall arrange at least two pieces in each quarter of the floor", async () => {
+  const { preset, spec, seed, setPieces } = await placeBenchmarkSetPieces();
   const { pieces } = placeArrangements(spec, preset.roomTypes, setPieces, seed);
   for (const roomName of ["concourse", "ticket-hall"]) {
     const room = spec.rooms.find((candidate) => candidate.name === roomName);
@@ -90,5 +96,49 @@ await test("the train station's concourse and ticket hall arrange at least two p
         );
       }
     }
+  }
+});
+
+await test("the platform's train car replaces its track bed and fits the track bed's span", async () => {
+  const { preset, setPieces } = await placeBenchmarkSetPieces();
+  const trainCar = preset.heroProps?.["train-car"];
+  assert.ok(trainCar !== undefined);
+  assert.equal(trainCar.replaces, "track-bed");
+  assert.deepEqual(preset.roomTypes?.["platform"]?.heroProps, ["train-car"]);
+  const trackBed = setPieces.find((piece) => piece.kind === "track-bed");
+  assert.ok(trackBed !== undefined);
+  assert.ok(
+    trainCar.size.width <= trackBed.size.x,
+    `car ${String(trainCar.size.width)} studs long, track bed ${String(trackBed.size.x)}`,
+  );
+  assert.ok(trainCar.size.depth <= trackBed.size.z, "the car stands within the track bed's depth");
+});
+
+/** Half the extent of a cylinder along each axis: half its length on its axis, its radius on the other two. */
+function cylinderHalfExtent(cylinder: { radius: number; length: number; axis: "x" | "y" | "z" }) {
+  const along = cylinder.length / 2;
+  return {
+    x: cylinder.axis === "x" ? along : cylinder.radius,
+    y: cylinder.axis === "y" ? along : cylinder.radius,
+    z: cylinder.axis === "z" ? along : cylinder.radius,
+  };
+}
+
+await test("every part of the train car lies inside the car's size", async () => {
+  const trainCar = (await loadPresets()).get("train-station")?.heroProps?.["train-car"];
+  assert.ok(trainCar !== undefined);
+  const { width, height, depth } = trainCar.size;
+  for (const part of trainCar.parts) {
+    const half =
+      part.shape === "box"
+        ? { x: part.size.width / 2, y: part.size.height / 2, z: part.size.depth / 2 }
+        : part.shape === "cylinder"
+          ? cylinderHalfExtent(part)
+          : undefined;
+    assert.ok(half !== undefined, `${part.shape} part is not checked`);
+    assert.ok(Math.abs(part.center.x) + half.x <= width / 2 + 1e-9, "part exceeds the width");
+    assert.ok(part.center.y - half.y >= -1e-9, "part sinks below the floor");
+    assert.ok(part.center.y + half.y <= height + 1e-9, "part exceeds the height");
+    assert.ok(Math.abs(part.center.z) + half.z <= depth / 2 + 1e-9, "part exceeds the depth");
   }
 });
