@@ -72,7 +72,7 @@ Land gate: npm run check
 ### Task 1: fix(set-pieces): hang doorway signs against the wall above the door
 Depends on: none | Files: `src/map/set-piece-placement.ts`, `src/map/set-piece-placement.test.ts` | Data: the in-doorway sign record's inset, so its back face lies on the room-side face of the wall above its doorway | Proof: npm run eval:studio
 ### Task 2: feat(build-map): show a fixture for each ceiling light
-Depends on: none | Files: `luau/build-map.luau`, `src/config.ts`, `scripts/smoke-studio.ts` | Data: one decorative Neon part per light record within `config.lightCeilingDropStuds` of the ceiling, sized by one config constant and tagged `config.ceilingTag` | Proof: npm run smoke:studio
+Depends on: none | Files: `luau/build-map.luau`, `src/config.ts`, `src/map/build-map-tool.ts`, `src/map/build-map-tool.test.ts`, `scripts/smoke-studio.ts` | Data: one decorative Neon part per light record within `config.lightCeilingDropStuds` of the ceiling, sized by one config constant and tagged `config.ceilingTag` | Proof: npm run smoke:studio
 ### Task 3: feat(presets): light the train station bright and even with crisp shadows
 Depends on: 2 | Files: `presets/train-station.json` | Data: the preset's `lighting` object (lower `ShadowSoftness`, no bloom glare) and `lightRoles` brightness and range | Proof: node scripts/measure-wall-color.ts
 ### Task 4: feat(presets): stand the ticket-hall lamps along its walls instead of a floor grid
