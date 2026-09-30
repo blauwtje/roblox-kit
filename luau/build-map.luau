@@ -3,8 +3,9 @@
 -- `arguments.phase`. The shell phase replaces the Model of the same id and the terrain it filled and
 -- adds the walls and terrain; the later phases find that Model and add to it: floors, spawns and
 -- ceilings, then doorway arches, then trim details, then props, then lights. Each light record becomes
--- a PointLight under an Attachment under the floor part of its zone. Ceilings are tagged and decorative,
--- as are the detail parts. Each prop becomes a ProceduralModel running the ModuleScript of its kind
+-- a PointLight under an Attachment under the floor part of its zone; a light within `ceilingDropStuds` of
+-- the ceiling above it also gets a Neon fixture part against that ceiling, tagged like the ceilings.
+-- Ceilings are tagged and decorative, as are the detail parts and fixtures. Each prop becomes a ProceduralModel running the ModuleScript of its kind
 -- under the Model, generated before the props phase returns. Reports the number of parts in the Model
 -- after the phase (the BaseParts that are children of the Model); the shell phase also reports
 -- whether it replaced a map.
@@ -68,6 +69,9 @@ type Arguments = {
 	-- Source text of the generator of each prop kind.
 	generators: { [string]: string }?,
 	ceilingTag: string?,
+	-- Lighting phase: how far below a ceiling a light may hang to get a fixture, and the fixture's side.
+	ceilingDropStuds: number?,
+	fixtureSizeStuds: number?,
 	terrainFills: { TerrainFill }?,
 	-- Flat MaterialVariant of each surface role that has one.
 	variants: { [string]: Variant }?,
@@ -78,6 +82,7 @@ type Arguments = {
 local TERRAIN_ATTRIBUTE_NAME = "RobloxKitTerrainFills"
 -- Attribute on the map Model holding the Lighting snapshot; apply-lighting.luau owns it and a rebuild carries it over.
 local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
+local FIXTURE_TOLERANCE_STUDS = 0.001
 
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
@@ -266,6 +271,45 @@ local function addLight(model: Model, record: LightRecord)
 	light.Parent = attachment
 end
 
+-- The bottom face height of the tagged ceiling over the point, if any.
+local function ceilingBottomOver(model: Model, position: Vector, ceilingTag: string): number?
+	for _, tagged in CollectionService:GetTagged(ceilingTag) do
+		if tagged:IsDescendantOf(model) and tagged:IsA("BasePart") then
+			local offset = tagged.CFrame:PointToObjectSpace(toVector3(position))
+			if math.abs(offset.X) <= tagged.Size.X / 2 and math.abs(offset.Z) <= tagged.Size.Z / 2 then
+				return tagged.Position.Y - tagged.Size.Y / 2
+			end
+		end
+	end
+	return nil
+end
+
+-- A Neon cube against the ceiling over a light within the drop of it; it hides with the ceilings by their tag.
+local function addFixture(model: Model, record: LightRecord)
+	local ceilingTag, dropStuds, sizeStuds =
+		arguments.ceilingTag, arguments.ceilingDropStuds, arguments.fixtureSizeStuds
+	if not ceilingTag or not dropStuds or not sizeStuds then
+		error("A lighting phase needs ceilingTag, ceilingDropStuds and fixtureSizeStuds.", 0)
+	end
+	local ceilingBottom = ceilingBottomOver(model, record.position, ceilingTag)
+	-- Studio positions carry float error, so the drop is compared with a tolerance.
+	if not ceilingBottom or ceilingBottom - record.position.y > dropStuds + FIXTURE_TOLERANCE_STUDS then
+		return
+	end
+	local fixture = Instance.new("Part")
+	fixture.Name = `{record.zone}-{record.role}-fixture`
+	fixture.Anchored = true
+	fixture.CanCollide = false
+	fixture.CanTouch = false
+	fixture.CanQuery = false
+	fixture.Material = Enum.Material.Neon
+	fixture.Color = Color3.fromHex(record.color)
+	fixture.Size = Vector3.new(sizeStuds, sizeStuds, sizeStuds)
+	fixture.Position = Vector3.new(record.position.x, ceilingBottom - sizeStuds / 2, record.position.z)
+	CollectionService:AddTag(fixture, ceilingTag)
+	fixture.Parent = model
+end
+
 local function findModel(): Model
 	local folder = workspace:FindFirstChild(arguments.mapsFolderName)
 	local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
@@ -281,6 +325,7 @@ end
 local function addLights(model: Model)
 	for _, record in arguments.lights or {} do
 		addLight(model, record)
+		addFixture(model, record)
 	end
 end
 

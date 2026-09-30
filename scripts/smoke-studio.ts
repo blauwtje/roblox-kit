@@ -332,9 +332,26 @@ function styledSmokeMap() {
   return { layout, details, props };
 }
 
+/** Name ending of the fixture part build_map hangs at each ceiling light. */
+const fixtureNameSuffix = "-fixture";
+
+/** The lights that hang within the ceiling drop of their room's ceiling; build_map shows one fixture part for each. */
+function ceilingLightPlacements() {
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  return placeLights(smokeMapSpec, preset.lightRoles).filter((placement) => {
+    const room = smokeMapSpec.rooms.find((candidate) => candidate.x === placement.position.x);
+    const wallHeight = room?.wallHeight ?? smokeMapSpec.wallHeight ?? config.defaultWallHeightStuds;
+    return wallHeight - placement.position.y <= config.lightCeilingDropStuds;
+  });
+}
+
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
   const { layout, details } = styledSmokeMap();
-  const expectedPartCount = layout.parts.length + details.length;
+  const zonedPartCount = layout.parts.length + details.length;
+  const expectedPartCount = zonedPartCount + ceilingLightPlacements().length;
   const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
   expectEqual("build_map partCount", output.partCount, expectedPartCount);
@@ -346,7 +363,7 @@ async function probeBuildMap(connection: StudioConnection): Promise<string> {
   expectEqual(
     "build_map zone part counts sum",
     output.zones.reduce((sum, zone) => sum + zone.partCount, 0),
-    expectedPartCount,
+    zonedPartCount,
   );
   return `${String(output.partCount)} parts in ${String(output.zones.length)} zones`;
 }
@@ -357,7 +374,7 @@ local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("$
 local ceilings = {}
 for _, tagged in game:GetService("CollectionService"):GetTagged("${config.ceilingTag}") do
   if tagged:IsDescendantOf(model) and tagged:IsA("BasePart") then
-    table.insert(ceilings, { name = tagged.Name, canCollide = tagged.CanCollide })
+    table.insert(ceilings, { name = tagged.Name, canCollide = tagged.CanCollide, isNeon = tagged.Material == Enum.Material.Neon, size = tagged.Size.X })
   end
 end
 local generators, proceduralModels, baseParts = {}, {}, 0
@@ -382,7 +399,9 @@ table.sort(proceduralModels, function(first, second) return first.name < second.
 return game:GetService("HttpService"):JSONEncode({ ceilings = ceilings, generators = generators, proceduralModels = proceduralModels, baseParts = baseParts })`;
 
 const mapDecorSchema = z.object({
-  ceilings: z.array(z.object({ name: z.string(), canCollide: z.boolean() })),
+  ceilings: z.array(
+    z.object({ name: z.string(), canCollide: z.boolean(), isNeon: z.boolean(), size: z.number() }),
+  ),
   generators: z.array(z.string()),
   proceduralModels: z.array(
     z.object({
@@ -438,9 +457,29 @@ function expectSetPiecesTurnedAndLabeled(
 async function probeMapDecor(connection: StudioConnection): Promise<string> {
   const { layout, props } = styledSmokeMap();
   const decor = await readMapDecor(connection);
+  const fixtures = decor.ceilings.filter((tagged) => tagged.name.endsWith(fixtureNameSuffix));
+  const ceilings = decor.ceilings.filter((tagged) => !tagged.name.endsWith(fixtureNameSuffix));
+  expectEqual(
+    "ceiling light fixtures tagged",
+    fixtures.map((fixture) => fixture.name),
+    ceilingLightPlacements()
+      .map((placement) => {
+        const room = smokeMapSpec.rooms.find((candidate) => candidate.x === placement.position.x);
+        return `${room?.name ?? ""}-${placement.role}${fixtureNameSuffix}`;
+      })
+      .sort(),
+  );
+  expectEqual(
+    "fixtures are Neon cubes of the configured size",
+    fixtures.every(
+      (fixture) =>
+        fixture.isNeon && fixture.size === config.lightFixtureSizeStuds && !fixture.canCollide,
+    ),
+    true,
+  );
   expectEqual(
     "ceiling names tagged",
-    decor.ceilings.map((ceiling) => ceiling.name),
+    ceilings.map((ceiling) => ceiling.name),
     layout.parts
       .filter((part) => part.kind === "ceiling")
       .map((part) => part.name)
@@ -448,7 +487,7 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
   );
   expectEqual(
     "ceilings collide",
-    decor.ceilings.some((ceiling) => ceiling.canCollide),
+    ceilings.some((ceiling) => ceiling.canCollide),
     false,
   );
   expectEqual(
@@ -477,7 +516,7 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
     expectEqual(`${model.name} generated parts`, model.generatedParts > 0, true);
   }
   expectSetPiecesTurnedAndLabeled(props, expectedNames, decor.proceduralModels);
-  return `${String(decor.ceilings.length)} ceilings tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
+  return `${String(ceilings.length)} ceilings and ${String(fixtures.length)} fixtures tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
 }
 
 /** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */

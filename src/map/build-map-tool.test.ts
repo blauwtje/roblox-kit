@@ -226,6 +226,15 @@ await test("a style sends its lights per zone and applies its lighting recipe af
   assert.ok(lighting.includes('"mapId":"two-rooms"'));
 });
 
+await test("the lighting phase carries what places a fixture at each ceiling light", async () => {
+  const connection = styledStudio();
+  await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  const lightingArguments = requestArguments(connection, 5);
+  assert.equal(lightingArguments["ceilingTag"], config.ceilingTag);
+  assert.equal(lightingArguments["ceilingDropStuds"], config.lightCeilingDropStuds);
+  assert.equal(lightingArguments["fixtureSizeStuds"], config.lightFixtureSizeStuds);
+});
+
 await test("without a style no lights are sent and the last request only restores Lighting", async () => {
   const connection = phaseStudio();
   await run(connection, twoRoomSpec);

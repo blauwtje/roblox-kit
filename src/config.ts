@@ -46,6 +46,8 @@ export const config = Object.freeze({
 
   /** How far below the ceiling a room light hangs. */
   lightCeilingDropStuds: 1,
+  /** Side of the cube fixture that build_map hangs from the ceiling at each ceiling light. */
+  lightFixtureSizeStuds: 1,
   /** Height above the floor of the focal light over a spawn pad. */
   focalLightHeightStuds: 6,
 
