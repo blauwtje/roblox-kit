@@ -112,7 +112,7 @@ await test("sends the laid-out parts and fills to Studio phase by phase and retu
     ["start", "hall"],
   );
   assert.deepEqual(structured.zones[1]?.bounds, {
-    min: { x: 20, y: -1, z: -20 },
+    min: { x: 20, y: config.floorLiftStuds - 1, z: -20 },
     max: { x: 60, y: 12, z: 20 },
   });
   const [text] = result.content;
@@ -143,7 +143,7 @@ await test("a room placed by relation builds at its grid-snapped center with a h
     ["start", "hall", "start-hall-hallway"],
   );
   assert.deepEqual(structured.zones[1]?.bounds, {
-    min: { x: 30, y: -1, z: -20 },
+    min: { x: 30, y: config.floorLiftStuds - 1, z: -20 },
     max: { x: 70, y: 12, z: 20 },
   });
   assert.equal(structured.zones[2]?.bounds.min.x, 20);

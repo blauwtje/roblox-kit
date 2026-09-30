@@ -55,13 +55,27 @@ await test("the same spec lays out to the same parts and terrain fills", () => {
   assert.equal(new Set(first.parts.map((part) => part.name)).size, first.parts.length);
 });
 
-await test("a room gets a floor under y = 0 and walls standing on it with the config defaults", () => {
+await test("a room floor's top clears the ground plane y = 0 by less than the overlap tolerance", () => {
   const { parts } = layoutOf({
     mapId: "one",
     rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20 }],
   });
   const floor = partNamed(parts, "box-floor");
-  assert.deepEqual(floor.position, { x: 10, y: -0.5, z: 20 });
+  const floorTop = floor.position.y + floor.size.y / 2;
+  assert.ok(floorTop > 0, `floor top ${String(floorTop)} is above the Baseplate top at y = 0`);
+  assert.ok(
+    floorTop < config.overlapToleranceStuds,
+    "walls and props on y = 0 only touch the floor",
+  );
+});
+
+await test("a room gets a floor topped at y = 0 plus the lift and walls standing on it with the config defaults", () => {
+  const { parts } = layoutOf({
+    mapId: "one",
+    rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20 }],
+  });
+  const floor = partNamed(parts, "box-floor");
+  assert.deepEqual(floor.position, { x: 10, y: config.floorLiftStuds - 0.5, z: 20 });
   assert.deepEqual(floor.size, { x: 30, y: config.defaultWallThicknessStuds, z: 20 });
   assert.equal(floor.material, config.defaultFloorMaterial);
   const north = partNamed(parts, "box-wall-north-1");

@@ -33,6 +33,11 @@ export const config = Object.freeze({
   defaultCeilingMaterial: "Concrete",
   defaultWallHeightStuds: 12,
   defaultWallThicknessStuds: 1,
+  /**
+   * How far a room floor's top rises above y = 0, the top of a place's Baseplate, so the two faces do not
+   * z-fight; kept below overlapToleranceStuds so walls and props standing on y = 0 still count as touching it.
+   */
+  floorLiftStuds: 0.04,
   defaultDoorWidthStuds: 6,
   /** Seed of a map spec that sets none. */
   defaultSeed: 1,

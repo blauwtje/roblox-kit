@@ -177,7 +177,7 @@ function floorPart(room: RoomSpec, style: RoomStyle): PartRecord {
     kind: "floor",
     role: "floor",
     color: style.floorColor,
-    position: { x: room.x, y: -style.wallThickness / 2, z: room.z },
+    position: { x: room.x, y: config.floorLiftStuds - style.wallThickness / 2, z: room.z },
     size: { x: room.width, y: style.wallThickness, z: room.depth },
     material: style.floorMaterial,
   };
