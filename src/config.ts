@@ -69,6 +69,9 @@ export const config = Object.freeze({
 
   /** Milliseconds capture_zones waits before each screen_capture: a capture right after a build or a lighting change reads the scene's unsettled light, far brighter or darker than a later one. */
   captureSettleMs: 3000,
+  /** A capture is blank when at least this share of its pixels lies within blankCaptureLuminanceTolerance (0-255) of its median luminance; a hidden viewport measures 0.99, real captures at most 0.76. */
+  blankCaptureUniformShare: 0.95,
+  blankCaptureLuminanceTolerance: 8,
 
   /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
   cameraCoordinateDecimals: 2,
@@ -95,6 +98,7 @@ export const config = Object.freeze({
   calibrationReferenceMeanFloor: 6,
   calibrationBadAnchorMeanCeiling: 4,
   calibrationAxisGap: 2,
+  evalWaveRoomTypes: ["platform", "concourse", "ticket-hall"],
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,

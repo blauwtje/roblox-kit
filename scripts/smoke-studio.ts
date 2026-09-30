@@ -17,6 +17,7 @@ import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 const presets = await loadPresets();
 
@@ -893,6 +894,7 @@ const connection = new StudioMcpClient({
   timeoutMs: config.upstreamTimeoutMs,
 });
 try {
+  await assertViewportVisible(connection);
   const capabilities = [
     ...(await probeCapabilities(connection)),
     ...(await probeMapTools(connection)),

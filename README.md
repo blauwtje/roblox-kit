@@ -135,6 +135,8 @@ Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the serve
 
 Run `npm run check` for the type check, lint, format check, tests and plugin validation. Run `npm run smoke:studio` against a running Studio to build, check, capture and playtest a three-room map.
 
+Run `npm run eval:studio` against a running Studio to build, check and capture each benchmark in `eval/benchmarks/`. It runs the blind place check on each typed room and scores each room of the current wave (`config.evalWaveRoomTypes`) on the six image axes against the reference set. It appends one line per benchmark to `eval/results.jsonl` with the `check_map` issues, the axis medians and the reviewers' evidence notes, and fails only when a place check fails. Run `node scripts/fetch-references.ts` first to download the reference images, and `node scripts/calibrate-review.ts` to check that the reviewer still separates the references from the known-bad anchors in `eval/anchors/bad/`.
+
 ## License
 
 MIT

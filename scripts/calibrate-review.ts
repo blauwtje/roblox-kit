@@ -1,6 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
 import { config } from "../src/config.ts";
 import {
   median,
@@ -9,17 +8,12 @@ import {
   type AxisMedians,
   type QualityAxis,
 } from "../src/eval/quality-review.ts";
+import { readReferenceSet, referenceImagePath } from "../src/eval/reference-set.ts";
 
-const referenceSetUrl = new URL("../eval/reference-set.json", import.meta.url);
-const referencesUrl = new URL("../eval/references/", import.meta.url);
 const badAnchorsUrl = new URL("../eval/anchors/bad/", import.meta.url);
 
 const badAnchorsPreset = "train-station";
 const genericRoomType = "room";
-
-const referenceSetSchema = z.array(
-  z.object({ game: z.string().min(1), targetId: z.number().int(), preset: z.string().min(1) }),
-);
 
 interface CalibrationImage {
   kind: "reference" | "bad-anchor";
@@ -48,22 +42,11 @@ interface AxisRow {
   inBound: boolean;
 }
 
-function gameFolder(game: string): string {
-  return game
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-|-$/g, "");
-}
-
 async function calibrationImages(): Promise<CalibrationImage[]> {
-  const references = referenceSetSchema
-    .parse(JSON.parse(await readFile(referenceSetUrl, "utf8")))
-    .map((reference) => ({
-      preset: reference.preset,
-      path: fileURLToPath(
-        new URL(`${gameFolder(reference.game)}/${String(reference.targetId)}.png`, referencesUrl),
-      ),
-    }));
+  const references = (await readReferenceSet()).map((reference) => ({
+    preset: reference.preset,
+    path: referenceImagePath(reference),
+  }));
   const referencePaths = references.map((reference) => reference.path);
   const images: CalibrationImage[] = references.map((reference) => ({
     kind: "reference",

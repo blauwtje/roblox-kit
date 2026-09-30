@@ -4,6 +4,8 @@ import { config } from "../src/config.ts";
 import { blindPlaceCheck } from "../src/eval/blind-place-check.ts";
 import type { PlaceCheckResult } from "../src/eval/blind-place-check.ts";
 import { codeScoreOf } from "../src/eval/code-score.ts";
+import { reviewRoomQuality, type QualityResult } from "../src/eval/quality-review.ts";
+import { readReferenceSet, referenceImagePath } from "../src/eval/reference-set.ts";
 import { buildMapTool } from "../src/map/build-map-tool.ts";
 import { captureZonesTool } from "../src/map/capture-zones-tool.ts";
 import { CheckReportStore } from "../src/map/check-report-store.ts";
@@ -15,6 +17,7 @@ import { resolveStyle } from "../src/style/resolve-style.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
+import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 /**
  * Builds, checks and captures each benchmark in `eval/benchmarks/` in the open Studio, runs the blind place
@@ -70,6 +73,67 @@ async function saveCaptures(
   return paths;
 }
 
+interface TypedRoom {
+  name: string;
+  roomType: string;
+}
+
+function typedRooms(spec: RelationMapSpec): TypedRoom[] {
+  return spec.rooms.flatMap((room) =>
+    room.roomType === undefined ? [] : [{ name: room.name, roomType: room.roomType }],
+  );
+}
+
+function currentWaveRooms(spec: RelationMapSpec): TypedRoom[] {
+  return typedRooms(spec).filter((room) => config.evalWaveRoomTypes.includes(room.roomType));
+}
+
+function captureOf(captures: string[], room: string, view: string): string | undefined {
+  return captures.find((path) => path.split("/").at(-1)?.startsWith(`${room}-${view}.`));
+}
+
+async function captureUntilDone(
+  benchmark: string,
+  request: z.input<typeof captureZonesTool.inputSchema>,
+  connection: StudioConnection,
+): Promise<{ captures: string[]; warnings: string[] }> {
+  const capturePaths = new Set<string>();
+  const warnings: string[] = [];
+  let zones = request.zones;
+  do {
+    const captured = await callTool(captureZonesTool, { ...request, zones }, connection);
+    if (zones !== undefined && captured.output.remainingZones.length >= zones.length) {
+      throw new Error(
+        `${benchmark}: zones left uncaptured: ${captured.output.remainingZones.join(", ")}.`,
+      );
+    }
+    // Every call repeats the whole-map cutaway under the same file name, so the set keeps one path.
+    const paths = await saveCaptures(benchmark, captured.output.shots, captured.content);
+    for (const path of paths) capturePaths.add(path);
+    warnings.push(...captured.output.warnings);
+    zones = captured.output.remainingZones;
+  } while (zones.length > 0);
+  return { captures: [...capturePaths], warnings };
+}
+
+async function qualityReviews(spec: RelationMapSpec, captures: string[]): Promise<QualityResult[]> {
+  if (spec.style === undefined) {
+    return [];
+  }
+  const genre = spec.style.preset;
+  const referencePaths = (await readReferenceSet()).map(referenceImagePath);
+  const reviews: QualityResult[] = [];
+  for (const room of currentWaveRooms(spec)) {
+    const capturePaths = ["eye", "a", "b"].flatMap(
+      (view) => captureOf(captures, room.name, view) ?? [],
+    );
+    reviews.push(
+      await reviewRoomQuality(room.name, genre, room.roomType, referencePaths, capturePaths),
+    );
+  }
+  return reviews;
+}
+
 /**
  * The blind place check (skills/visual-judge SKILL.md step 5) of each typed room of a styled benchmark, from
  * the room zone's saved view a and view b images; a benchmark without a style has no typed rooms.
@@ -80,14 +144,9 @@ async function placeChecks(spec: RelationMapSpec, captures: string[]): Promise<P
   }
   const genre = spec.style.preset;
   const roomTypes = resolveStyle(await loadPresets(), spec.style).roomTypes ?? {};
-  const typedRooms = spec.rooms.flatMap((room) =>
-    room.roomType === undefined ? [] : [{ name: room.name, roomType: room.roomType }],
-  );
   return Promise.all(
-    typedRooms.map(({ name, roomType }) => {
-      const views = ["a", "b"].map((view) =>
-        captures.find((path) => path.split("/").at(-1)?.startsWith(`${name}-${view}.`)),
-      );
+    typedRooms(spec).map(({ name, roomType }) => {
+      const views = ["a", "b"].map((view) => captureOf(captures, name, view));
       const imagePaths = views.filter((path) => path !== undefined);
       if (imagePaths.length !== views.length) {
         const error = `Room "${name}" has no view a and view b capture to place-check.`;
@@ -115,24 +174,20 @@ async function evaluate(file: string, connection: StudioConnection) {
     },
     connection,
   );
-  const capturePaths = new Set<string>();
-  const captureWarnings: string[] = [];
-  let zones: string[] | undefined;
-  do {
-    const captured = await callTool(captureZonesTool, { mapId: spec.mapId, zones }, connection);
-    if (zones !== undefined && captured.output.remainingZones.length >= zones.length) {
-      throw new Error(
-        `${benchmark}: zones left uncaptured: ${captured.output.remainingZones.join(", ")}.`,
-      );
-    }
-    // Every call repeats the whole-map cutaway under the same file name, so the set keeps one path.
-    const paths = await saveCaptures(benchmark, captured.output.shots, captured.content);
-    for (const path of paths) capturePaths.add(path);
-    captureWarnings.push(...captured.output.warnings);
-    zones = captured.output.remainingZones;
-  } while (zones.length > 0);
-  const captures = [...capturePaths];
+  const cutaways = await captureUntilDone(benchmark, { mapId: spec.mapId }, connection);
+  const waveRoomNames = currentWaveRooms(spec).map((room) => room.name);
+  const eyeViews =
+    waveRoomNames.length === 0
+      ? { captures: [], warnings: [] }
+      : await captureUntilDone(
+          benchmark,
+          { mapId: spec.mapId, zones: waveRoomNames, views: ["eye"], cutaway: false },
+          connection,
+        );
+  const captures = [...cutaways.captures, ...eyeViews.captures];
+  const captureWarnings = [...cutaways.warnings, ...eyeViews.warnings];
   const placeCheck = await placeChecks(spec, captures);
+  const quality = await qualityReviews(spec, captures);
   const budget = spec.performanceBudget;
   return {
     benchmark,
@@ -151,8 +206,11 @@ async function evaluate(file: string, connection: StudioConnection) {
     zoneCount: checked.output.zoneCount,
     captures,
     captureWarnings,
+    checkIssues: checked.output.issues,
+    checkIssuesOmitted: checked.output.issuesOmitted,
     placeCheck,
     placeCheckPassed: placeCheck.every((check) => check.passed),
+    quality,
   };
 }
 
@@ -161,6 +219,7 @@ const connection = new StudioMcpClient({
   timeoutMs: config.upstreamTimeoutMs,
 });
 try {
+  await assertViewportVisible(connection);
   const files = (await readdir(benchmarksUrl)).filter((name) => name.endsWith(".json")).sort();
   const failedPlaceChecks: string[] = [];
   for (const file of files) {
@@ -182,6 +241,15 @@ try {
           `${line.benchmark} ${check.room}: named ${named}, not ${check.genre} / ${check.roomType} furnished`,
         );
       }
+    }
+    for (const review of line.quality) {
+      const scores =
+        review.medians === undefined
+          ? `no scores (${String(review.error)})`
+          : Object.entries(review.medians)
+              .map(([axis, median]) => `${axis} ${String(median)}`)
+              .join(", ");
+      console.log(`  ${review.room} (${review.roomType}) quality: ${scores}`);
     }
   }
   if (failedPlaceChecks.length > 0) {
