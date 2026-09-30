@@ -48,7 +48,7 @@ const samplesReply = JSON.stringify({
 });
 
 /** Answers the check with `text`, and the zone read and the stats sampling that follow it with fixed replies. */
-function studioReturning(text: string, isError = false) {
+function studioReturning(text: string, isError = false, propsReply = '{"props":[]}') {
   return new FakeStudioConnection(studios, {
     execute_luau: (request) => {
       const code = String(request.arguments["code"]);
@@ -56,7 +56,9 @@ function studioReturning(text: string, isError = false) {
         ? samplesReply
         : code.includes('"spawnNameSuffix"')
           ? zonesReply
-          : text;
+          : code.includes("UPRIGHT_MINIMUM_UP_Y")
+            ? propsReply
+            : text;
       return { content: [{ type: "text", text: reply }], isError };
     },
   });
@@ -126,6 +128,8 @@ await test("issues are listed inline up to a cap and all of them are stored unde
     floating: 10,
     unreachable: 1,
     sizeRule: 0,
+    scale: 0,
+    rotation: 0,
   });
   assert.equal(structured.issues.length, 20);
   assert.equal(structured.issuesOmitted, 6);
@@ -383,6 +387,41 @@ await test("a preset with a spec adds sizeRule issues to the counts and the repo
   ]) {
     const plain = (await run(input)).structuredContent as { passed: boolean; counts: object };
     assert.equal(plain.passed, true);
-    assert.deepEqual(plain.counts, { overlapping: 0, floating: 0, unreachable: 0, sizeRule: 0 });
+    assert.deepEqual(plain.counts, {
+      overlapping: 0,
+      floating: 0,
+      unreachable: 0,
+      sizeRule: 0,
+      scale: 0,
+      rotation: 0,
+    });
   }
+});
+
+await test("with a preset, props out of scale or off the grid become scale and rotation issues naming their part path", async () => {
+  const bench = { kind: "bench", position: { x: 1, y: 2, z: 3 }, upright: true };
+  const props = [
+    { ...bench, path: partPath("bench-1"), size: { x: 6, y: 3, z: 2 }, yaw: 90 },
+    { ...bench, path: partPath("bench-2"), size: { x: 6, y: 9, z: 2 }, yaw: 30 },
+  ];
+  const studio = studioReturning(checkedMap(), false, JSON.stringify({ props }));
+  const { reports, run } = setup(studio);
+  const result = await run({ mapId: "arena", preset: "train-station" });
+  const structured = result.structuredContent as {
+    passed: boolean;
+    counts: { scale: number; rotation: number };
+    issues: CheckIssue[];
+    reportId: string;
+  };
+  assert.equal(structured.passed, false);
+  assert.deepEqual(
+    structured.issues.map((issue) => [issue.kind, issue.parts]),
+    [
+      ["scale", [partPath("bench-2")]],
+      ["rotation", [partPath("bench-2")]],
+    ],
+  );
+  assert.equal(structured.counts.scale, 1);
+  assert.equal(structured.counts.rotation, 1);
+  assert.equal(reports.get(structured.reportId)?.issues.length, 2);
 });

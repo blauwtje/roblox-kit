@@ -649,7 +649,9 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     output.counts.overlapping +
     output.counts.floating +
     output.counts.unreachable +
-    output.counts.sizeRule;
+    output.counts.sizeRule +
+    output.counts.scale +
+    output.counts.rotation;
   expectEqual("check_map issues + omitted", output.issues.length + output.issuesOmitted, counted);
   expectEqual("check_map passed", output.passed, counted === 0);
   // A clean map: any issue here is a finding, not something to tolerate.
@@ -658,6 +660,8 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     floating: 0,
     unreachable: 0,
     sizeRule: 0,
+    scale: 0,
+    rotation: 0,
   });
   expectEqual(
     "check_map sceneStats zones",

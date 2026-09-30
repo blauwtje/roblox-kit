@@ -4,7 +4,7 @@ import { config } from "../config.ts";
 
 /** One finding of `check_map`: what is wrong, which part paths are involved and where in studs. */
 export const checkIssueSchema = z.strictObject({
-  kind: z.enum(["overlapping", "floating", "unreachable", "sizeRule"]),
+  kind: z.enum(["overlapping", "floating", "unreachable", "sizeRule", "scale", "rotation"]),
   /** Full names of the parts involved, such as `Workspace.RobloxKitMaps.arena.start-floor`. */
   parts: z.array(z.string()),
   position: z.strictObject({ x: z.number(), y: z.number(), z: z.number() }),

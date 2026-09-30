@@ -17,6 +17,7 @@ import {
   relationMapSpecSchema,
   type PerformanceBudget,
 } from "./map-spec.ts";
+import { findPropIssues, propRecordSchema } from "./prop-rules.ts";
 import { findSizeRuleIssues } from "./size-rules.ts";
 import { zoneShot } from "./zone-cameras.ts";
 
@@ -25,14 +26,18 @@ const presets = await loadPresets();
 /** Straight-line distance beyond which a spawn and a target are reported as tooFar, not pathfound. */
 const MAX_PATH_STUDS = 3000;
 
-/** The counts `check-map.luau` reports; `sizeRule` is computed here, from the spec. */
+/** The counts `check-map.luau` reports; `sizeRule` is computed here from the spec, `scale` and `rotation` from the props. */
 const luauCountsSchema = z.strictObject({
   overlapping: z.number().int(),
   floating: z.number().int(),
   unreachable: z.number().int(),
 });
 
-const issueCountsSchema = luauCountsSchema.extend({ sizeRule: z.number().int() });
+const issueCountsSchema = luauCountsSchema.extend({
+  sizeRule: z.number().int(),
+  scale: z.number().int(),
+  rotation: z.number().int(),
+});
 
 const checkMapInput = z.strictObject({
   /** The mapId that `build_map` returned. */
@@ -101,6 +106,19 @@ const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number(
 const mapZonesSchema = z.strictObject({
   zones: z.array(z.strictObject({ name: z.string(), min: vectorSchema, max: vectorSchema })),
 });
+
+/** The props of the map with what the scale and rotation rules need, read in Studio. */
+async function readProps(connection: StudioConnection, studioId: string, mapId: string) {
+  const read = await runLuauFile({
+    connection,
+    studioId,
+    fileName: "read-props.luau",
+    datamodelType: "Edit",
+    arguments: { mapId, mapsFolderName: config.mapsFolderName },
+    resultSchema: z.strictObject({ props: z.array(propRecordSchema) }),
+  });
+  return read.props;
+}
 
 /** Draw calls and triangles per zone camera: the cameras are framed here, the counts read in Studio. */
 async function sampleSceneStats(
@@ -189,7 +207,7 @@ export function createCheckMapTool(
     description:
       `Checks a map built by build_map for overlapping parts, floating parts (not connected to the ground or terrain) and zones and objective points that a walk from any SpawnLocation cannot reach (Studio pathfinding; a pair of spawn and target over ${String(MAX_PATH_STUDS)} studs apart is reported as an unreachable issue whose detail starts with tooFar). ` +
       `Optional objectives [{ name, x, y, z }] add targets and an optional preset (a build_map style preset name) sets the agent size from its size rules. ` +
-      `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. ` +
+      `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. With a preset it also reads the map's props and reports scale issues (a prop's height outside the preset's heightRatio of the avatar height, naming the prop) and rotation issues (a prop whose yaw is not a multiple of 90 degrees or that is tilted, where the preset's rule does not allow free rotation). ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles): withinBudget is false and warnings name each zone over a limit, without failing passed; warnings also name any model outside the map that stands between a spawn and a target it cannot reach; issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
       `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
@@ -228,6 +246,13 @@ export function createCheckMapTool(
         },
         resultSchema: checkedMapSchema,
       });
+      // Prop rules live in the preset; without one no prop is read.
+      const propIssues =
+        preset === undefined
+          ? []
+          : findPropIssues(await readProps(context.studio, studioId, input.mapId), preset);
+      const scaleIssues = propIssues.filter((issue) => issue.kind === "scale");
+      const rotationIssues = propIssues.filter((issue) => issue.kind === "rotation");
       const sceneStats = await sampleSceneStats(context.studio, studioId, input.mapId);
       const budget = input.spec?.performanceBudget ?? defaultPerformanceBudget;
       const budgetWarnings = overBudgetWarnings(sceneStats, budget);
@@ -236,12 +261,24 @@ export function createCheckMapTool(
         ...checked.issues.floating,
         ...checked.issues.unreachable,
         ...sizeRuleIssues.slice(0, config.maxIssuesPerKind),
+        ...scaleIssues.slice(0, config.maxIssuesPerKind),
+        ...rotationIssues.slice(0, config.maxIssuesPerKind),
       ];
-      const counts = { ...checked.counts, sizeRule: sizeRuleIssues.length };
+      const counts = {
+        ...checked.counts,
+        sizeRule: sizeRuleIssues.length,
+        scale: scaleIssues.length,
+        rotation: rotationIssues.length,
+      };
       const report = reports.add(input.mapId, issues);
       const uri = checkReportUri(report.reportId);
       const totalIssues =
-        counts.overlapping + counts.floating + counts.unreachable + counts.sizeRule;
+        counts.overlapping +
+        counts.floating +
+        counts.unreachable +
+        counts.sizeRule +
+        counts.scale +
+        counts.rotation;
       const inlineIssues = issues.slice(0, config.maxInlineIssues);
       return toolResult(
         {
