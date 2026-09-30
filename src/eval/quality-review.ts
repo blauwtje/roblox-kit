@@ -5,51 +5,47 @@ import { extname, join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { config } from "../config.ts";
+import { loadPresets } from "../style/load-preset.ts";
 
 const promptUrl = new URL("../../skills/visual-judge/quality-prompt.md", import.meta.url);
 
-export const qualityAxes = ["scale", "rotation", "placement", "materials", "lighting"] as const;
+export const qualityAxes = [
+  "palette",
+  "focalHierarchy",
+  "negativeSpace",
+  "readability",
+  "atmosphere",
+  "lighting",
+] as const;
 
 export type QualityAxis = (typeof qualityAxes)[number];
 
-const axisAnswerSchema = z.object({
-  evidence: z.string(),
-  score: z.number().int().min(1).max(10),
-});
+const axisScoreSchema = z.number().int().min(1).max(10);
 
-const defectSchema = z.object({
-  piece: z.string(),
-  problem: z.string(),
-  where: z.string(),
-});
-
-/** What one reviewer answers, as `quality-prompt.md` asks for it. */
+/** What one reviewer answers, as `quality-prompt.md` asks for it: one score per axis, no reasoning. */
 const qualityAnswerSchema = z.object({
-  scale: axisAnswerSchema,
-  rotation: axisAnswerSchema,
-  placement: axisAnswerSchema,
-  materials: axisAnswerSchema,
-  lighting: axisAnswerSchema,
-  defects: z.array(defectSchema),
+  palette: axisScoreSchema,
+  focalHierarchy: axisScoreSchema,
+  negativeSpace: axisScoreSchema,
+  readability: axisScoreSchema,
+  atmosphere: axisScoreSchema,
+  lighting: axisScoreSchema,
 });
 
 export type QualityAnswer = z.output<typeof qualityAnswerSchema>;
-
-export type QualityDefect = z.output<typeof defectSchema>;
 
 /** The median score of each axis over a room's reviewers. */
 export type AxisMedians = Record<QualityAxis, number>;
 
 /**
- * The quality review of one room: the per-axis medians and every defect the reviewers named, or why a
- * reviewer gave no answer, which fails the room.
+ * The quality review of one room: the per-axis medians, or why a reviewer gave no answer, which fails
+ * the room.
  */
 export interface QualityResult {
   room: string;
   genre: string;
   roomType: string;
   medians?: AxisMedians;
-  defects: QualityDefect[];
   error?: string;
   passed: boolean;
 }
@@ -62,13 +58,15 @@ function answerJsonSchema(): string {
 }
 
 /**
- * The brief of `quality-prompt.md` (the text after its first rule) with its four fields filled: the genre,
- * the room type, and one image name per line for the references and for the captures.
+ * The brief of `quality-prompt.md` (the text after its first rule) with its five fields filled: the genre,
+ * the room type, the preset's lighting intent, and one image name per line for the references and for
+ * the captures.
  */
 export function qualityBrief(
   promptText: string,
   genre: string,
   roomType: string,
+  lightingIntent: string,
   referenceNames: string[],
   captureNames: string[],
 ): string {
@@ -80,6 +78,7 @@ export function qualityBrief(
     .slice(ruleIndex + "\n---\n".length)
     .replaceAll("<genre>", genre)
     .replaceAll("<room type>", roomType)
+    .replaceAll("<lighting intent>", lightingIntent)
     .replace("<reference paths>", referenceNames.join("\n"))
     .replace("<capture paths>", captureNames.join("\n"))
     .trim();
@@ -95,7 +94,7 @@ function median(scores: number[]): number {
 export function axisMedians(answers: QualityAnswer[]): AxisMedians {
   const medians = {} as AxisMedians;
   for (const axis of qualityAxes) {
-    medians[axis] = median(answers.map((answer) => answer[axis].score));
+    medians[axis] = median(answers.map((answer) => answer[axis]));
   }
   return medians;
 }
@@ -103,20 +102,6 @@ export function axisMedians(answers: QualityAnswer[]): AxisMedians {
 /** Whether every axis median reaches `config.visualPassScore`; one weak axis fails the room. */
 export function reachesPassScore(medians: AxisMedians): boolean {
   return qualityAxes.every((axis) => medians[axis] >= config.visualPassScore);
-}
-
-/** Every reviewer's defects in reviewer order, each piece-problem-place triple once. */
-export function mergedDefects(answers: QualityAnswer[]): QualityDefect[] {
-  const seen = new Set<string>();
-  const merged: QualityDefect[] = [];
-  for (const defect of answers.flatMap((answer) => answer.defects)) {
-    const key = JSON.stringify([defect.piece, defect.problem, defect.where]);
-    if (!seen.has(key)) {
-      seen.add(key);
-      merged.push(defect);
-    }
-  }
-  return merged;
 }
 
 const run = promisify(execFile);
@@ -130,6 +115,7 @@ const run = promisify(execFile);
 async function askReviewer(
   genre: string,
   roomType: string,
+  lightingIntent: string,
   referencePaths: string[],
   capturePaths: string[],
 ): Promise<QualityAnswer> {
@@ -148,6 +134,7 @@ async function askReviewer(
       await readFile(promptUrl, "utf8"),
       genre,
       roomType,
+      lightingIntent,
       referenceNames,
       captureNames,
     );
@@ -185,9 +172,18 @@ async function askReviewer(
   }
 }
 
+/** The lighting intent the bundled preset named `genre` declares; throws when no such preset exists. */
+async function presetLightingIntent(genre: string): Promise<string> {
+  const preset = (await loadPresets()).get(genre);
+  if (preset === undefined) {
+    throw new Error(`No preset named ${genre} declares a lighting intent.`);
+  }
+  return preset.lightingIntent;
+}
+
 /**
  * Scores one room: `config.qualityReviewersPerRoom` fresh reviewers each rate its captures (eye view first)
- * against the references, and each axis takes the median. A reviewer that fails, times out or answers
+ * against the references and the preset's lighting intent, and each axis takes the median. A reviewer that fails, times out or answers
  * off-schema fails the room with its error, so one room cannot stop the others.
  */
 export async function reviewRoomQuality(
@@ -198,8 +194,9 @@ export async function reviewRoomQuality(
   capturePaths: string[],
 ): Promise<QualityResult> {
   try {
+    const lightingIntent = await presetLightingIntent(genre);
     const reviewers = Array.from({ length: config.qualityReviewersPerRoom }, () =>
-      askReviewer(genre, roomType, referencePaths, capturePaths),
+      askReviewer(genre, roomType, lightingIntent, referencePaths, capturePaths),
     );
     const answers = await Promise.all(reviewers);
     const medians = axisMedians(answers);
@@ -208,11 +205,10 @@ export async function reviewRoomQuality(
       genre,
       roomType,
       medians,
-      defects: mergedDefects(answers),
       passed: reachesPassScore(medians),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { room, genre, roomType, defects: [], error: message, passed: false };
+    return { room, genre, roomType, error: message, passed: false };
   }
 }
