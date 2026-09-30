@@ -102,6 +102,14 @@ export const config = Object.freeze({
   calibrationAxisGap: 2,
   evalWaveRoomTypes: ["platform", "concourse", "ticket-hall"],
 
+  /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
+  heroPropsFolder: ".roblox-kit/hero-props",
+  /** The Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
+  blenderPath: "/opt/homebrew/bin/blender",
+  blenderTimeoutMs: 120_000,
+  /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
+  heroPropSizeToleranceStuds: 0.1,
+
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,
   maxPlaytestPlayers: 8,

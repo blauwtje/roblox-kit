@@ -7,3 +7,4 @@ docs/prompt.md
 .claude/scheduled_tasks.lock
 eval/captures/
 eval/references/
+.roblox-kit/
