@@ -133,8 +133,8 @@ interface LightRecord {
   position: Vector;
   range: number;
   shadows: boolean;
-  /** The visible fixture box that holds the light; absent for a light hung from the ceiling. */
-  fixture?: FixtureBox;
+  /** The visible fixture box that holds the light, and whether it hangs from the ceiling; absent for the center and focal lights. */
+  fixture?: FixtureBox & { pendant: boolean };
   brightness: number;
   color: string;
 }
@@ -156,7 +156,11 @@ function lightRecordsOf(
       );
     }
     const { brightness, color } = style.lightRoles[placement.role];
-    return { ...placement, part: floor.name, brightness, color };
+    const fixture = placement.fixture && {
+      ...placement.fixture,
+      pendant: style.lightFixtures?.kind === "pendant",
+    };
+    return { ...placement, fixture, part: floor.name, brightness, color };
   });
 }
 

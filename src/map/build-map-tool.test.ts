@@ -212,11 +212,18 @@ await test("a style sends its lights per zone and applies its lighting recipe af
   const lighting = String(connection.requests[6]?.arguments["code"]);
   assert.equal(connection.requests.length, 7);
   const { lights } = requestArguments(connection, 5) as {
-    lights: { zone: string; part: string; role: string; shadows: boolean; fixture?: object }[];
+    lights: {
+      zone: string;
+      part: string;
+      role: string;
+      shadows: boolean;
+      fixture?: { pendant: boolean };
+    }[];
   };
   for (const zone of ["start", "hall"]) {
     const zoneLights = lights.filter((light) => light.zone === zone);
     assert.ok(zoneLights.every((light) => light.part === `${zone}-floor`));
+    assert.ok(zoneLights.every((light) => light.fixture === undefined || !light.fixture.pendant));
     assert.deepEqual(
       zoneLights.filter((light) => light.role === "hero").map((light) => light.shadows),
       [true],

@@ -335,23 +335,37 @@ function styledSmokeMap() {
 /** Name ending of the fixture part build_map hangs at each ceiling light. */
 const fixtureNameSuffix = "-fixture";
 
-/** The lights that hang within the ceiling drop of their room's ceiling; build_map shows one fixture part for each. */
-function ceilingLightPlacements() {
+/** The train-station preset's lights on the smoke map, as build_map places them. */
+function smokeLightPlacements() {
   const preset = presets.get("train-station");
   if (preset === undefined) {
     throw new Error("The train-station preset is missing.");
   }
-  return placeLights(smokeMapSpec, preset.lightRoles).filter((placement) => {
+  return placeLights(smokeMapSpec, preset.lightRoles, preset.lightFixtures);
+}
+
+/** The lights without a fixture box that hang within the ceiling drop of their room's ceiling; build_map shows one cube fixture part for each. */
+function ceilingLightPlacements() {
+  return smokeLightPlacements().filter((placement) => {
+    if (placement.fixture !== undefined) {
+      return false;
+    }
     const room = smokeMapSpec.rooms.find((candidate) => candidate.x === placement.position.x);
     const wallHeight = room?.wallHeight ?? smokeMapSpec.wallHeight ?? config.defaultWallHeightStuds;
     return wallHeight - placement.position.y <= config.lightCeilingDropStuds;
   });
 }
 
+/** The lights a preset's `lightFixtures` placed; build_map builds one box part holding each. */
+function fixtureLightPlacements() {
+  return smokeLightPlacements().filter((placement) => placement.fixture !== undefined);
+}
+
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
   const { layout, details } = styledSmokeMap();
   const zonedPartCount = layout.parts.length + details.length;
-  const expectedPartCount = zonedPartCount + ceilingLightPlacements().length;
+  const expectedPartCount =
+    zonedPartCount + ceilingLightPlacements().length + fixtureLightPlacements().length;
   const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
   expectEqual("build_map partCount", output.partCount, expectedPartCount);
@@ -574,13 +588,19 @@ for _, descendant in model:GetDescendants() do
   if descendant:IsA("PointLight") and not descendant:FindFirstAncestorOfClass("ProceduralModel") then
     local attachment = descendant.Parent :: Attachment
     local position = attachment.WorldPosition
+    local holder = attachment.Parent :: BasePart
     table.insert(lights, {
-      part = attachment.Parent.Name, range = descendant.Range, brightness = descendant.Brightness,
+      part = holder.Name, holderNeon = holder.Material == Enum.Material.Neon, holderCeilingTagged = holder:HasTag("${config.ceilingTag}"),
+      holderCanCollide = holder.CanCollide, holderSize = { x = holder.Size.X, y = holder.Size.Y, z = holder.Size.Z }, range = descendant.Range, brightness = descendant.Brightness,
       color = descendant.Color:ToHex(), shadows = descendant.Shadows, x = position.X, y = position.Y, z = position.Z,
     })
   end
 end
-table.sort(lights, function(first, second) return first.x < second.x end)
+table.sort(lights, function(first, second)
+  if first.x ~= second.x then return first.x < second.x end
+  if first.y ~= second.y then return first.y < second.y end
+  return first.z < second.z
+end)
 local snapshot = model:GetAttribute("RobloxKitLightingSnapshot")
 return game:GetService("HttpService"):JSONEncode({ lights = lights, snapshot = if typeof(snapshot) == "string" then snapshot else "" })`;
 
@@ -588,6 +608,10 @@ const mapLightsSchema = z.object({
   lights: z.array(
     z.object({
       part: z.string(),
+      holderNeon: z.boolean(),
+      holderCeilingTagged: z.boolean(),
+      holderCanCollide: z.boolean(),
+      holderSize: z.object({ x: z.number(), y: z.number(), z: z.number() }),
       range: z.number(),
       brightness: z.number(),
       color: z.string(),
@@ -619,18 +643,41 @@ async function probeLighting(connection: StudioConnection): Promise<string> {
   }
   const hex = (color: string) => color.slice(1).toLowerCase();
   const built = await readMapLights(connection, studioId);
-  const placements = placeLights(smokeMapSpec, preset.lightRoles).sort(
-    (first, second) => first.position.x - second.position.x,
+  const placements = smokeLightPlacements().sort(
+    (first, second) =>
+      first.position.x - second.position.x ||
+      first.position.y - second.position.y ||
+      first.position.z - second.position.z,
   );
   expectEqual("light count", built.lights.length, placements.length);
   placements.forEach((placement, index) => {
     const light = built.lights[index];
     const roleValues = preset.lightRoles[placement.role];
-    const room = smokeMapSpec.rooms.find((candidate) => candidate.x === placement.position.x);
-    if (light === undefined || room === undefined) {
-      throw new Error(`No built light or room for the ${placement.role} placement.`);
+    if (light === undefined) {
+      throw new Error(`No built light for the ${placement.role} placement.`);
     }
-    expectEqual(`${placement.role} light floor part`, light.part, `${room.name}-floor`);
+    if (placement.fixture === undefined) {
+      expectEqual(`${placement.role} light floor part`, light.part, `${placement.zone}-floor`);
+    } else {
+      expectEqual(
+        `${placement.zone} fixture holds its light`,
+        light.part.startsWith(`${placement.zone}-${placement.role}-fixture-`),
+        true,
+      );
+      expectEqual(
+        `${placement.zone} fixture is Neon and not collidable`,
+        light.holderNeon && !light.holderCanCollide,
+        true,
+      );
+      expectEqual(
+        `${placement.zone} sconce is not hidden with the ceilings`,
+        light.holderCeilingTagged,
+        preset.lightFixtures?.kind === "pendant",
+      );
+      expectClose(`${placement.zone} fixture width`, light.holderSize.x, placement.fixture.size.x);
+      expectClose(`${placement.zone} fixture height`, light.holderSize.y, placement.fixture.size.y);
+      expectClose(`${placement.zone} fixture depth`, light.holderSize.z, placement.fixture.size.z);
+    }
     expectEqual(`${placement.role} light shadows`, light.shadows, placement.shadows);
     expectEqual(`${placement.role} light color`, light.color.toLowerCase(), hex(roleValues.color));
     expectClose(`${placement.role} light range`, light.range, placement.range);

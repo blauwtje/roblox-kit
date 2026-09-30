@@ -3,7 +3,8 @@
 -- `arguments.phase`. The shell phase replaces the Model of the same id and the terrain it filled and
 -- adds the walls and terrain; the later phases find that Model and add to it: floors, spawns and
 -- ceilings, then doorway arches, then trim details, then props, then lights. Each light record becomes
--- a PointLight under an Attachment under the floor part of its zone; a light within `ceilingDropStuds` of
+-- a PointLight under an Attachment under its fixture box, a Neon part tagged like the ceilings only for a
+-- pendant, or without one under the floor part of its zone; a light without a box within `ceilingDropStuds` of
 -- the ceiling above it also gets a Neon fixture part against that ceiling, tagged like the ceilings.
 -- Ceilings are tagged and decorative, as are the detail parts and fixtures. Each prop becomes a ProceduralModel running the ModuleScript of its kind
 -- under the Model, generated before the props phase returns. Reports the number of parts in the Model
@@ -45,6 +46,8 @@ type LightRecord = {
 	position: Vector,
 	range: number,
 	shadows: boolean,
+	-- The visible box that holds the light; a pendant hangs from the ceiling and hides with it.
+	fixture: { position: Vector, size: Vector, pendant: boolean }?,
 	brightness: number,
 	color: string,
 }
@@ -253,15 +256,42 @@ local function countPartChildren(model: Model): number
 	return count
 end
 
--- A light hangs from an Attachment on its zone's floor part, so it adds no part to the map.
-local function addLight(model: Model, record: LightRecord)
-	local floor = model:FindFirstChild(record.part)
-	if not floor or not floor:IsA("BasePart") then
+-- A Neon box in the light's color; only a pendant is tagged, so cutaways hide it with the ceilings.
+local function addFixtureBox(model: Model, record: LightRecord, fixtureNumber: number): Part
+	local box = record.fixture
+	local ceilingTag = arguments.ceilingTag
+	if not box or not ceilingTag then
+		error("A fixture box needs its record's fixture and ceilingTag.", 0)
+	end
+	local fixture = Instance.new("Part")
+	fixture.Name = `{record.zone}-{record.role}-fixture-{fixtureNumber}`
+	fixture.Anchored = true
+	fixture.CanCollide = false
+	fixture.CanTouch = false
+	fixture.CanQuery = false
+	fixture.Material = Enum.Material.Neon
+	fixture.Color = Color3.fromHex(record.color)
+	fixture.Size = toVector3(box.size)
+	fixture.Position = toVector3(box.position)
+	if box.pendant then
+		CollectionService:AddTag(fixture, ceilingTag)
+	end
+	fixture.Parent = model
+	return fixture
+end
+
+-- A light hangs from an Attachment on its fixture box when it has one, else on its zone's floor part, which adds no part.
+local function addLight(model: Model, record: LightRecord, fixtureNumber: number)
+	local holder = model:FindFirstChild(record.part)
+	if record.fixture then
+		holder = addFixtureBox(model, record, fixtureNumber)
+	end
+	if not holder or not holder:IsA("BasePart") then
 		error(`Light "{record.role}" of zone "{record.zone}" has no floor part named "{record.part}".`, 0)
 	end
 	local attachment = Instance.new("Attachment")
 	attachment.Name = `{record.zone}-{record.role}-light`
-	attachment.Parent = floor
+	attachment.Parent = holder
 	attachment.WorldPosition = toVector3(record.position)
 	local light = Instance.new("PointLight")
 	light.Range = record.range
@@ -323,9 +353,15 @@ local function findModel(): Model
 end
 
 local function addLights(model: Model)
+	local fixtureCount = 0
 	for _, record in arguments.lights or {} do
-		addLight(model, record)
-		addFixture(model, record)
+		if record.fixture then
+			fixtureCount += 1
+		end
+		addLight(model, record, fixtureCount)
+		if not record.fixture then
+			addFixture(model, record)
+		end
 	end
 end
 
