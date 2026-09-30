@@ -121,7 +121,7 @@
       "arrangements": [
         { "shape": "along-walls", "piece": "bench", "spacing": 6, "walls": "doorless", "inset": 2 },
         { "shape": "rows", "piece": "rail", "spacing": 4, "perRow": 3 },
-        { "shape": "grid", "piece": "lamp", "spacing": 7 },
+        { "shape": "along-walls", "piece": "lamp", "spacing": 7, "walls": "doorless", "inset": 1 },
         {
           "shape": "along-walls",
           "piece": "ticket-machine",
