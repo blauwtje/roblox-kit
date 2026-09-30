@@ -70,10 +70,58 @@
   "roomTypes": {
     "concourse": {
       "setPieces": ["bench", "departure-board", "clock"],
-      "signLabel": "CONCOURSE"
+      "arrangements": [
+        { "shape": "grid", "piece": "pillar", "spacing": 12 },
+        { "shape": "rows", "piece": "bench", "spacing": 6, "perRow": 3 },
+        {
+          "shape": "along-walls",
+          "piece": "ticket-machine",
+          "spacing": 5,
+          "walls": "doorless",
+          "inset": 2,
+          "max": 3
+        }
+      ],
+      "signLabel": "CONCOURSE",
+      "roomNames": [
+        "waiting area",
+        "waiting hall",
+        "waiting room",
+        "waiting concourse",
+        "main hall",
+        "hall",
+        "station hall",
+        "lobby"
+      ]
     },
-    "platform": { "setPieces": ["track-bed", "platform-edge"], "signLabel": "PLATFORM 1" },
-    "ticket-hall": { "setPieces": ["ticket-counter"], "signLabel": "TICKETS" }
+    "platform": {
+      "setPieces": ["track-bed", "platform-edge"],
+      "arrangements": [
+        { "shape": "along-length", "piece": "lamp", "spacing": 8, "inset": 1 },
+        { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 5 },
+        { "shape": "along-length", "piece": "pillar", "spacing": 8, "inset": 10 },
+        { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 15 }
+      ],
+      "signLabel": "PLATFORM 1",
+      "roomNames": ["track", "station platform"]
+    },
+    "ticket-hall": {
+      "setPieces": ["ticket-counter"],
+      "arrangements": [
+        { "shape": "along-walls", "piece": "bench", "spacing": 6, "walls": "doorless", "inset": 2 },
+        { "shape": "rows", "piece": "rail", "spacing": 4, "perRow": 3 },
+        { "shape": "grid", "piece": "lamp", "spacing": 7 },
+        {
+          "shape": "along-walls",
+          "piece": "ticket-machine",
+          "spacing": 3,
+          "walls": "doorless",
+          "inset": 2
+        }
+      ],
+      "signLabel": "TICKETS",
+      "roomNames": ["ticket counter", "ticket office", "booking hall"]
+    }
   },
   "sizeRules": {
     "agentRadius": 2,
