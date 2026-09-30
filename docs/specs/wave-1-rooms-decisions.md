@@ -25,3 +25,30 @@ Task 22: the upload runs inside build_map, because plugin `userConfig` values re
 Task 23: a hero prop takes the slot of the set piece it replaces, and that set piece is the fallback, so a build without an uploaded asset looks as it does today.
 Task 16: the platform's train car replaces the track bed, which runs along the far (south) wall opposite the entry, inside the eye view.
 Task 25: the ticket hall's hero is its ticket counter, which holds the facing-entry slot; a ticket machine has no slot there.
+Task 15 cd12a65: renamed `fixtureSize` to `studDimensions` so fixtures and hero-prop sizes share one width/height/depth schema.
+Task 15 cd12a65: extracted `surfaceRoleName` so `propRule.surface` and the hero part `role` share one role enum.
+Task 15 cd12a65: a room type's `heroProps` kinds are not cross-checked against the preset's `heroProps` keys in the schema, because the brief names no such rule; a later task can add it.
+Task 15 cd12a65: `profile` part is a polygon of at least 3 x/y points extruded `depth` studs along z; `cylinder` takes `radius`, `length` and `axis`; every part has a `center` in studs from the footprint center.
+Task 17 6363b68: size is the union of position accessor min/max across all primitives, node transforms not applied.
+Task 17 6363b68: a primitive whose mode is not a triangle list, or a position accessor without min/max, throws instead of being skipped.
+Task 17 6363b68: triangles come from the indices accessor count, else the POSITION count, divided by 3.
+Task 17 6363b68: unnamed meshes and materials are reported as empty-string names.
+Task 16 2a0a7f5: car length 40 studs, under the 55-stud track-bed span on the 60-wide benchmark platform, over the 16-stud default.
+Task 16 2a0a7f5: car depth 4.2 studs so it stays on the 5-stud-deep track bed; height 8.6 under the 16-stud wall.
+Task 16 2a0a7f5: length runs along `width` (x), the same axis as the track bed's x length.
+Task 16 2a0a7f5: the wall role colors the body, accent the window band, since roles are limited to five.
+Task 18 3a0b10c: Blender units are studs (1 unit = 1 stud); recipe (x, y, z) maps to Blender (x, -z, y), which exports as glTF (x, y, z).
+Task 18 3a0b10c: a profile's points are offsets from its `center`, not absolute; cylinders use 16 segments.
+Task 18 3a0b10c: the hash is the first 12 hex characters of a SHA-256 over the canonical (key-sorted) recipe, the used roles' colors and the .py source.
+Task 18 3a0b10c: `heroPropSizeToleranceStuds` is 0.1 and `blenderPath` is /opt/homebrew/bin/blender in config.
+Task 18 3a0b10c: the color on each role material is the preset's surface color (sRGB to linear); the surface material name is not exported.
+Task 18 3a0b10c: Blender always reruns (no cache by hash); the run passes `--python-exit-code 1` so a script error fails it.
+Task 19 19bf528: views are orthographic on a neutral grey background at 768px, constants in render-hero-prop.py (config.ts is outside Files).
+Task 19 19bf528: front looks along Blender's Y (recipe depth axis, the car's long face), side along the width axis (end-on for the car), three-quarter from a raised corner.
+Task 20 59128ee: one fresh reviewer per round (spec says "a fresh reviewer"), not three.
+Task 20 59128ee: rounds.json lives at .roblox-kit/hero-props/<preset>-<kind>/rounds.json, a list of hashes; a hash is recorded before the reviewer runs, so a reviewer crash still uses the round; a re-run of a recorded hash costs none.
+Task 20 59128ee: review.json is {hash, passed, axes: {axis: {score, note}}} in the hash folder.
+Task 20 59128ee: the reviewer gets the recipe's kind, description, size and per-role color and part count, with renders copied as render-1..3.
+Task 22 0599cec: userConfig keys are snake_case (roblox_open_cloud_api_key, roblox_creator_user_id), both required: false so the plugin installs without a key.
+Task 22 0599cec: uploadReviewedHeroProp is idempotent by hash and refuses without a passed review of that hash.
+Task 22 0599cec: failed upload records nothing; polling stops after config.openCloudMaxPolls (60 x 2s).
