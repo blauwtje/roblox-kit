@@ -62,17 +62,32 @@ export function placeCheckBrief(promptText: string, imageNames: string[]): strin
     .trim();
 }
 
-/** A room name as the skill compares it: case ignored, spaces and hyphens alike. */
-function normalizedRoom(name: string): string {
+/** A room name as the skill compares it: case ignored, spaces and hyphens alike, as its words. */
+function roomWords(name: string): string[] {
   return name
     .trim()
     .toLowerCase()
-    .replace(/[\s-]+/g, "-");
+    .split(/[\s-]+/)
+    .filter((word) => word !== "");
+}
+
+/** Whether `words` appear in `named` as one consecutive run; no words never appear. */
+function containsRun(named: string[], words: string[]): boolean {
+  if (words.length === 0) {
+    return false;
+  }
+  for (let start = 0; start + words.length <= named.length; start += 1) {
+    if (words.every((word, offset) => named[start + offset] === word)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
- * Whether the reviewer named the spec's genre and either the room type or one of its `acceptedNames`
- * (SKILL.md step 5), and did not call the room `empty`; `unknown` never matches.
+ * Whether the reviewer named the spec's genre and a room name containing the room type or one of its
+ * `acceptedNames` as a run of whole words (SKILL.md step 5), and did not call the room `empty`; `unknown`
+ * never matches.
  */
 export function placeMatches(
   answer: PlaceAnswer,
@@ -80,11 +95,11 @@ export function placeMatches(
   roomType: string,
   acceptedNames: string[],
 ): boolean {
-  const named = normalizedRoom(answer.room);
+  const named = roomWords(answer.room);
   return (
     answer.genre === genre &&
     answer.furnished === "furnished" &&
-    [roomType, ...acceptedNames].some((accepted) => normalizedRoom(accepted) === named)
+    [roomType, ...acceptedNames].some((accepted) => containsRun(named, roomWords(accepted)))
   );
 }
 

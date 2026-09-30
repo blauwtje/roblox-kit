@@ -51,6 +51,51 @@ await test("a name the room type lists matches, ignoring case, spaces and hyphen
   );
 });
 
+await test("a name that contains the room type or a listed name as a run of whole words matches", () => {
+  const answer = {
+    clues: "",
+    furnished: "furnished" as const,
+    genre: "train-station",
+    room: "Train Station Platform",
+  };
+  assert.equal(placeMatches(answer, "train-station", "platform", []), true);
+  assert.equal(
+    placeMatches({ ...answer, room: "Platform 4 Waiting Area" }, "train-station", "platform", []),
+    true,
+  );
+  assert.equal(
+    placeMatches({ ...answer, room: "the main-concourse hall" }, "train-station", "concourse", []),
+    true,
+  );
+  assert.equal(
+    placeMatches({ ...answer, room: "Grand Ticket Hall" }, "train-station", "ticket-hall", []),
+    true,
+  );
+  assert.equal(
+    placeMatches({ ...answer, room: "Main Hall" }, "train-station", "concourse", ["main hall"]),
+    true,
+  );
+});
+
+await test("a name that holds the words apart, partly or inside a longer word does not match", () => {
+  const answer = {
+    clues: "",
+    furnished: "furnished" as const,
+    genre: "train-station",
+    room: "Ticket Waiting Hall",
+  };
+  assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), false);
+  assert.equal(
+    placeMatches({ ...answer, room: "Ticket" }, "train-station", "ticket-hall", []),
+    false,
+  );
+  assert.equal(
+    placeMatches({ ...answer, room: "Platforms" }, "train-station", "platform", []),
+    false,
+  );
+  assert.equal(placeMatches({ ...answer, room: "Hall" }, "train-station", "platform", [""]), false);
+});
+
 await test("an empty answer fails even when the genre and room are right", () => {
   const answer = {
     clues: "",
