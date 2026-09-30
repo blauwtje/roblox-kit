@@ -95,7 +95,11 @@
     "departure-board": { "heightRatio": { "min": 1.15, "max": 2.5 }, "freeRotation": false },
     "clock": { "heightRatio": { "min": 1.26, "max": 2.75 }, "freeRotation": false },
     "ticket-machine": { "heightRatio": { "min": 0.69, "max": 1.5 }, "freeRotation": false },
-    "track-bed": { "heightRatio": { "min": 0.11, "max": 0.25 }, "freeRotation": false },
+    "track-bed": {
+      "heightRatio": { "min": 0.11, "max": 0.25 },
+      "freeRotation": false,
+      "depth": 10
+    },
     "platform-edge": { "heightRatio": { "min": 0.05, "max": 0.13 }, "freeRotation": false },
     "ticket-counter": { "heightRatio": { "min": 0.92, "max": 2.0 }, "freeRotation": false }
   },
@@ -280,7 +284,7 @@
         { "shape": "along-length", "piece": "lamp", "spacing": 8, "inset": 1 },
         { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 5 },
         { "shape": "along-length", "piece": "pillar", "spacing": 8, "inset": 10 },
-        { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 15 }
+        { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 13 }
       ],
       "signLabel": "PLATFORM 1",
       "roomNames": ["track", "station platform"]

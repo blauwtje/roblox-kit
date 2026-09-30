@@ -131,6 +131,8 @@ const propRule = z.strictObject({
   freeRotation: z.boolean(),
   /** The surface role whose color and material the prop's parts take; absent keeps the generator's own look. */
   surface: surfaceRoleName.optional(),
+  /** Studs the prop stands away from its wall, in place of the generator's own depth; the track bed and platform edge read it. */
+  depth: z.number().positive().optional(),
 });
 
 const studPoint = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });

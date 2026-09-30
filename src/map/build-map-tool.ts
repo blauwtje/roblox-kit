@@ -267,6 +267,7 @@ export function propsOf(
     style.palette.accent,
     seed,
     doorwayClearanceBoxes(spec, agent),
+    style.propRules,
   );
   const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
   return {

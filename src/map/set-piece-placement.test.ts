@@ -7,6 +7,7 @@ import { mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
 import type { MapSpec } from "./map-spec.ts";
 import { resolveRelations } from "./relation-solver.ts";
 import { propDimensions, propKinds } from "./prop-placement.ts";
+import { placeArrangements } from "./arrangement-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
 import type { SetPieceRecord } from "./set-piece-placement.ts";
@@ -397,4 +398,68 @@ await test("every sign of the resolved train-station benchmark touches a wall pa
     return touching.length === 0 ? [`sign-${String(index + 1)}`] : [];
   });
   assert.deepEqual(floating, [], "signs that touch no wall part");
+});
+
+await test("a prop rule's depth sets how far the track bed stands from its wall, and the platform edge follows it", () => {
+  const { pieces } = placeSetPieces(stationSpec, roomTypes, accent, 1, [], {
+    "track-bed": { freeRotation: false, depth: 8 },
+  });
+  const [trackBed] = piecesOf("track-bed", pieces);
+  const [platformEdge] = piecesOf("platform-edge", pieces);
+  assert.ok(trackBed && platformEdge);
+  const northInnerFace = -20 + 1;
+  const edgeDepth = propDimensions["platform-edge"].z;
+  assert.equal(trackBed.size.z, 8);
+  assert.equal(trackBed.pivot.z, northInnerFace + 4);
+  assert.equal(platformEdge.size.z, edgeDepth);
+  assert.equal(platformEdge.pivot.z, northInnerFace + 8 + edgeDepth / 2);
+});
+
+await test("the train station's along-length arrangements keep clear of the 12-stud track and edge strip", async () => {
+  const preset = (await loadPresets()).get("train-station");
+  assert.ok(preset !== undefined);
+  assert.equal(preset.propRules["track-bed"]?.depth, 10);
+  const spec = mapSpecSchema.parse({
+    mapId: "platform",
+    rooms: [
+      {
+        name: "platform",
+        roomType: "platform",
+        x: 0,
+        z: 0,
+        width: 60,
+        depth: 30,
+        doors: [{ side: "south", offset: 0 }],
+      },
+    ],
+  });
+  const { pieces: setPieces, warnings } = placeSetPieces(
+    spec,
+    preset.roomTypes,
+    preset.palette.accent,
+    1,
+    [],
+    preset.propRules,
+  );
+  const [trackBed] = piecesOf("track-bed", setPieces);
+  const [platformEdge] = piecesOf("platform-edge", setPieces);
+  assert.ok(trackBed && platformEdge);
+  assert.deepEqual(warnings, []);
+  assert.equal(trackBed.size.z + platformEdge.size.z, 12);
+  const stripFarFaceZ = platformEdge.pivot.z + platformEdge.size.z / 2;
+
+  const arranged = placeArrangements(spec, preset.roomTypes, setPieces, 1);
+
+  assert.deepEqual(arranged.warnings, []);
+  const alongLength = arranged.pieces.filter((piece) =>
+    ["lamp", "bench", "pillar"].includes(piece.kind),
+  );
+  assert.ok(alongLength.length > 0);
+  for (const piece of alongLength) {
+    // Each piece faces north or south, so its depth runs along Z.
+    assert.ok(
+      piece.pivot.z - piece.size.z / 2 >= stripFarFaceZ,
+      `${piece.kind} at z=${String(piece.pivot.z)} reaches the strip ending at z=${String(stripFarFaceZ)}`,
+    );
+  }
 });
