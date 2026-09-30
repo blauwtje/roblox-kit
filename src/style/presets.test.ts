@@ -69,6 +69,7 @@ async function placeBenchmarkSetPieces() {
     preset.palette.accent,
     seed,
     doorwayClearanceBoxes(spec, agent),
+    preset.propRules,
   );
   return { preset, spec, seed, setPieces: pieces };
 }
