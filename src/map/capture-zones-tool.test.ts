@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+import timers from "node:timers/promises";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
@@ -358,34 +359,53 @@ await test("a bad zone name fails before any ceiling is hidden", async () => {
   assert.deepEqual(callKinds(studio), ["restore", "read"]);
 });
 
-await test("each screen_capture waits config.captureSettleMs after the previous request", async () => {
-  const studio = studioWith(() => okImage());
-  const call = captureZonesTool.handler(
-    captureZonesTool.inputSchema.parse({ mapId: "arena", zones: ["start"] }),
-    { studio },
-  );
-  const capturesSoFar = () =>
-    studio.requests.filter((request) => request.name === "screen_capture").length;
-  // The call reads Luau files from disk before its first timer, so it needs several event-loop turns.
-  const flush = async () => {
-    for (let turn = 0; turn < 50; turn += 1) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-  };
+await test(
+  "each screen_capture waits config.captureSettleMs after the previous request",
+  // A regression that never sets the timer or captures would leave the wait loops below spinning.
+  { timeout: 10_000 },
+  async () => {
+    const studio = studioWith(() => okImage());
+    const call = captureZonesTool.handler(
+      captureZonesTool.inputSchema.parse({ mapId: "arena", zones: ["start"] }),
+      { studio },
+    );
+    const capturesSoFar = () =>
+      studio.requests.filter((request) => request.name === "screen_capture").length;
+    // The call reads Luau files from the thread pool before each settle timer, so the test waits for
+    // the handler to register the timer instead of guessing a number of event-loop turns.
+    const settleTimer = mock.method(timers, "setTimeout");
+    const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+    const untilSettleTimers = async (count: number) => {
+      while (settleTimer.mock.callCount() < count) {
+        await nextTurn();
+      }
+    };
+    const untilCaptures = async (count: number) => {
+      while (capturesSoFar() < count) {
+        await nextTurn();
+      }
+    };
 
-  await flush();
-  assert.equal(capturesSoFar(), 0);
-  mock.timers.tick(config.captureSettleMs - 1);
-  await flush();
-  assert.equal(capturesSoFar(), 0);
-  mock.timers.tick(1);
-  await flush();
-  assert.equal(capturesSoFar(), 1);
-  mock.timers.tick(config.captureSettleMs);
-  await flush();
-  assert.equal(capturesSoFar(), 2);
-  mock.timers.tick(config.captureSettleMs);
-  await flush();
-  assert.equal(capturesSoFar(), 3);
-  await call;
-});
+    await untilSettleTimers(1);
+    assert.equal(capturesSoFar(), 0);
+    assert.deepEqual(settleTimer.mock.calls[0]?.arguments, [config.captureSettleMs]);
+    mock.timers.tick(config.captureSettleMs - 1);
+    for (let turn = 0; turn < 50; turn += 1) {
+      await nextTurn();
+    }
+    assert.equal(capturesSoFar(), 0);
+    mock.timers.tick(1);
+    await untilCaptures(1);
+    assert.equal(capturesSoFar(), 1);
+    await untilSettleTimers(2);
+    mock.timers.tick(config.captureSettleMs);
+    await untilCaptures(2);
+    assert.equal(capturesSoFar(), 2);
+    await untilSettleTimers(3);
+    mock.timers.tick(config.captureSettleMs);
+    await untilCaptures(3);
+    assert.equal(capturesSoFar(), 3);
+    await call;
+    settleTimer.mock.restore();
+  },
+);
