@@ -1,3 +1,4 @@
+import { createSeededRandom } from "../shared/seeded-random.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import {
   cornerFootprints,
@@ -279,13 +280,16 @@ function insideRoom({ room, interior }: RoomFrame, box: Box): boolean {
   );
 }
 
-/** Places one arrangement's pieces in slot order, adding each piece's box to `blocked`. */
+/**
+ * Places one arrangement's pieces in slot order, adding each piece's box to `blocked`. Each slot draws its
+ * piece's seed from the room's `random`, so a row of one generator does not come out identical.
+ */
 function placeArrangement(
   frame: RoomFrame,
   arrangement: Arrangement,
   roomPieces: SetPieceRecord[],
   blocked: Box[],
-  seed: number,
+  random: () => number,
 ): SetPieceRecord[] {
   const { room, interior } = frame;
   if (!isPropKind(arrangement.piece)) {
@@ -306,7 +310,7 @@ function placeArrangement(
       kind: arrangement.piece,
       pivot: { x: room.x + slot.x, y: size.y / 2, z: room.z + slot.z },
       size,
-      seed,
+      seed: Math.floor(random() * 2 ** 31),
       yaw: yawFacing[slot.facing],
       attributes: {},
     };
@@ -324,7 +328,7 @@ function arrangementsOfRoom(
   room: RoomSpec,
   roomTypes: NonNullable<Preset["roomTypes"]>,
   setPieces: SetPieceRecord[],
-  seed: number,
+  random: () => number,
 ): SetPiecePlacement {
   const arrangements = (room.roomType === undefined ? undefined : roomTypes[room.roomType])
     ?.arrangements;
@@ -341,7 +345,7 @@ function arrangementsOfRoom(
   const pieces: SetPieceRecord[] = [];
   const warnings: string[] = [];
   for (const arrangement of arrangements) {
-    const placed = placeArrangement(frame, arrangement, roomPieces, blocked, seed);
+    const placed = placeArrangement(frame, arrangement, roomPieces, blocked, random);
     if (placed.length === 0) {
       warnings.push(
         `Room "${room.name}" has no space for its ${arrangement.shape} of ${arrangement.piece}; enlarge the room or loosen the spacing.`,
@@ -357,7 +361,8 @@ function arrangementsOfRoom(
  * `along-walls` and `along-length` slots whose count grows with the room's floor. A slot is dropped when it
  * would leave the room or overlap a corner pillar, a doorway strip, a door's lane to the room center, a spawn
  * pad, a set piece or an earlier piece; an arrangement that places nothing adds one warning. Rooms without a
- * type or without arrangements get none, and an arranged piece with no generator throws.
+ * type or without arrangements get none, and an arranged piece with no generator throws. Each piece gets its
+ * own seed from its room's random stream, so the same spec and seed give the same layout.
  */
 export function placeArrangements(
   spec: MapSpec,
@@ -368,8 +373,14 @@ export function placeArrangements(
   if (roomTypes === undefined) {
     return { pieces: [], warnings: [] };
   }
-  const placements = spec.rooms.map((room) =>
-    arrangementsOfRoom(spec, room, roomTypes, setPieces, seed),
+  const placements = spec.rooms.map((room, roomIndex) =>
+    arrangementsOfRoom(
+      spec,
+      room,
+      roomTypes,
+      setPieces,
+      createSeededRandom(seed + roomIndex * propDimensions.roomSeedStride),
+    ),
   );
   return {
     pieces: placements.flatMap((placement) => placement.pieces),

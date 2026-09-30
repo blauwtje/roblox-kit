@@ -180,10 +180,12 @@ await test("an arrangement that places nothing adds one warning, and a room with
   assert.deepEqual(placeArrangements(others, undefined, [], seed), { pieces: [], warnings: [] });
 });
 
-await test("the same spec builds the same layout with the room's seed", () => {
+await test("the same spec builds the same layout, each piece with its own seed", () => {
   const spec = specOf(room("hall", "hall", 80, 50));
+  const { pieces } = arrange(spec);
   assert.deepEqual(arrange(spec), arrange(spec));
-  assert.ok(arrange(spec).pieces.every((piece) => piece.seed === seed));
+  assert.ok(pieces.length > 1);
+  assert.equal(new Set(pieces.map((piece) => piece.seed)).size, pieces.length);
 });
 
 await test("an arranged piece with no generator throws", () => {

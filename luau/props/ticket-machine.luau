@@ -2,7 +2,7 @@
 -- ProceduralModel generator source for a ticket vending machine: a tall cabinet with a lit touch screen, a
 -- keypad, a card reader and a ticket slot on its -Z face, under a lit header.
 -- Params.Size is (width, height, depth); the customer side is -Z and the output stays inside Size.
--- The screen glow varies per Seed so a row of machines does not look stamped.
+-- The screen color is picked per Seed, so a row of machines with their own seeds does not look stamped.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
