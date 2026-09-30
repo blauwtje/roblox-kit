@@ -5,5 +5,15 @@
   "homepage": "https://github.com/blauwtje/roblox-kit",
   "repository": "https://github.com/blauwtje/roblox-kit",
   "license": "MIT",
-  "keywords": ["roblox", "roblox-studio", "luau", "mcp", "playtest"]
+  "keywords": ["roblox", "roblox-studio", "luau", "mcp", "playtest"],
+  "mcpServers": {
+    "studio": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/studio/launch-studio-mcp.ts"]
+    },
+    "roblox-kit": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/server/main.ts"]
+    }
+  }
 }

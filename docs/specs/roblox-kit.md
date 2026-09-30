@@ -10,7 +10,7 @@ Every API fact below cites a row of `docs/research.md`, section "Upgrade researc
 
 ### Shipped (Tasks 1 to 20, landed on `main`)
 
-- Layer on the built-in StudioMCP: `.mcp.json` declares `studio` (per-OS launcher) and `roblox-kit` (this server); no built-in tool is re-exposed.
+- Layer on the built-in StudioMCP: `.mcp.json` (project scope) and `.claude-plugin/plugin.json` (plugin scope, exact `${CLAUDE_PLUGIN_ROOT}`, which the plugin loader substitutes only without a `:-` default) declare `studio` (per-OS launcher) and `roblox-kit` (this server); no built-in tool is re-exposed.
 - Four tools, `build_map`, `check_map`, `capture_zones`, `run_playtest`; geometry computed in TypeScript, Luau only instantiates; handle `mapId`, a Model under `Workspace.RobloxKitMaps`, replaced on rebuild.
 - Check reports: at most `config.maxInlineIssues` inline issues plus a `roblox-kit://check-reports/{reportId}` resource link.
 - Node native TypeScript, erasable syntax, `.ts` imports, `node:test`; every call to StudioMCP under `config.upstreamTimeoutMs`; optional `studioId` per tool.
