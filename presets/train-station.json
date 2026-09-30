@@ -106,7 +106,7 @@
       "roomNames": ["waiting area", "hall", "station hall", "lobby"]
     },
     "platform": {
-      "setPieces": ["track-bed", "platform-edge"],
+      "setPieces": ["track-bed", "platform-edge", "clock"],
       "arrangements": [
         { "shape": "along-length", "piece": "lamp", "spacing": 8, "inset": 1 },
         { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 5 },
