@@ -5,3 +5,5 @@ docs/research-parts/
 docs/prompt.md
 .DS_Store
 .claude/scheduled_tasks.lock
+eval/captures/
+eval/references/

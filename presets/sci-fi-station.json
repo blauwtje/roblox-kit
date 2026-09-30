@@ -1,0 +1,91 @@
+{
+  "palette": {
+    "colors": ["#e6ebf0", "#9aa7b4", "#3a4656", "#141b26"],
+    "accent": "#2ec4ff"
+  },
+  "surfaces": {
+    "floor": {
+      "material": "SmoothPlastic",
+      "color": "#3a4656"
+    },
+    "wall": {
+      "material": "SmoothPlastic",
+      "color": "#e6ebf0"
+    },
+    "trim": {
+      "material": "Metal",
+      "color": "#9aa7b4"
+    },
+    "ceiling": {
+      "material": "Metal",
+      "color": "#141b26"
+    },
+    "accent": {
+      "material": "Neon",
+      "color": "#2ec4ff"
+    }
+  },
+  "lighting": {
+    "LightingStyle": "Soft",
+    "PrioritizeLightingQuality": true,
+    "Ambient": "#2a3444",
+    "OutdoorAmbient": "#3c4a5e",
+    "Brightness": 4.5,
+    "ExposureCompensation": 1,
+    "EnvironmentDiffuseScale": 0.7,
+    "EnvironmentSpecularScale": 0.8,
+    "ShadowSoftness": 0.15,
+    "Atmosphere": {
+      "Density": 0.15,
+      "Offset": 0.2,
+      "Color": "#9aa7b4",
+      "Decay": "#3a4656",
+      "Glare": 0.2,
+      "Haze": 0.5
+    },
+    "Bloom": {
+      "Intensity": 0.7,
+      "Size": 32,
+      "Threshold": 1.1
+    }
+  },
+  "lightingIntent": "cool, even panel light",
+  "lightRoles": {
+    "zoneMarker": {
+      "range": 28,
+      "brightness": 1.4,
+      "color": "#7fdcff"
+    },
+    "focal": {
+      "range": 40,
+      "brightness": 2,
+      "color": "#d5f3ff"
+    },
+    "hero": {
+      "range": 75,
+      "brightness": 3,
+      "color": "#ffffff"
+    }
+  },
+  "propKit": ["pillar", "lamp", "stairs", "rail"],
+  "propRules": {
+    "pillar": { "freeRotation": false },
+    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
+    "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "control-console": { "heightRatio": { "min": 0.4, "max": 0.88 }, "freeRotation": false },
+    "crate-stack": { "heightRatio": { "min": 0.46, "max": 1.0 }, "freeRotation": false }
+  },
+  "roomTypes": {
+    "bridge": { "setPieces": ["control-console"], "signLabel": "BRIDGE" },
+    "cargo-bay": { "setPieces": ["crate-stack"], "signLabel": "CARGO BAY" }
+  },
+  "sizeRules": {
+    "agentRadius": 2,
+    "agentHeight": 5,
+    "minDoorwayWidth": 10,
+    "minHallwayWidth": 10,
+    "minWallHeight": 12,
+    "avatarHeight": { "min": 5, "max": 6.5 }
+  }
+}

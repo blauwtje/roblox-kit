@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Visual judge finding",
+  "description": "One issue the judge found in a built map. reasoning comes first so the verdict follows from it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "severity", "cites", "evidence", "reasoning", "verdict"],
+  "properties": {
+    "type": {
+      "description": "What kind of issue this is.",
+      "enum": [
+        "overlap",
+        "floating",
+        "unreachable",
+        "scale",
+        "rotation",
+        "placement",
+        "size-rule",
+        "palette",
+        "lighting",
+        "readability",
+        "spec-miss"
+      ]
+    },
+    "severity": {
+      "description": "blocker: the map is unusable or broken. major: clearly against the intent or preset. minor: polish; never sent back to the builder.",
+      "enum": ["blocker", "major", "minor"]
+    },
+    "cites": {
+      "description": "The spec item or preset rule the finding breaks, such as `rooms[1].roomType` or `train-station lightingIntent`. Only a blocker or major finding that cites one goes back to the builder.",
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageId", "visible"],
+      "properties": {
+        "imageId": {
+          "description": "The capture_zones image the finding rests on, as `<zone>:<view>`, such as `kitchen:a`; the cutaway is `<mapId>:top`.",
+          "type": "string",
+          "minLength": 1
+        },
+        "visible": {
+          "description": "What the image shows, in the judge's words.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "specField": {
+      "description": "The build_map spec field to change, such as rooms[1].wallHeight, when the judge can tell.",
+      "type": "string",
+      "minLength": 1
+    },
+    "reasoning": {
+      "description": "Why the image counts as a defect against the intent line or preset rubric, written before the verdict.",
+      "type": "string",
+      "minLength": 1
+    },
+    "verdict": {
+      "description": "The one-sentence conclusion the reasoning supports.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

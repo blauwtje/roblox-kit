@@ -5,6 +5,12 @@ import type { StudioConnection } from "../studio/studio-connection.ts";
 /** What every tool handler receives besides its validated input. */
 export interface ToolContext {
   studio: StudioConnection;
+  /**
+   * Sends an MCP progress notification for the running call. The registry always sets it, and it
+   * does nothing when the client sent no progressToken. `total` is the number of steps. It is
+   * optional only so direct handler calls in tests may omit it; make it required once they pass it.
+   */
+  reportProgress?(progress: number, total: number, message: string): Promise<void>;
 }
 
 /**

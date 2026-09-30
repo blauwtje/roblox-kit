@@ -1,16 +1,29 @@
+import { parseArgs } from "node:util";
 import { z } from "zod";
 import { config } from "../src/config.ts";
 import { runLuauFile } from "../src/luau/run-luau-file.ts";
-import { buildMapTool } from "../src/map/build-map-tool.ts";
+import { buildMapTool, propsOf } from "../src/map/build-map-tool.ts";
 import { captureZonesTool } from "../src/map/capture-zones-tool.ts";
 import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
+import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
-import { mapSpecSchema } from "../src/map/map-spec.ts";
+import { relationMapSpecSchema } from "../src/map/map-spec.ts";
+import type { PropRecord } from "../src/map/prop-placement.ts";
+import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
+import { buildRoomDetails } from "../src/map/room-details.ts";
+import { resolveRelations } from "../src/map/relation-solver.ts";
+import { loadPresets } from "../src/style/load-preset.ts";
 import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
+
+const presets = await loadPresets();
+
+/** Server & Clients opens one Studio window per player, so it runs only on `--multiplayer`. */
+const { values: smokeOptions } = parseArgs({ options: { multiplayer: { type: "boolean" } } });
 
 const capabilitiesSchema = z.array(
   z.object({ capability: z.string(), ok: z.boolean(), detail: z.string() }),
@@ -91,48 +104,90 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
 
 /**
  * A fixed 3-room map far from the place's Baseplate (x and z near 2000), so everything the smoke
- * builds, fills and removes lies outside what the place owns.
+ * builds, fills and removes lies outside what the place owns. The vault and the yard are placed by
+ * relation, so the map also has two hallway zones. The hall, vault and yard take the train-station room
+ * types concourse, ticket-hall and platform, so the map also has set pieces.
  */
-const smokeMapSpec = mapSpecSchema.parse({
+/** No bundled preset sets a MaterialVariant, so the smoke asks for one to probe that build_map applies it. */
+const smokeWallVariant = { baseMaterial: "Brick", studsPerTile: 8 };
+
+const smokeRelationSpec = relationMapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
+  style: {
+    preset: "train-station",
+    overrides: { surfaces: { wall: { variant: smokeWallVariant } } },
+  },
+  seed: 1,
+  // At the train-station size rules, so check_map with the preset reports no sizeRule issue.
+  wallHeight: 16,
+  doorWidth: 10,
   rooms: [
-    {
-      name: "hall",
-      x: 2000,
-      z: 2000,
-      width: 20,
-      depth: 20,
-      spawn: true,
-      doors: [{ side: "east" }],
-    },
+    { name: "hall", x: 2000, z: 2000, width: 20, depth: 20, spawn: true, roomType: "concourse" },
     {
       name: "vault",
-      x: 2020,
-      z: 2000,
+      roomType: "ticket-hall",
       width: 20,
       depth: 20,
-      doors: [{ side: "west" }, { side: "east" }],
+      relation: { to: "hall", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
     },
-    { name: "yard", x: 2040, z: 2000, width: 20, depth: 20, doors: [{ side: "west" }] },
+    {
+      name: "yard",
+      roomType: "platform",
+      width: 20,
+      depth: 20,
+      relation: { to: "vault", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
+    },
   ],
   terrain: [
     {
       shape: "block",
-      center: { x: 2020, y: -12, z: 2000 },
-      size: { x: 60, y: 8, z: 20 },
+      center: { x: 2035, y: -12, z: 2000 },
+      size: { x: 90, y: 8, z: 20 },
       material: "Grass",
     },
   ],
 });
 
+/** The smoke map with every room centered: what layout, lights and the checks below expect. */
+const smokeMapSpec = resolveRelations(smokeRelationSpec);
+
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
-const smokeRegion = { min: [1960, -30, 1960], max: [2080, 30, 2040] };
+const smokeRegion = { min: [1960, -30, 1960], max: [2100, 30, 2040] };
 
-/** What must remain in Workspace once the smoke is done. */
-const placeWorkspaceChildren = ["Terrain", "Baseplate", "SpawnLocation", "Camera"];
+/** Name of the Model the blocker probe puts beside the smoke map; the cleanup removes it by name. */
+const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
 
-/** Removes what the smoke and the tools insert: only names and the region the smoke owns. */
-const cleanupLuau = `
+/** Puts Lighting back from the snapshot the map Model holds; it must run before the Model is destroyed. */
+const restoreLightingLuau = `
+local Lighting = game:GetService("Lighting")
+local mapsFolder = workspace:FindFirstChild("${config.mapsFolderName}")
+local mapModel = if mapsFolder then mapsFolder:FindFirstChild("${smokeMapSpec.mapId}") else nil
+local encoded = if mapModel then mapModel:GetAttribute("RobloxKitLightingSnapshot") else nil
+if typeof(encoded) == "string" then
+  local snapshot = game:GetService("HttpService"):JSONDecode(encoded)
+  for name, value in snapshot.lighting do
+    if name == "LightingStyle" then Lighting.LightingStyle = Enum.LightingStyle[value]
+    elseif name == "Ambient" or name == "OutdoorAmbient" then Lighting[name] = Color3.fromHex(value)
+    else Lighting[name] = value end
+  end
+  local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+  if atmosphere and snapshot.atmosphere then
+    for name, value in snapshot.atmosphere do
+      if name == "Color" or name == "Decay" then atmosphere[name] = Color3.fromHex(value) else atmosphere[name] = value end
+    end
+  end
+  local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+  if bloom and snapshot.bloom then
+    for name, value in snapshot.bloom do bloom[name] = value end
+  end
+  for _, className in snapshot.created do
+    local effect = Lighting:FindFirstChildOfClass(className)
+    if effect then effect:Destroy() end
+  end
+end`;
+
+/** Removes what the smoke and the tools insert: only names and the region the smoke owns; other maps stay. */
+const cleanupLuau = `${restoreLightingLuau}
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayerScripts = game:GetService("StarterPlayer"):FindFirstChildOfClass("StarterPlayerScripts")
 local function destroyNamed(container, name)
@@ -141,13 +196,50 @@ local function destroyNamed(container, name)
     if child.Name == name then child:Destroy() end
   end
 end
-destroyNamed(workspace, "${config.mapsFolderName}")
+local mapsFolder = workspace:FindFirstChild("${config.mapsFolderName}")
+destroyNamed(mapsFolder, "${smokeMapSpec.mapId}")
+destroyNamed(mapsFolder, "${blockerModelName}")
+if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
+for _, variant in game:GetService("MaterialService"):GetChildren() do
+  if variant:IsA("MaterialVariant") and string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then variant:Destroy() end
+end
 destroyNamed(ServerScriptService, "RobloxKitPlaytestServerHarness")
 destroyNamed(StarterPlayerScripts, "RobloxKitPlaytestClientHarness")
 local min = Vector3.new(${smokeRegion.min.join(", ")})
 local max = Vector3.new(${smokeRegion.max.join(", ")})
 workspace.Terrain:FillBlock(CFrame.new((min + max) / 2), max - min, Enum.Material.Air)
 return "cleaned"`;
+
+/** Reports Lighting as JSON: the recipe's properties and effects, as the smoke compares them. */
+const lightingStateLuau = `
+local Lighting = game:GetService("Lighting")
+local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+return game:GetService("HttpService"):JSONEncode({
+  LightingStyle = Lighting.LightingStyle.Name,
+  Ambient = Lighting.Ambient:ToHex(),
+  OutdoorAmbient = Lighting.OutdoorAmbient:ToHex(),
+  Brightness = Lighting.Brightness,
+  ExposureCompensation = Lighting.ExposureCompensation,
+  ShadowSoftness = Lighting.ShadowSoftness,
+  effectCount = #Lighting:GetChildren(),
+  atmosphereDensity = if atmosphere then atmosphere.Density else -1,
+  atmosphereColor = if atmosphere then atmosphere.Color:ToHex() else "",
+  bloomIntensity = if bloom then bloom.Intensity else -1,
+})`;
+
+const lightingStateSchema = z.object({
+  LightingStyle: z.string(),
+  Ambient: z.string(),
+  OutdoorAmbient: z.string(),
+  Brightness: z.number(),
+  ExposureCompensation: z.number(),
+  ShadowSoftness: z.number(),
+  effectCount: z.number(),
+  atmosphereDensity: z.number(),
+  atmosphereColor: z.string(),
+  bloomIntensity: z.number(),
+});
 
 /** Reports the place state as one line; the smoke fails unless it is the state the place started in. */
 const placeStateLuau = `
@@ -166,6 +258,10 @@ for x = 1, voxels.Size.X do
     end
   end
 end
+local smokeVariants = 0
+for _, variant in game:GetService("MaterialService"):GetChildren() do
+  if string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then smokeVariants += 1 end
+end
 local harnesses = 0
 for _, name in { "RobloxKitPlaytestServerHarness", "RobloxKitPlaytestClientHarness" } do
   if game:GetService("ServerScriptService"):FindFirstChild(name) then harnesses += 1 end
@@ -173,13 +269,14 @@ for _, name in { "RobloxKitPlaytestServerHarness", "RobloxKitPlaytestClientHarne
   if scripts and scripts:FindFirstChild(name) then harnesses += 1 end
 end
 return game:GetService("HttpService"):JSONEncode({
-  workspace = names, serverStorage = #storage, solidTerrainVoxels = solid, harnesses = harnesses,
+  workspace = names, smokeVariants = smokeVariants, serverStorage = #storage, solidTerrainVoxels = solid, harnesses = harnesses,
 })`;
 
 const placeStateSchema = z.object({
   workspace: z.array(z.string()),
   serverStorage: z.number(),
   solidTerrainVoxels: z.number(),
+  smokeVariants: z.number(),
   harnesses: z.number(),
 });
 
@@ -223,11 +320,24 @@ async function callRealTool<Input extends z.ZodObject, Output extends z.ZodObjec
   return { output, content: result.content };
 }
 
+/** What build_map sends for the styled smoke map: layout with ceilings, trim details and preset props. */
+function styledSmokeMap() {
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
+  const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
+  const { props } = propsOf(smokeMapSpec, preset);
+  return { layout, details, props };
+}
+
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
-  const layout = layoutMap(smokeMapSpec);
-  const { output } = await callRealTool(buildMapTool, smokeMapSpec, connection);
+  const { layout, details } = styledSmokeMap();
+  const expectedPartCount = layout.parts.length + details.length;
+  const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
-  expectEqual("build_map partCount", output.partCount, layout.parts.length);
+  expectEqual("build_map partCount", output.partCount, expectedPartCount);
   expectEqual(
     "build_map zones",
     output.zones.map((zone) => zone.name),
@@ -236,15 +346,303 @@ async function probeBuildMap(connection: StudioConnection): Promise<string> {
   expectEqual(
     "build_map zone part counts sum",
     output.zones.reduce((sum, zone) => sum + zone.partCount, 0),
-    layout.parts.length,
+    expectedPartCount,
   );
   return `${String(output.partCount)} parts in ${String(output.zones.length)} zones`;
 }
 
+/** The ceilings, generator ModuleScripts and ProceduralModels of the built map, and every BasePart under it. */
+const mapDecorLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local ceilings = {}
+for _, tagged in game:GetService("CollectionService"):GetTagged("${config.ceilingTag}") do
+  if tagged:IsDescendantOf(model) and tagged:IsA("BasePart") then
+    table.insert(ceilings, { name = tagged.Name, canCollide = tagged.CanCollide })
+  end
+end
+local generators, proceduralModels, baseParts = {}, {}, 0
+for _, descendant in model:GetDescendants() do
+  if descendant:IsA("BasePart") then baseParts += 1 end
+  if descendant:IsA("ModuleScript") then table.insert(generators, descendant.Name) end
+  if descendant:IsA("ProceduralModel") then
+    local generated = 0
+    for _, inner in descendant:GetDescendants() do
+      if inner:IsA("BasePart") then generated += 1 end
+    end
+    table.insert(proceduralModels, {
+      name = descendant.Name, generationError = descendant.GenerationError, generator = if descendant.Generator then descendant.Generator.Name else "", generatedParts = generated,
+      label = descendant:GetAttribute("Label"), accent = if descendant:GetAttribute("AccentColor") then (descendant:GetAttribute("AccentColor") :: Color3):ToHex() else nil,
+      yaw = math.round(math.deg(math.atan2(-descendant:GetPivot().LookVector.X, -descendant:GetPivot().LookVector.Z))),
+    })
+  end
+end
+table.sort(generators)
+table.sort(ceilings, function(first, second) return first.name < second.name end)
+table.sort(proceduralModels, function(first, second) return first.name < second.name end)
+return game:GetService("HttpService"):JSONEncode({ ceilings = ceilings, generators = generators, proceduralModels = proceduralModels, baseParts = baseParts })`;
+
+const mapDecorSchema = z.object({
+  ceilings: z.array(z.object({ name: z.string(), canCollide: z.boolean() })),
+  generators: z.array(z.string()),
+  proceduralModels: z.array(
+    z.object({
+      name: z.string(),
+      generationError: z.string(),
+      generator: z.string(),
+      generatedParts: z.number(),
+      label: z.string().optional(),
+      accent: z.string().optional(),
+      yaw: z.number(),
+    }),
+  ),
+  baseParts: z.number(),
+});
+
+async function readMapDecor(connection: StudioConnection) {
+  const studioId = await selectStudio(connection, undefined);
+  return mapDecorSchema.parse(JSON.parse(await executeLuau(connection, studioId, mapDecorLuau)));
+}
+
+/** Proves each set piece in Studio faces its `yaw` and carries its sign's `Label` and `AccentColor`. */
+function expectSetPiecesTurnedAndLabeled(
+  props: (PropRecord | SetPieceRecord)[],
+  names: string[],
+  built: z.output<typeof mapDecorSchema>["proceduralModels"],
+) {
+  const builtByName = new Map(built.map((model) => [model.name, model]));
+  let setPieceCount = 0;
+  for (const [index, prop] of props.entries()) {
+    if (!("yaw" in prop)) {
+      continue;
+    }
+    setPieceCount += 1;
+    const name = names[index] ?? "";
+    const model = builtByName.get(name);
+    expectEqual(`${name} yaw`, ((model?.yaw ?? NaN) + 360) % 360, prop.yaw);
+    expectEqual(`${name} Label`, model?.label, prop.attributes["Label"]);
+    expectEqual(
+      `${name} AccentColor`,
+      model?.accent,
+      prop.attributes["AccentColor"]?.replace("#", "").toLowerCase(),
+    );
+  }
+  expectEqual("the smoke map has set pieces", setPieceCount > 0, true);
+  expectEqual(
+    "the smoke map has a sign per typed room door",
+    built.some((model) => model.name.startsWith("sign-") && model.label !== undefined),
+    true,
+  );
+}
+
+/** Proves ceilings carry the tag, one generator per prop kind exists and every prop generated parts without error. */
+async function probeMapDecor(connection: StudioConnection): Promise<string> {
+  const { layout, props } = styledSmokeMap();
+  const decor = await readMapDecor(connection);
+  expectEqual(
+    "ceiling names tagged",
+    decor.ceilings.map((ceiling) => ceiling.name),
+    layout.parts
+      .filter((part) => part.kind === "ceiling")
+      .map((part) => part.name)
+      .sort(),
+  );
+  expectEqual(
+    "ceilings collide",
+    decor.ceilings.some((ceiling) => ceiling.canCollide),
+    false,
+  );
+  expectEqual(
+    "generator ModuleScripts",
+    decor.generators,
+    [...new Set(props.map((prop) => `${prop.kind}-generator`))].sort(),
+  );
+  const countByKind = new Map<string, number>();
+  const expectedNames = props.map((prop) => {
+    const count = (countByKind.get(prop.kind) ?? 0) + 1;
+    countByKind.set(prop.kind, count);
+    return `${prop.kind}-${String(count)}`;
+  });
+  expectEqual(
+    "ProceduralModel names",
+    decor.proceduralModels.map((model) => model.name),
+    [...expectedNames].sort(),
+  );
+  for (const model of decor.proceduralModels) {
+    expectEqual(`${model.name} GenerationError`, model.generationError, "");
+    expectEqual(
+      `${model.name} generator`,
+      model.generator,
+      `${model.name.replace(/-\d+$/, "")}-generator`,
+    );
+    expectEqual(`${model.name} generated parts`, model.generatedParts > 0, true);
+  }
+  expectSetPiecesTurnedAndLabeled(props, expectedNames, decor.proceduralModels);
+  return `${String(decor.ceilings.length)} ceilings tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
+}
+
+/** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */
+const paintedMapLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local variant = game:GetService("MaterialService"):FindFirstChild("${smokeMapSpec.mapId}-wall")
+local painted = { floors = {}, walls = {}, wallVariants = {}, variantBase = "", variantStuds = 0 }
+for _, part in model:GetChildren() do
+  local list = if string.find(part.Name, "floor", 1, true) then painted.floors elseif string.find(part.Name, "wall", 1, true) then painted.walls else nil
+  if list then table.insert(list, part.Color:ToHex()) end
+  if list == painted.walls then table.insert(painted.wallVariants, part.MaterialVariant) end
+end
+if variant and variant:IsA("MaterialVariant") then
+  painted.variantBase = variant.BaseMaterial.Name
+  painted.variantStuds = variant.StudsPerTile
+end
+return game:GetService("HttpService"):JSONEncode(painted)`;
+
+const paintedMapSchema = z.object({
+  floors: z.array(z.string()),
+  walls: z.array(z.string()),
+  wallVariants: z.array(z.string()),
+  variantBase: z.string(),
+  variantStuds: z.number(),
+});
+
+async function probePaintedMap(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const painted = paintedMapSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, paintedMapLuau)),
+  );
+  const { surfaces } = presets.get("train-station") ?? {};
+  if (surfaces === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const hex = (color: string) => color.slice(1).toLowerCase();
+  expectEqual("floor colors", [...new Set(painted.floors)], [hex(surfaces.floor.color)]);
+  expectEqual("wall colors", [...new Set(painted.walls)], [hex(surfaces.wall.color)]);
+  expectEqual("wall parts built", painted.walls.length > 0, true);
+  expectEqual(
+    "wall MaterialVariant names",
+    [...new Set(painted.wallVariants)],
+    [`${smokeMapSpec.mapId}-wall`],
+  );
+  expectEqual("MaterialVariant base", painted.variantBase, smokeWallVariant.baseMaterial);
+  expectEqual("MaterialVariant studsPerTile", painted.variantStuds, smokeWallVariant.studsPerTile);
+  return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
+}
+
+/** The lights the built map holds (not those inside generated props): each PointLight with its Attachment, the part above it and its world position. */
+const mapLightsLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local lights = {}
+for _, descendant in model:GetDescendants() do
+  if descendant:IsA("PointLight") and not descendant:FindFirstAncestorOfClass("ProceduralModel") then
+    local attachment = descendant.Parent :: Attachment
+    local position = attachment.WorldPosition
+    table.insert(lights, {
+      part = attachment.Parent.Name, range = descendant.Range, brightness = descendant.Brightness,
+      color = descendant.Color:ToHex(), shadows = descendant.Shadows, x = position.X, y = position.Y, z = position.Z,
+    })
+  end
+end
+table.sort(lights, function(first, second) return first.x < second.x end)
+local snapshot = model:GetAttribute("RobloxKitLightingSnapshot")
+return game:GetService("HttpService"):JSONEncode({ lights = lights, snapshot = if typeof(snapshot) == "string" then snapshot else "" })`;
+
+const mapLightsSchema = z.object({
+  lights: z.array(
+    z.object({
+      part: z.string(),
+      range: z.number(),
+      brightness: z.number(),
+      color: z.string(),
+      shadows: z.boolean(),
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    }),
+  ),
+  snapshot: z.string(),
+});
+
+function expectClose(what: string, actual: number, expected: number): void {
+  if (Math.abs(actual - expected) > 1e-3) {
+    throw new Error(`${what}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+
+async function readMapLights(connection: StudioConnection, studioId: string) {
+  return mapLightsSchema.parse(JSON.parse(await executeLuau(connection, studioId, mapLightsLuau)));
+}
+
+/** Proves the style's lights hang under their rooms' floors, the recipe reached Lighting and a rebuild keeps the snapshot. */
+async function probeLighting(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const hex = (color: string) => color.slice(1).toLowerCase();
+  const built = await readMapLights(connection, studioId);
+  const placements = placeLights(smokeMapSpec, preset.lightRoles).sort(
+    (first, second) => first.position.x - second.position.x,
+  );
+  expectEqual("light count", built.lights.length, placements.length);
+  placements.forEach((placement, index) => {
+    const light = built.lights[index];
+    const roleValues = preset.lightRoles[placement.role];
+    const room = smokeMapSpec.rooms.find((candidate) => candidate.x === placement.position.x);
+    if (light === undefined || room === undefined) {
+      throw new Error(`No built light or room for the ${placement.role} placement.`);
+    }
+    expectEqual(`${placement.role} light floor part`, light.part, `${room.name}-floor`);
+    expectEqual(`${placement.role} light shadows`, light.shadows, placement.shadows);
+    expectEqual(`${placement.role} light color`, light.color.toLowerCase(), hex(roleValues.color));
+    expectClose(`${placement.role} light range`, light.range, placement.range);
+    expectClose(`${placement.role} light brightness`, light.brightness, roleValues.brightness);
+    expectClose(`${placement.role} light x`, light.x, placement.position.x);
+    expectClose(`${placement.role} light y`, light.y, placement.position.y);
+    expectClose(`${placement.role} light z`, light.z, placement.position.z);
+  });
+  expectEqual("snapshot stored on the map Model", built.snapshot.length > 0, true);
+
+  const recipe = preset.lighting;
+  const lighting = lightingStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+  );
+  expectEqual("Lighting LightingStyle", lighting.LightingStyle, recipe.LightingStyle);
+  expectEqual("Lighting Ambient", lighting.Ambient.toLowerCase(), hex(recipe.Ambient));
+  expectEqual(
+    "Lighting OutdoorAmbient",
+    lighting.OutdoorAmbient.toLowerCase(),
+    hex(recipe.OutdoorAmbient),
+  );
+  expectClose("Lighting Brightness", lighting.Brightness, recipe.Brightness);
+  expectClose(
+    "Lighting ExposureCompensation",
+    lighting.ExposureCompensation,
+    recipe.ExposureCompensation,
+  );
+  expectClose("Atmosphere Density", lighting.atmosphereDensity, recipe.Atmosphere.Density);
+  expectEqual(
+    "Atmosphere Color",
+    lighting.atmosphereColor.toLowerCase(),
+    hex(recipe.Atmosphere.Color),
+  );
+  expectClose("Bloom Intensity", lighting.bloomIntensity, recipe.Bloom.Intensity);
+
+  await callRealTool(buildMapTool, smokeRelationSpec, connection);
+  const rebuilt = await readMapLights(connection, studioId);
+  expectEqual("light count after a rebuild", rebuilt.lights.length, placements.length);
+  expectEqual("snapshot kept across a rebuild", rebuilt.snapshot, built.snapshot);
+  return `${String(placements.length)} lights under their floors, recipe applied, snapshot kept across a rebuild`;
+}
+
 async function probeCheckMap(connection: StudioConnection): Promise<string> {
   const tool = createCheckMapTool(new CheckReportStore());
-  const { output, content } = await callRealTool(tool, { mapId: smokeMapSpec.mapId }, connection);
-  expectEqual("check_map partCount", output.partCount, layoutMap(smokeMapSpec).parts.length);
+  const { output, content } = await callRealTool(
+    tool,
+    { mapId: smokeMapSpec.mapId, preset: smokeRelationSpec.style?.preset, spec: smokeRelationSpec },
+    connection,
+  );
+  // check_map boxes every BasePart under the Model, including the parts the props generated.
+  expectEqual("check_map partCount", output.partCount, (await readMapDecor(connection)).baseParts);
   expectEqual("check_map zoneCount", output.zoneCount, smokeMapSpec.rooms.length);
   expectEqual("check_map reachabilityChecked", output.reachabilityChecked, true);
   expectEqual(
@@ -252,12 +650,91 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     content.some((block) => block.type === "resource_link"),
     true,
   );
-  const counted = output.counts.overlapping + output.counts.floating + output.counts.unreachable;
+  const counted =
+    output.counts.overlapping +
+    output.counts.floating +
+    output.counts.unreachable +
+    output.counts.placement +
+    output.counts.sizeRule +
+    output.counts.scale +
+    output.counts.rotation;
   expectEqual("check_map issues + omitted", output.issues.length + output.issuesOmitted, counted);
   expectEqual("check_map passed", output.passed, counted === 0);
   // A clean map: any issue here is a finding, not something to tolerate.
-  expectEqual("check_map counts", output.counts, { overlapping: 0, floating: 0, unreachable: 0 });
-  return `passed=${String(output.passed)} counts=${JSON.stringify(output.counts)}`;
+  expectEqual("check_map counts", output.counts, {
+    overlapping: 0,
+    floating: 0,
+    unreachable: 0,
+    placement: 0,
+    sizeRule: 0,
+    scale: 0,
+    rotation: 0,
+  });
+  expectEqual(
+    "check_map sceneStats zones",
+    output.sceneStats.map((sample) => sample.zone).sort(),
+    smokeMapSpec.rooms.map((room) => room.name).sort(),
+  );
+  for (const sample of output.sceneStats) {
+    // A zone camera looks at the room's floor and walls: both counts are above zero.
+    expectEqual(`check_map sceneStats ${sample.zone} drawCalls > 0`, sample.drawCalls > 0, true);
+    expectEqual(`check_map sceneStats ${sample.zone} triangles > 0`, sample.triangles > 0, true);
+  }
+  expectEqual("check_map budget", output.budget, smokeRelationSpec.performanceBudget);
+  // The smoke map is small and nothing else stands in the smoke region: no zone is over budget, no walk blocked.
+  expectEqual("check_map withinBudget", output.withinBudget, true);
+  expectEqual("check_map warnings", output.warnings, []);
+  return `passed=${String(output.passed)} counts=${JSON.stringify(output.counts)} sceneStats=${JSON.stringify(output.sceneStats)}`;
+}
+
+/** Walls off the hallway between the hall and the vault with a Model outside the smoke map. */
+function blockerLuau(): string {
+  const roomNamed = (name: string) => {
+    const room = smokeMapSpec.rooms.find((candidate) => candidate.name === name);
+    if (room === undefined) throw new Error(`The smoke map has no room "${name}".`);
+    return room;
+  };
+  const hall = roomNamed("hall");
+  const vault = roomNamed("vault");
+  const hallwayMiddleX = (hall.x + hall.width / 2 + vault.x - vault.width / 2) / 2;
+  return `
+local model = Instance.new("Model")
+model.Name = "${blockerModelName}"
+local wall = Instance.new("Part")
+wall.Name = "Wall"
+wall.Anchored = true
+wall.Size = Vector3.new(2, 40, ${String(hall.depth + 10)})
+wall.Position = Vector3.new(${String(hallwayMiddleX)}, 20, ${String(hall.z)})
+wall.Parent = model
+model.Parent = workspace:FindFirstChild("${config.mapsFolderName}")
+return "placed"`;
+}
+
+/** Proves check_map names a Model outside the map that walls off a walk, then removes that Model. */
+async function probeBlockingModel(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  await executeLuau(connection, studioId, blockerLuau());
+  try {
+    const tool = createCheckMapTool(new CheckReportStore());
+    const { output } = await callRealTool(tool, { mapId: smokeMapSpec.mapId }, connection);
+    const blockerPath = `Workspace.${config.mapsFolderName}.${blockerModelName}`;
+    expectEqual("check_map unreachable > 0 with the blocker", output.counts.unreachable > 0, true);
+    expectEqual(
+      "check_map warnings naming the blocker",
+      output.warnings.filter((warning) => warning.startsWith(`${blockerPath} `)).length,
+      1,
+    );
+    return output.warnings.join(" | ");
+  } finally {
+    await executeLuau(
+      connection,
+      studioId,
+      `local folder = workspace:FindFirstChild("${config.mapsFolderName}")
+local model = if folder then folder:FindFirstChild("${blockerModelName}") else nil
+if model then model:Destroy() end
+return "removed"`,
+    );
+  }
 }
 
 async function probeCaptureZones(connection: StudioConnection): Promise<string> {
@@ -267,13 +744,52 @@ async function probeCaptureZones(connection: StudioConnection): Promise<string> 
     connection,
   );
   const images = content.filter((block) => block.type === "image");
+  const zoneNames = smokeMapSpec.rooms.map((room) => room.name).sort();
+  // The cutaway of the whole map comes first, then views a and b of the zones that fit
+  // config.maxImagesPerCall; the rest come back in remainingZones.
+  const fittingZones = Math.floor((config.maxImagesPerCall - 1) / 2);
+  const firstZones = zoneNames.slice(0, fittingZones);
+  const laterZones = zoneNames.slice(fittingZones);
   expectEqual(
-    "capture_zones shot zones",
-    output.shots.map((shot) => shot.zone),
-    smokeMapSpec.rooms.map((room) => room.name),
+    "capture_zones shots",
+    output.shots.map((shot) => `${shot.zone}:${shot.view}`),
+    [`${smokeMapSpec.mapId}:top`, ...firstZones.flatMap((name) => [`${name}:a`, `${name}:b`])],
   );
-  expectEqual("capture_zones image count", images.length, smokeMapSpec.rooms.length);
-  return `${String(images.length)} images, one per zone`;
+  expectEqual("capture_zones image count", images.length, 1 + firstZones.length * 2);
+  expectEqual("capture_zones remainingZones", output.remainingZones, laterZones);
+  const rest = await callRealTool(
+    captureZonesTool,
+    { mapId: smokeMapSpec.mapId, zones: laterZones, cutaway: false },
+    connection,
+  );
+  expectEqual(
+    "capture_zones follow-up shots",
+    rest.output.shots.map((shot) => `${shot.zone}:${shot.view}`),
+    laterZones.flatMap((name) => [`${name}:a`, `${name}:b`]),
+  );
+  expectEqual("capture_zones follow-up remainingZones", rest.output.remainingZones, []);
+  // The output schema already requires a positive integer width and height per shot.
+  const sizes = [...output.shots, ...rest.output.shots].map(
+    (shot) => `${String(shot.width)}x${String(shot.height)}`,
+  );
+  const eye = await callRealTool(
+    captureZonesTool,
+    { mapId: smokeMapSpec.mapId, views: ["eye"], cutaway: false },
+    connection,
+  );
+  // The eye view of each room, shot with ceilings shown.
+  expectEqual(
+    "capture_zones eye shots",
+    eye.output.shots.map((shot) => `${shot.zone}:${shot.view}`),
+    zoneNames.map((name) => `${name}:eye`),
+  );
+  expectEqual(
+    "capture_zones eye image count",
+    eye.content.filter((block) => block.type === "image").length,
+    zoneNames.length,
+  );
+  expectEqual("capture_zones eye remainingZones", eye.output.remainingZones, []);
+  return `${String(images.length)} images (cap ${String(config.maxImagesPerCall)}), the top-down cutaway then two views per zone, ${String(rest.output.shots.length)} more in a follow-up call, plus ${String(zoneNames.length)} eye views, sizes ${sizes.join(" ")}, warnings ${JSON.stringify(output.warnings)}`;
 }
 
 const playServerChecks = `
@@ -306,10 +822,20 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   const studioId = await selectStudio(connection, undefined);
   const findings: Capability[] = [];
   await executeLuau(connection, studioId, cleanupLuau);
+  const lightingBefore = lightingStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+  );
+  const stateBefore = placeStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, placeStateLuau)),
+  );
   try {
     const steps: [string, () => Promise<string>][] = [
       ["build_map", () => probeBuildMap(connection)],
+      ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
+      ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
+      ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
+      ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],
       [
         "run_playtest play with a server and a client check",
@@ -325,7 +851,9 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
             2,
           ),
       ],
-      [
+    ];
+    if (smokeOptions.multiplayer === true) {
+      steps.push([
         "run_playtest multiplayer with 2 players",
         () =>
           probePlaytest(
@@ -339,8 +867,8 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
             },
             3,
           ),
-      ],
-    ];
+      ]);
+    }
     for (const [capability, attempt] of steps) {
       findings.push(await probeTool(capability, attempt));
     }
@@ -350,16 +878,17 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   const state = placeStateSchema.parse(
     JSON.parse(await executeLuau(connection, studioId, placeStateLuau)),
   );
+  const lightingAfter = lightingStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+  );
   findings.push(
     await probeTool("place restored after the smoke", () => {
-      expectEqual(
-        "Workspace children",
-        [...state.workspace].sort(),
-        [...placeWorkspaceChildren].sort(),
-      );
+      expectEqual("Lighting", lightingAfter, lightingBefore);
+      expectEqual("Workspace children", state.workspace, stateBefore.workspace);
       expectEqual("ServerStorage children", state.serverStorage, 0);
       expectEqual("terrain voxels over the map region", state.solidTerrainVoxels, 0);
       expectEqual("harness scripts left", state.harnesses, 0);
+      expectEqual("smoke MaterialVariants left", state.smokeVariants, 0);
       return Promise.resolve(JSON.stringify(state));
     }),
   );
@@ -371,6 +900,7 @@ const connection = new StudioMcpClient({
   timeoutMs: config.upstreamTimeoutMs,
 });
 try {
+  await assertViewportVisible(connection);
   const capabilities = [
     ...(await probeCapabilities(connection)),
     ...(await probeMapTools(connection)),

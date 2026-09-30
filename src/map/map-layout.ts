@@ -1,4 +1,5 @@
 import { config } from "../config.ts";
+import type { Preset } from "../style/preset-schema.ts";
 import type { MapSpec, RoomSpec, TerrainFill } from "./map-spec.ts";
 
 export interface Vector {
@@ -13,10 +14,39 @@ export interface PartRecord {
   name: string;
   /** The zone (room name) the part belongs to. */
   room: string;
-  kind: "floor" | "wall" | "spawn";
+  kind: "floor" | "wall" | "spawn" | "ceiling";
+  /** The style surface the part is painted from. */
+  role: SurfaceRole;
+  /** A #rrggbb color: the style's color for `role`, or the shipped default without a style. */
+  color: string;
   position: Vector;
   size: Vector;
   material: string;
+}
+
+/** The surface roles a part is painted from; each names a `surfaces` entry of a preset. */
+export type SurfaceRole = keyof Preset["surfaces"];
+
+interface SurfaceColor {
+  color: string;
+  material?: string;
+}
+
+/** The color, and optionally the material, of the surface roles a part can take; a preset's `surfaces` fits this shape. */
+export type SurfaceColors = Record<"floor" | "wall", SurfaceColor> & { ceiling?: SurfaceColor };
+
+/** Neutral grays used when the map spec has no style. */
+const defaultSurfaceColors: SurfaceColors = {
+  floor: { color: "#8a8a8a" },
+  wall: { color: "#b8b8b8" },
+};
+
+/** The ceiling color when ceilings are built from surfaces that name none. */
+const defaultCeilingColor = "#d6d6d6";
+
+export interface LayoutOptions {
+  /** Adds one ceiling part per room, to be tagged `config.ceilingTag` when built; absent adds none. */
+  ceilings?: boolean;
 }
 
 export interface MapLayout {
@@ -29,9 +59,13 @@ type Side = RoomSpec["doors"][number]["side"];
 interface RoomStyle {
   floorMaterial: string;
   wallMaterial: string;
+  ceilingMaterial: string;
   wallHeight: number;
   wallThickness: number;
   doorWidth: number;
+  floorColor: string;
+  wallColor: string;
+  ceilingColor: string;
 }
 
 /** A stretch of wall, measured along the wall from its center. */
@@ -42,14 +76,26 @@ interface Interval {
 
 const sides: Side[] = ["north", "south", "east", "west"];
 
-/** Room settings win over map settings, which win over the config defaults. */
-function resolveStyle(spec: MapSpec, room: RoomSpec): RoomStyle {
+/** Room settings win over map settings, which win over the style's surface material, which wins over the config defaults. */
+function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): RoomStyle {
   return {
-    floorMaterial: room.floorMaterial ?? spec.floorMaterial ?? config.defaultFloorMaterial,
-    wallMaterial: room.wallMaterial ?? spec.wallMaterial ?? config.defaultWallMaterial,
+    floorMaterial:
+      room.floorMaterial ??
+      spec.floorMaterial ??
+      surfaces.floor.material ??
+      config.defaultFloorMaterial,
+    wallMaterial:
+      room.wallMaterial ??
+      spec.wallMaterial ??
+      surfaces.wall.material ??
+      config.defaultWallMaterial,
+    ceilingMaterial: surfaces.ceiling?.material ?? config.defaultCeilingMaterial,
     wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
     wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
     doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
+    floorColor: surfaces.floor.color,
+    wallColor: surfaces.wall.color,
+    ceilingColor: surfaces.ceiling?.color ?? defaultCeilingColor,
   };
 }
 
@@ -105,6 +151,8 @@ function wallParts(room: RoomSpec, style: RoomStyle): PartRecord[] {
         name: `${room.name}${config.wallNameInfix}${side}-${String(index + 1)}`,
         room: room.name,
         kind: "wall",
+        role: "wall",
+        color: style.wallColor,
         position: {
           x: room.x + (runsAlongX ? alongCenter : acrossOffset),
           y: style.wallHeight / 2,
@@ -127,9 +175,25 @@ function floorPart(room: RoomSpec, style: RoomStyle): PartRecord {
     name: `${room.name}${config.floorNameSuffix}`,
     room: room.name,
     kind: "floor",
-    position: { x: room.x, y: -style.wallThickness / 2, z: room.z },
+    role: "floor",
+    color: style.floorColor,
+    position: { x: room.x, y: config.floorLiftStuds - style.wallThickness / 2, z: room.z },
     size: { x: room.width, y: style.wallThickness, z: room.depth },
     material: style.floorMaterial,
+  };
+}
+
+/** A slab over the whole footprint, resting on top of the walls. */
+function ceilingPart(room: RoomSpec, style: RoomStyle): PartRecord {
+  return {
+    name: `${room.name}${config.ceilingNameSuffix}`,
+    room: room.name,
+    kind: "ceiling",
+    role: "ceiling",
+    color: style.ceilingColor,
+    position: { x: room.x, y: style.wallHeight + style.wallThickness / 2, z: room.z },
+    size: { x: room.width, y: style.wallThickness, z: room.depth },
+    material: style.ceilingMaterial,
   };
 }
 
@@ -139,6 +203,8 @@ function spawnPart(room: RoomSpec, style: RoomStyle): PartRecord {
     name: `${room.name}${config.spawnNameSuffix}`,
     room: room.name,
     kind: "spawn",
+    role: "floor",
+    color: style.floorColor,
     position: { x: room.x, y: style.wallThickness / 2, z: room.z },
     size: { x: style.doorWidth, y: style.wallThickness, z: style.doorWidth },
     material: style.floorMaterial,
@@ -154,15 +220,22 @@ function assertRoomFits(room: RoomSpec, style: RoomStyle): void {
   }
 }
 
-/** Turns a map spec into parts and terrain fills; the same spec always yields the same layout. */
-export function layoutMap(spec: MapSpec): MapLayout {
+/** Turns a map spec into parts and terrain fills; the same spec and surfaces always yield the same layout. */
+export function layoutMap(
+  spec: MapSpec,
+  surfaces: SurfaceColors = defaultSurfaceColors,
+  options: LayoutOptions = {},
+): MapLayout {
   const parts: PartRecord[] = [];
   for (const room of spec.rooms) {
-    const style = resolveStyle(spec, room);
+    const style = resolveStyle(spec, room, surfaces);
     assertRoomFits(room, style);
     parts.push(floorPart(room, style), ...wallParts(room, style));
     if (room.spawn) {
       parts.push(spawnPart(room, style));
+    }
+    if (options.ceilings) {
+      parts.push(ceilingPart(room, style));
     }
   }
   return { parts, terrainFills: spec.terrain };

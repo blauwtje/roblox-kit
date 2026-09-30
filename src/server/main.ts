@@ -13,7 +13,7 @@ import { CheckReportStore } from "../map/check-report-store.ts";
 import { createRunPlaytestTool } from "../playtest/run-playtest-tool.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
 import { StudioMcpClient } from "../studio/studio-mcp-client.ts";
-import type { ToolDefinition } from "./tool-definition.ts";
+import type { ToolContext, ToolDefinition } from "./tool-definition.ts";
 import { toolErrorResult } from "./tool-error.ts";
 
 /** Full check reports of this process, written by `check_map` and read through the report resource. */
@@ -71,9 +71,23 @@ export function createServer(options: ServerOptions): McpServer {
         outputSchema: tool.outputSchema,
         annotations: tool.annotations,
       },
-      async (input) => {
+      async (input, callContext) => {
+        const progressToken = callContext.mcpReq._meta?.progressToken;
+        const reportProgress: NonNullable<ToolContext["reportProgress"]> = async (
+          progress,
+          total,
+          message,
+        ) => {
+          if (progressToken === undefined) {
+            return;
+          }
+          await callContext.mcpReq.notify({
+            method: "notifications/progress",
+            params: { progressToken, progress, total, message },
+          });
+        };
         try {
-          return await tool.handler(input, { studio: options.studio });
+          return await tool.handler(input, { studio: options.studio, reportProgress });
         } catch (error) {
           return toolErrorResult(error);
         }

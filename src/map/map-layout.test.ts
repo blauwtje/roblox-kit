@@ -55,13 +55,27 @@ await test("the same spec lays out to the same parts and terrain fills", () => {
   assert.equal(new Set(first.parts.map((part) => part.name)).size, first.parts.length);
 });
 
-await test("a room gets a floor under y = 0 and walls standing on it with the config defaults", () => {
+await test("a room floor's top clears the ground plane y = 0 by less than the overlap tolerance", () => {
   const { parts } = layoutOf({
     mapId: "one",
     rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20 }],
   });
   const floor = partNamed(parts, "box-floor");
-  assert.deepEqual(floor.position, { x: 10, y: -0.5, z: 20 });
+  const floorTop = floor.position.y + floor.size.y / 2;
+  assert.ok(floorTop > 0, `floor top ${String(floorTop)} is above the Baseplate top at y = 0`);
+  assert.ok(
+    floorTop < config.overlapToleranceStuds,
+    "walls and props on y = 0 only touch the floor",
+  );
+});
+
+await test("a room gets a floor topped at y = 0 plus the lift and walls standing on it with the config defaults", () => {
+  const { parts } = layoutOf({
+    mapId: "one",
+    rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20 }],
+  });
+  const floor = partNamed(parts, "box-floor");
+  assert.deepEqual(floor.position, { x: 10, y: config.floorLiftStuds - 0.5, z: 20 });
   assert.deepEqual(floor.size, { x: 30, y: config.defaultWallThicknessStuds, z: 20 });
   assert.equal(floor.material, config.defaultFloorMaterial);
   const north = partNamed(parts, "box-wall-north-1");
@@ -189,4 +203,79 @@ await test("the schema rejects unknown keys, duplicate room names and empty maps
     mapSpecSchema.safeParse({ mapId: "bad", rooms: [{ ...room, width: -5 }] }).success,
     false,
   );
+});
+
+await test("each part carries a surface role and the shipped default color when there is no style", () => {
+  const { parts } = layoutOf(threeRoomInput);
+  for (const part of parts) {
+    assert.match(part.color, /^#[0-9a-f]{6}$/);
+  }
+  const floor = partNamed(parts, "start-floor");
+  const wall = partNamed(parts, "start-wall-north-1");
+  const spawn = partNamed(parts, "start-spawn");
+  assert.equal(floor.role, "floor");
+  assert.equal(wall.role, "wall");
+  assert.equal(spawn.role, "floor");
+  assert.notEqual(floor.color, wall.color);
+});
+
+await test("a style's surface colors replace the defaults by role", () => {
+  const surfaces = { floor: { color: "#112233" }, wall: { color: "#445566" } };
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
+  assert.equal(partNamed(parts, "hall-floor").color, "#112233");
+  assert.equal(partNamed(parts, "start-spawn").color, "#112233");
+  assert.equal(partNamed(parts, "hall-wall-north-1").color, "#445566");
+});
+
+await test("a style's surface material fills in where the room and the map name none", () => {
+  const surfaces = {
+    floor: { color: "#112233", material: "Slate" },
+    wall: { color: "#445566", material: "Brick" },
+  };
+  const input = { ...threeRoomInput, wallMaterial: "Wood" };
+  const { parts } = layoutMap(mapSpecSchema.parse(input), surfaces);
+  assert.equal(partNamed(parts, "hall-floor").material, "Slate");
+  assert.equal(partNamed(parts, "start-spawn").material, "Slate");
+  assert.equal(partNamed(parts, "hall-wall-north-1").material, "Wood");
+  const withoutMapMaterial = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
+  assert.equal(partNamed(withoutMapMaterial.parts, "hall-wall-north-1").material, "Brick");
+});
+
+await test("a layout without the ceilings option has no ceiling part", () => {
+  const { parts } = layoutOf(threeRoomInput);
+  assert.equal(parts.filter((part) => part.kind === "ceiling").length, 0);
+});
+
+await test("ceilings add one slab per room on top of the walls, with shipped defaults", () => {
+  const spec = mapSpecSchema.parse({ ...threeRoomInput, wallHeight: 10, wallThickness: 2 });
+  const { parts } = layoutMap(spec, undefined, { ceilings: true });
+  const ceilings = parts.filter((part) => part.kind === "ceiling");
+  assert.deepEqual(
+    ceilings.map((part) => part.name),
+    ["start", "hall", "vault"].map((room) => `${room}${config.ceilingNameSuffix}`),
+  );
+  const ceiling = partNamed(parts, "hall-ceiling");
+  assert.equal(ceiling.room, "hall");
+  assert.equal(ceiling.role, "ceiling");
+  assert.equal(ceiling.material, config.defaultCeilingMaterial);
+  assert.deepEqual(ceiling.position, { x: 40, y: 11, z: 0 });
+  assert.deepEqual(ceiling.size, { x: 40, y: 2, z: 40 });
+  const wall = partNamed(parts, "hall-wall-north-1");
+  assert.equal(ceiling.position.y - ceiling.size.y / 2, wall.position.y + wall.size.y / 2);
+  assert.equal(new Set(parts.map((part) => part.name)).size, parts.length);
+});
+
+await test("ceilings take the style's ceiling color and material", () => {
+  const surfaces = {
+    floor: { color: "#112233" },
+    wall: { color: "#445566" },
+    ceiling: { color: "#778899", material: "Metal" },
+  };
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces, { ceilings: true });
+  assert.equal(partNamed(parts, "vault-ceiling").color, "#778899");
+  assert.equal(partNamed(parts, "vault-ceiling").material, "Metal");
+});
+
+await test("the ceiling tag is a non-empty config name", () => {
+  assert.ok(config.ceilingTag.length > 0);
 });

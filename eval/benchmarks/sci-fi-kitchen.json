@@ -1,0 +1,33 @@
+{
+  "mapId": "benchmark-sci-fi-kitchen",
+  "style": { "preset": "sci-fi-station" },
+  "seed": 303,
+  "wallHeight": 14,
+  "doorWidth": 10,
+  "rooms": [
+    { "name": "prep-area", "x": 0, "z": 200, "width": 40, "depth": 30, "spawn": true },
+    {
+      "name": "cooking-line",
+      "width": 50,
+      "depth": 30,
+      "relation": {
+        "to": "prep-area",
+        "direction": "east",
+        "hallwayLength": 10,
+        "hallwayWidth": 12
+      }
+    },
+    {
+      "name": "cold-storage",
+      "width": 30,
+      "depth": 25,
+      "relation": {
+        "to": "prep-area",
+        "direction": "north",
+        "hallwayLength": 10,
+        "hallwayWidth": 12
+      }
+    }
+  ],
+  "objectives": [{ "name": "chef-station", "x": 55, "y": 3, "z": 200 }]
+}

@@ -2,11 +2,11 @@
   "mcpServers": {
     "studio": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/src/studio/launch-studio-mcp.ts"]
+      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/src/studio/launch-studio-mcp.ts"]
     },
     "roblox-kit": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/src/server/main.ts"]
+      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/src/server/main.ts"]
     }
   }
 }

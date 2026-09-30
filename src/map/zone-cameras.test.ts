@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
-import { zoneShot, type Bounds } from "./zone-cameras.ts";
+import { zoneShot, zoneShots, type Bounds } from "./zone-cameras.ts";
 
 const room: Bounds = { min: { x: 0, y: 0, z: 0 }, max: { x: 40, y: 12, z: 30 } };
 const degrees = (radians: number): number => (radians * 180) / Math.PI;
@@ -62,5 +62,73 @@ await test("coordinates are rounded to hundredths of a stud", () => {
   });
   for (const value of [...shot.cameraPosition, ...shot.lookAt]) {
     assert.equal(value, Math.round(value * 100) / 100);
+  }
+});
+
+await test("each zone gets views a, b, top and eye in that order; a, b and top look at the zone center", () => {
+  const shots = zoneShots({ name: "start", bounds: room });
+  assert.deepEqual(
+    shots.map((shot) => [shot.zone, shot.view]),
+    [
+      ["start", "a"],
+      ["start", "b"],
+      ["start", "top"],
+      ["start", "eye"],
+    ],
+  );
+  for (const shot of shots.filter((candidate) => candidate.view !== "eye")) {
+    assert.deepEqual(shot.lookAt, [20, 6, 15]);
+  }
+});
+
+await test("the eye view stands at eye height, inset from the -Z side, and looks at the room center pitched down", () => {
+  const eye = zoneShots({ name: "start", bounds: room })[3];
+  assert.ok(eye !== undefined);
+  assert.equal(eye.view, "eye");
+  assert.deepEqual(eye.cameraPosition, [
+    20,
+    room.min.y + config.eyeHeightStuds,
+    room.min.z + config.eyeInsetStuds,
+  ]);
+  assert.equal(eye.lookAt[0], 20);
+  assert.equal(eye.lookAt[2], 15);
+  const pitch = degrees(
+    Math.atan2(eye.cameraPosition[1] - eye.lookAt[1], eye.lookAt[2] - eye.cameraPosition[2]),
+  );
+  assert.ok(Math.abs(pitch - config.eyePitchDegrees) < 0.05, `pitch was ${String(pitch)}`);
+});
+
+await test("view a is the existing single zone shot", () => {
+  const [viewA] = zoneShots({ name: "start", bounds: room });
+  const { view, ...shot } = viewA ?? { view: "a" };
+  assert.equal(view, "a");
+  assert.deepEqual(shot, zoneShot({ name: "start", bounds: room }));
+});
+
+await test("view b mirrors view a across the zone center on the Z axis", () => {
+  const [viewA, viewB] = zoneShots({ name: "start", bounds: room });
+  assert.ok(viewA !== undefined && viewB !== undefined);
+  assert.equal(viewB.cameraPosition[0], viewA.cameraPosition[0]);
+  assert.equal(viewB.cameraPosition[1], viewA.cameraPosition[1]);
+  assert.equal(viewB.cameraPosition[2] - 15, -(viewA.cameraPosition[2] - 15));
+});
+
+await test("the top view sits above the zone center and every corner stays in view", () => {
+  const top = zoneShots({ name: "start", bounds: room })[2];
+  assert.ok(top !== undefined);
+  assert.equal(top.view, "top");
+  assert.equal(top.cameraPosition[0], 20);
+  assert.ok(Math.abs(top.cameraPosition[2] - 15) < 1, "the camera is over the center");
+  assert.ok(top.cameraPosition[1] > room.max.y, "the camera is above the zone");
+  const axis = top.lookAt.map((value, index) => value - (top.cameraPosition[index] ?? 0));
+  for (const [x, y, z] of corners(room)) {
+    const toCorner = [
+      x - top.cameraPosition[0],
+      y - top.cameraPosition[1],
+      z - top.cameraPosition[2],
+    ];
+    const dot = toCorner.reduce((sum, value, index) => sum + value * (axis[index] ?? 0), 0);
+    const angle = degrees(Math.acos(dot / (Math.hypot(...toCorner) * Math.hypot(...axis))));
+    assert.ok(angle <= config.studioFieldOfViewDegrees / 2, `corner at ${String(angle)} degrees`);
   }
 });

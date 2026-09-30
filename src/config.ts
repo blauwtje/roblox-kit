@@ -22,12 +22,32 @@ export const config = Object.freeze({
   floorNameSuffix: "-floor",
   spawnNameSuffix: "-spawn",
   wallNameInfix: "-wall-",
+  ceilingNameSuffix: "-ceiling",
+  /** CollectionService tag on every ceiling part; capture_zones hides the parts by it. */
+  ceilingTag: "RobloxKitCeiling",
+  /** Part attribute that holds a hidden ceiling's or near wall's own Transparency until capture_zones restores it. */
+  cutawayOriginalTransparencyAttribute: "RobloxKitOriginalTransparency",
 
   defaultFloorMaterial: "Concrete",
   defaultWallMaterial: "Brick",
+  defaultCeilingMaterial: "Concrete",
   defaultWallHeightStuds: 12,
   defaultWallThicknessStuds: 1,
+  /**
+   * How far a room floor's top rises above y = 0, the top of a place's Baseplate, so the two faces do not
+   * z-fight; kept below overlapToleranceStuds so walls and props standing on y = 0 still count as touching it.
+   */
+  floorLiftStuds: 0.04,
   defaultDoorWidthStuds: 6,
+  /** Seed of a map spec that sets none. */
+  defaultSeed: 1,
+  /** Grid that the center of a room placed by relation snaps to. */
+  gridStuds: 5,
+
+  /** How far below the ceiling a room light hangs. */
+  lightCeilingDropStuds: 1,
+  /** Height above the floor of the focal light over a spawn pad. */
+  focalLightHeightStuds: 6,
 
   /** Penetration below this depth is face contact, not an overlap. */
   overlapToleranceStuds: 0.05,
@@ -39,11 +59,46 @@ export const config = Object.freeze({
   /** Issues check_map keeps per kind in the full report; counts stay exact. */
   maxIssuesPerKind: 100,
 
+  /** Scene limits per zone camera of a spec that sets no performance budget. */
+  maxDrawCalls: 1000,
+  maxTriangles: 1_000_000,
+  /** Seconds the camera rests before its scene stats are read; a shorter wait reads the previous camera's numbers. */
+  statsSettleSeconds: 1,
+  /** Seconds one stats sampling call may take beyond the settle time of its cameras. */
+  statsCallMarginSeconds: 10,
+
+  /** Milliseconds capture_zones waits before each screen_capture: a capture right after a build or a lighting change reads the scene's unsettled light, far brighter or darker than a later one. */
+  captureSettleMs: 3000,
+  /** A capture is blank when at least this share of its pixels lies within blankCaptureLuminanceTolerance (0-255) of its median luminance; a hidden viewport measures 0.99, real captures at most 0.76. */
+  blankCaptureUniformShare: 0.95,
+  blankCaptureLuminanceTolerance: 8,
+
   /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
   cameraCoordinateDecimals: 2,
   zoneShotPitchDegrees: 55,
+  /** The eye view: the camera stands this high above the zone's lowest point, this far in from its -Z side, pitched down by eyePitchDegrees. */
+  eyeHeightStuds: 5,
+  eyeInsetStuds: 3,
+  eyePitchDegrees: 10,
   /** Studio's default camera field of view. */
   studioFieldOfViewDegrees: 70,
+  /** Long-edge range in pixels a capture is expected to fall in; capture_zones warns outside it. */
+  imageLongEdgeMin: 1000,
+  imageLongEdgeMax: 1568,
+  /** Images capture_zones returns per call, which is also one judge round's cap (1,924 tokens each at 1456x1030); further zones go to remainingZones. */
+  maxImagesPerCall: 8,
+  /** Milliseconds one blind place check of `npm run eval:studio` (a headless `claude -p` reading two images) may take. */
+  placeCheckTimeoutMs: 180_000,
+  /** Fresh reviewers that each score one room of `npm run eval:studio`; each axis takes their median. */
+  qualityReviewersPerRoom: 3,
+  /** Milliseconds one reference-scored reviewer (a headless `claude -p` reading every reference and capture) may take. */
+  qualityReviewTimeoutMs: 420_000,
+  /** The score every axis median of a room must reach to pass the quality review, on the 1-10 scale. */
+  visualPassScore: 7,
+  calibrationReferenceMeanFloor: 6,
+  calibrationBadAnchorMeanCeiling: 4,
+  calibrationAxisGap: 2,
+  evalWaveRoomTypes: ["platform", "concourse", "ticket-hall"],
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,

@@ -1,28 +1,28 @@
 ---
 name: map-building
-description: Use when building or changing a Roblox map with rooms, walls, doors, floors, spawns or terrain in Studio, or when asked to check or screenshot one. Not for Luau scripts (luau skill), playtests or animation.
+description: Use when building or changing a styled Roblox map (genre preset, rooms, walls, doors, floors, spawns, terrain) in Studio, or when asked to check or screenshot one. Not for Luau scripts (luau skill), playtests or animation.
 ---
 
 # Map building
 
-Studio's built-in tools can place parts one at a time, but a hand-placed map arrives with overlaps, floating walls and rooms nobody can walk into. The enemy is a map made from loose `execute_luau` part calls and called done unseen. The overcorrection is running every tool on every edit and pulling images nobody reads.
+Studio's built-in tools can place parts one at a time, but a hand-placed map arrives with overlaps, floating walls and rooms nobody can walk into. The enemy is a map made from loose `execute_luau` part calls, or a bare-box spec, called done unseen. The overcorrection is running every tool on every edit and pulling images nobody reads.
 
 ## When to use
 
-- Building a map from rooms, doors, spawns and terrain fills, or rebuilding one after a change.
+- Building a map from a preset, rooms, doors, spawns and terrain fills, or rebuilding one after a change.
 - Asked whether a map is walkable or sound, or to show what it looks like.
 - Not for scripts (luau skill), playtests or animation: their own skills own those.
 
 ## Process
 
-1. **Describe the map as a spec and call `build_map`.** Give `mapId` plus `rooms` (`name`, center `x`/`z`, outer `width`/`depth`, `doors`, `spawn`) and optional `terrain` fills (`block` or `ball`). A spec is data, so the same spec always builds the same parts.
-2. **Read the coordinates before writing them.** The floor top is y = 0, north is -Z, east is +X, and a door's `offset` runs along its wall from the wall center. Room names are unique, and each door must fit its wall and clear the other doors, or the call fails before touching Studio.
-3. **Set styles once at the top.** `floorMaterial`, `wallMaterial`, `wallHeight`, `wallThickness` and `doorWidth` apply to all rooms and a room overrides them; unset ones default to Concrete, Brick, 12, 1 and 6 studs. Materials are `Enum.Material` names, and an unknown one fails the build.
-4. **Change a map by calling `build_map` again with the same `mapId`.** It destroys the old Model and clears the terrain that build filled, so parts added by hand inside the Model are lost. Put hand additions outside `Workspace.RobloxKitMaps`. There is no undo step: undo recording is unavailable to `execute_luau`, so tell the user a build cannot be undone with Ctrl+Z.
-5. **Run `check_map` with the `mapId` after every build.** It reports `overlapping`, `floating` and `unreachable` issues with part paths and stud positions. Fix the spec and rebuild until `passed` is true; do not patch parts in Studio, because the next rebuild erases the patch.
-6. **Read `reachabilityChecked` before trusting `passed`.** It is false when the map has no spawn, so nothing was tested for reachability; set `spawn: true` on one room. The room holding the spawn is skipped. Only 20 issues come back inline: for `issuesOmitted` above 0, read the `reportUri` resource, which lasts until the server restarts.
-7. **Capture only when the user needs to see it.** `capture_zones` returns one angled image per room and moves the Studio camera for each shot. Pass `zones` with the few rooms in question; every image costs context. It needs a Studio viewport open on the place.
-8. **Use Studio's own tools for what a spec cannot say.** `search_game_tree` and `inspect_instance` read what exists, `insert_asset` and `generate_mesh` add props, and `execute_luau` handles one-off tweaks outside the map Model. Keep them out of the map's geometry, which `build_map` owns.
+1. **Describe the map as a spec and call `build_map`.** Give `mapId`, `rooms` (`name`, outer `width`/`depth`, `doors`, `spawn`), optional `terrain` fills (`block` or `ball`) and `objectives` (`name`, `x`, `y`, `z`). The floor top is y = 0, north is -Z, east is +X and a door `offset` runs along its wall from the wall center. Room names are unique, and a door that does not fit fails the call before touching Studio.
+2. **Pick a genre with `style: { preset }`.** Presets are `train-station`, `horror-facility`, `sci-fi-station` and `cozy-town`. A preset adds palette colors, ceilings, trims, props, lights and a Lighting recipe, so a room stops being a bare box. Change one value with `style.overrides` (any subset of the preset) instead of hand edits. Without a style, `floorMaterial`, `wallMaterial`, `wallHeight`, `wallThickness` and `doorWidth` default to Concrete, Brick, 12, 1 and 6.
+3. **Place rooms by relation, not by coordinates.** One anchor room gives `x`/`z`; every other room gives `relation: { to, direction, hallwayLength, hallwayWidth }` instead. The server snaps it to a 5-stud grid and adds a zone `<to>-<room>-hallway` with doors on both rooms, so hand-computed offsets cannot overlap. A cycle, an unknown `to` or a collision fails naming the rooms.
+4. **Keep the sizes at the preset's size rules.** A preset sets minimum doorway width, hallway width and wall height that a player needs to walk through; set `doorWidth`, `hallwayWidth` and `wallHeight` at or above them, because `check_map` reports each smaller one as a `sizeRule` issue.
+5. **Change a map by calling `build_map` again with the same `mapId`, and keep its `seed`.** The build replaces the old Model and its terrain, so parts added by hand inside it are lost; put them outside `Workspace.RobloxKitMaps`. `seed` (default 1) fixes every random variation, so the same spec and seed give the same map and a changed seed only reshuffles props. A build cannot be undone with Ctrl+Z, so tell the user.
+6. **Read `phases` in the result, not a progress bar.** The build runs six phases (shell, floors and ceilings, openings, surfaces, props, lighting) and returns `phases: [{ name, partCount }]`. A failed phase errors by name and leaves a partial Model; fix the spec and rebuild the same `mapId` to replace it.
+7. **Run `check_map` after every build with `mapId`, `preset` and `spec`.** Without `preset` and `spec`, `sizeRule` is never checked. It reports `overlapping`, `floating`, `unreachable` and `sizeRule` issues with part paths and stud positions, and `sceneStats` per zone (`drawCalls`, `triangles`). Fix the spec until `passed` is true, because the next rebuild erases a Studio patch. `reachabilityChecked` false means no spawn: set `spawn: true` on one room. For `issuesOmitted` above 0, read the `reportUri` resource.
+8. **Capture only when the user needs to see it, then judge with the visual-judge skill.** `capture_zones` moves the Studio camera and returns one top-down cutaway of the whole map (view `top`), then views `a` and `b` of each zone; pass `zones` with the few rooms in question, because every image costs context. Zones beyond the per-call image cap come back in `remainingZones`; capture them with `cutaway: false` to skip the repeated cutaway. It needs an open Studio viewport. Use Studio's own tools (`search_game_tree`, `insert_asset`, `execute_luau`) only outside the map Model, which `build_map` owns.
 
 ## Clean up the shared place
 
