@@ -11,3 +11,6 @@ Task 13 d08e58b: train-station sconce size 2 wide x 3 tall x 1 deep studs (brief
 Task 13 d08e58b: sconce flush to the wall's inner face; skipped within doorWidth/2 + half its width of a door offset, and within cornerReachStuds of a corner.
 Task 13 d08e58b: pendants form a centered grid inside the room bounds; an odd grid puts one at the center, beside the hero light.
 Task 13 d08e58b: with lightFixtures every room's center light is a shadow-casting hero (not only the largest room).
+Task 14 969a464: the fixture record carries `pendant: boolean`, because the Luau cannot tell a pendant from a sconce by position (both sit under the tagged ceiling).
+Task 14 969a464: the fixture part name gets a running number (`-fixture-<n>`), because a zone holds many fixtures.
+Task 14 969a464: the fixture Attachment keeps the name `<zone>-<role>-light`.
