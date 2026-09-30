@@ -3,6 +3,7 @@ import { z } from "zod";
 import { config } from "../config.ts";
 import { applyLighting } from "../lighting/apply-lighting.ts";
 import { placeLights } from "../lighting/light-placement.ts";
+import type { FixtureBox } from "../lighting/light-placement.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
@@ -132,14 +133,13 @@ interface LightRecord {
   position: Vector;
   range: number;
   shadows: boolean;
+  /** The visible fixture box that holds the light; absent for a light hung from the ceiling. */
+  fixture?: FixtureBox;
   brightness: number;
   color: string;
 }
 
-/**
- * The lights the style's light roles place, each tied to the floor part of the room centered where
- * the light hangs. Placements carry no room name; the first room with that center takes it.
- */
+/** The lights the style's light roles and fixtures place, each tied to the floor part of its zone's room. */
 function lightRecordsOf(
   spec: MapSpec,
   parts: PartRecord[],
@@ -148,18 +148,15 @@ function lightRecordsOf(
   if (style === undefined) {
     return [];
   }
-  return placeLights(spec, style.lightRoles).map((placement) => {
-    const room = spec.rooms.find(
-      (candidate) => candidate.x === placement.position.x && candidate.z === placement.position.z,
-    );
-    const floor = parts.find((part) => part.kind === "floor" && part.room === room?.name);
-    if (room === undefined || floor === undefined) {
+  return placeLights(spec, style.lightRoles, style.lightFixtures).map((placement) => {
+    const floor = parts.find((part) => part.kind === "floor" && part.room === placement.zone);
+    if (floor === undefined) {
       throw new Error(
-        `No room floor found for the ${placement.role} light at ${JSON.stringify(placement.position)}.`,
+        `No room floor found for the ${placement.role} light at ${JSON.stringify(placement.position)} of zone ${placement.zone}.`,
       );
     }
     const { brightness, color } = style.lightRoles[placement.role];
-    return { ...placement, zone: room.name, part: floor.name, brightness, color };
+    return { ...placement, part: floor.name, brightness, color };
   });
 }
 

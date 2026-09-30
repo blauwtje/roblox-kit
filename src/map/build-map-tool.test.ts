@@ -212,16 +212,23 @@ await test("a style sends its lights per zone and applies its lighting recipe af
   const lighting = String(connection.requests[6]?.arguments["code"]);
   assert.equal(connection.requests.length, 7);
   const { lights } = requestArguments(connection, 5) as {
-    lights: { zone: string; part: string; role: string; shadows: boolean }[];
+    lights: { zone: string; part: string; role: string; shadows: boolean; fixture?: object }[];
   };
-  assert.deepEqual(
-    lights.map((light) => [light.zone, light.part, light.role, light.shadows]),
-    [
-      ["start", "start-floor", "hero", true],
-      ["start", "start-floor", "focal", false],
-      ["hall", "hall-floor", "zoneMarker", false],
-    ],
-  );
+  for (const zone of ["start", "hall"]) {
+    const zoneLights = lights.filter((light) => light.zone === zone);
+    assert.ok(zoneLights.every((light) => light.part === `${zone}-floor`));
+    assert.deepEqual(
+      zoneLights.filter((light) => light.role === "hero").map((light) => light.shadows),
+      [true],
+    );
+    assert.equal(
+      zoneLights.filter((light) => light.role === "focal").length,
+      zone === "start" ? 1 : 0,
+    );
+    const fixtureLights = zoneLights.filter((light) => light.fixture !== undefined);
+    assert.ok(fixtureLights.length > 0, `${zone} has fixtures`);
+    assert.ok(fixtureLights.every((light) => light.role === "zoneMarker" && !light.shadows));
+  }
   assert.ok(lighting.includes('"recipe"'));
   assert.ok(lighting.includes('"mapId":"two-rooms"'));
 });

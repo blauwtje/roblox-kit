@@ -67,6 +67,12 @@
       "color": "#fff1cf"
     }
   },
+  "lightFixtures": {
+    "kind": "sconce",
+    "spacing": 10,
+    "height": 8,
+    "size": { "width": 2, "height": 3, "depth": 1 }
+  },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
   "propRules": {
     "bench": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },

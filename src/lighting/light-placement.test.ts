@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { config } from "../config.ts";
+import { cornerReachStuds } from "../map/prop-placement.ts";
 import { mapSpecSchema } from "../map/map-spec.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { placeLights } from "./light-placement.ts";
@@ -24,9 +26,21 @@ await test("puts the hero in the largest room and a zone marker in every other r
     lightRoles,
   );
   assert.deepEqual(lights, [
-    { role: "zoneMarker", position: { x: 0, y: 11, z: 0 }, range: 20, shadows: false },
-    { role: "hero", position: { x: 40, y: 11, z: 0 }, range: 60, shadows: true },
-    { role: "zoneMarker", position: { x: -40, y: 11, z: 0 }, range: 20, shadows: false },
+    {
+      zone: "hall",
+      role: "zoneMarker",
+      position: { x: 0, y: 11, z: 0 },
+      range: 20,
+      shadows: false,
+    },
+    { zone: "yard", role: "hero", position: { x: 40, y: 11, z: 0 }, range: 60, shadows: true },
+    {
+      zone: "closet",
+      role: "zoneMarker",
+      position: { x: -40, y: 11, z: 0 },
+      range: 20,
+      shadows: false,
+    },
   ]);
 });
 
@@ -53,6 +67,7 @@ await test("adds a shadowless focal light over a spawn pad", () => {
     lightRoles,
   );
   assert.deepEqual(lights.at(-1), {
+    zone: "start",
     role: "focal",
     position: { x: 50, y: 6, z: 10 },
     range: 30,
@@ -88,4 +103,97 @@ await test("only the hero casts shadows", () => {
   for (const light of lights) {
     assert.equal(light.shadows, light.role === "hero");
   }
+});
+
+const sconces: NonNullable<Preset["lightFixtures"]> = {
+  kind: "sconce",
+  spacing: 10,
+  height: 8,
+  size: { width: 2, height: 3, depth: 1 },
+};
+
+const pendants: NonNullable<Preset["lightFixtures"]> = {
+  kind: "pendant",
+  spacing: 20,
+  drop: 4,
+  size: { width: 2, height: 1, depth: 2 },
+};
+
+await test("with fixtures every room's center light is a shadow-casting hero and each fixture a shadowless zone marker", () => {
+  const lights = placeLights(
+    spec([
+      { name: "hall", x: 0, z: 0, width: 40, depth: 40 },
+      { name: "yard", x: 60, z: 0, width: 20, depth: 20 },
+    ]),
+    lightRoles,
+    sconces,
+  );
+  for (const light of lights) {
+    const isFixture = light.fixture !== undefined;
+    assert.equal(light.role, isFixture ? "zoneMarker" : "hero");
+    assert.equal(light.shadows, !isFixture);
+    if (light.fixture !== undefined) {
+      assert.deepEqual(light.position, light.fixture.position);
+    }
+  }
+  assert.deepEqual(
+    lights.filter((light) => light.fixture === undefined).map((light) => light.zone),
+    ["hall", "yard"],
+  );
+});
+
+await test("sconces repeat along every wall at the preset spacing and height, flush to the wall", () => {
+  const lights = placeLights(
+    spec([{ name: "hall", x: 0, z: 0, width: 40, depth: 40 }]),
+    lightRoles,
+    sconces,
+  );
+  const north = lights.filter((light) => light.fixture?.position.z === -18.5);
+  const inner = north.map((light) => light.position.x).sort((first, second) => first - second);
+  assert.ok(inner.length >= 2);
+  for (let index = 1; index < inner.length; index += 1) {
+    assert.equal((inner[index] ?? 0) - (inner[index - 1] ?? 0), 10);
+  }
+  for (const light of lights.filter((entry) => entry.fixture !== undefined)) {
+    assert.equal(light.position.y, 8);
+  }
+  assert.deepEqual(north[0]?.fixture?.size, { x: 2, y: 3, z: 1 });
+  const east = lights.find((light) => light.fixture?.position.x === 18.5);
+  assert.deepEqual(east?.fixture?.size, { x: 1, y: 3, z: 2 });
+});
+
+await test("sconces keep out of the corners and of door gaps", () => {
+  const room = { name: "hall", x: 0, z: 0, width: 40, depth: 40 };
+  const withoutDoor = placeLights(spec([room]), lightRoles, sconces);
+  const withDoor = placeLights(
+    spec([{ ...room, doors: [{ side: "north", offset: 5 }] }]),
+    lightRoles,
+    sconces,
+  );
+  const northOf = (lights: typeof withDoor) =>
+    lights.filter((light) => light.fixture?.position.z === -18.5);
+  assert.equal(northOf(withDoor).length, northOf(withoutDoor).length - 1);
+  for (const light of northOf(withDoor)) {
+    assert.ok(Math.abs(light.position.x - 5) >= config.defaultDoorWidthStuds / 2 + 1);
+  }
+  for (const light of withoutDoor.filter((entry) => entry.fixture !== undefined)) {
+    const alongWall = Math.min(Math.abs(light.position.x), Math.abs(light.position.z));
+    assert.ok(alongWall <= 19 - cornerReachStuds);
+  }
+});
+
+await test("pendants hang in a centered grid the drop below the ceiling", () => {
+  const lights = placeLights(
+    spec([{ name: "hall", x: 10, z: 0, width: 50, depth: 30 }]),
+    lightRoles,
+    pendants,
+  );
+  const fixtures = lights.filter((light) => light.fixture !== undefined);
+  assert.ok(fixtures.length > 1);
+  for (const light of fixtures) {
+    assert.equal(light.position.y, config.defaultWallHeightStuds - 4);
+    assert.deepEqual(light.fixture?.size, { x: 2, y: 1, z: 2 });
+  }
+  const xs = fixtures.map((light) => light.position.x - 10);
+  assert.equal(Math.min(...xs), -Math.max(...xs));
 });

@@ -22,6 +22,32 @@ const lightRole = z.strictObject({
   color: hexColor,
 });
 
+const fixtureSize = z.strictObject({
+  width: z.number().positive(),
+  height: z.number().positive(),
+  depth: z.number().positive(),
+});
+
+/**
+ * The visible light fixtures repeated in each room. A sconce sits against the walls, `height` studs
+ * above the floor; a pendant hangs in a grid, `drop` studs below the ceiling. Both measure to the
+ * fixture's center and repeat every `spacing` studs.
+ */
+const lightFixtures = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("sconce"),
+    spacing: z.number().positive(),
+    height: z.number().positive(),
+    size: fixtureSize,
+  }),
+  z.strictObject({
+    kind: z.literal("pendant"),
+    spacing: z.number().positive(),
+    drop: z.number().positive(),
+    size: fixtureSize,
+  }),
+]);
+
 const atmosphere = z.strictObject({
   /** Roblox clamps Density to 0..1 (U9). */
   Density: z.number().min(0).max(1),
@@ -134,6 +160,8 @@ export const presetSchema = z.strictObject({
     focal: lightRole,
     hero: lightRole,
   }),
+  /** Fixtures that hold a zone-marker light in a repeating pattern; absent leaves one center light per room. */
+  lightFixtures: lightFixtures.optional(),
   /** Names of the props this genre may place. */
   propKit: z.array(z.string().min(1)).min(1),
   /** Scale and rotation rules keyed by prop kind, for every kind a room of this genre can place. */

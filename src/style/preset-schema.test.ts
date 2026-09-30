@@ -247,3 +247,29 @@ await test("presetOverridesSchema accepts a partial avatar height and a prop rul
   };
   assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
 });
+
+const fixtureSize = { width: 2, height: 3, depth: 1 };
+
+await test("presetSchema accepts a sconce or a pendant fixture pattern, and works without one", () => {
+  const sconce = { kind: "sconce", spacing: 10, height: 8, size: fixtureSize };
+  const pendant = { kind: "pendant", spacing: 12, drop: 4, size: fixtureSize };
+  for (const lightFixtures of [sconce, pendant, undefined]) {
+    const result = presetSchema.safeParse({ ...validPreset(), lightFixtures });
+    assert.equal(result.success, true, JSON.stringify(lightFixtures));
+  }
+});
+
+await test("presetSchema rejects a fixture pattern with another kind's field, a missing field or a non-positive spacing", () => {
+  const invalid = [
+    { kind: "sconce", spacing: 10, drop: 4, size: fixtureSize },
+    { kind: "pendant", spacing: 10, height: 8, size: fixtureSize },
+    { kind: "sconce", spacing: 10, size: fixtureSize },
+    { kind: "sconce", spacing: 0, height: 8, size: fixtureSize },
+    { kind: "sconce", spacing: 10, height: 8, size: { width: 2, height: 3 } },
+    { kind: "lantern", spacing: 10, height: 8, size: fixtureSize },
+  ];
+  for (const lightFixtures of invalid) {
+    const result = presetSchema.safeParse({ ...validPreset(), lightFixtures });
+    assert.equal(result.success, false, JSON.stringify(lightFixtures));
+  }
+});
