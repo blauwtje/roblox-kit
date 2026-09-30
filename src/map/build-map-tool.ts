@@ -16,6 +16,7 @@ import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spe
 import { placeArrangements } from "./arrangement-placement.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
+import { doorwayClearanceBoxes } from "./size-rules.ts";
 import { buildRoomDetails, type DetailPart } from "./room-details.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
@@ -233,7 +234,14 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
 export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; warnings: string[] } {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
-  const setPieces = placeSetPieces(spec, style.roomTypes, style.palette.accent, seed);
+  const agent = { radius: style.sizeRules.agentRadius, height: style.sizeRules.agentHeight };
+  const setPieces = placeSetPieces(
+    spec,
+    style.roomTypes,
+    style.palette.accent,
+    seed,
+    doorwayClearanceBoxes(spec, agent),
+  );
   const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
   return {
     props: [

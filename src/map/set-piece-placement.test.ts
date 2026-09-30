@@ -4,6 +4,7 @@ import { mapSpecSchema } from "./map-spec.ts";
 import type { MapSpec } from "./map-spec.ts";
 import { propDimensions, propKinds } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
+import { doorwayClearanceBoxes } from "./size-rules.ts";
 import type { SetPieceRecord } from "./set-piece-placement.ts";
 import { loadPresets } from "../style/load-preset.ts";
 
@@ -264,4 +265,44 @@ await test("every set piece a bundled preset names has a generator", async () =>
       }
     }
   }
+});
+
+await test("placeSetPieces keeps the track bed and platform edge out of every doorway clearance box", () => {
+  // A west door whose clearance box reaches into the north wall's strip, where the track pieces run.
+  const spec = mapSpecSchema.parse({
+    ...stationSpec,
+    rooms: stationSpec.rooms.map((room) =>
+      room.name === "platform"
+        ? { ...room, doors: [...room.doors, { side: "west", offset: -12 }] }
+        : room,
+    ),
+  });
+  const agent = { radius: 2, height: 5 };
+  const clearances = doorwayClearanceBoxes(spec, agent);
+  const unclamped = placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  const [unclampedBed] = piecesOf("track-bed", unclamped);
+  assert.ok(unclampedBed !== undefined);
+
+  const { pieces, warnings } = placeSetPieces(spec, roomTypes, accent, 1, clearances);
+
+  assert.deepEqual(warnings, []);
+  const tracks = [...piecesOf("track-bed", pieces), ...piecesOf("platform-edge", pieces)];
+  assert.equal(tracks.length, 2);
+  for (const track of tracks) {
+    for (const clearance of clearances) {
+      const overlapsX =
+        track.pivot.x - track.size.x / 2 < clearance.max.x &&
+        track.pivot.x + track.size.x / 2 > clearance.min.x;
+      const overlapsZ =
+        track.pivot.z - track.size.z / 2 < clearance.max.z &&
+        track.pivot.z + track.size.z / 2 > clearance.min.z;
+      assert.ok(
+        !(overlapsX && overlapsZ),
+        `${track.kind} stands in the ${clearance.side} doorway of ${clearance.room}`,
+      );
+    }
+  }
+  assert.ok(tracks.every((track) => track.size.x < unclampedBed.size.x));
+  assert.equal(tracks[0]?.pivot.x, tracks[1]?.pivot.x);
+  assert.equal(tracks[0]?.size.x, tracks[1]?.size.x);
 });

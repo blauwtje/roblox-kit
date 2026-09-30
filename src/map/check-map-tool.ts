@@ -18,7 +18,7 @@ import {
   type PerformanceBudget,
 } from "./map-spec.ts";
 import { findPropIssues, propRecordSchema } from "./prop-rules.ts";
-import { findSizeRuleIssues } from "./size-rules.ts";
+import { doorwayClearanceBoxes, findSizeRuleIssues } from "./size-rules.ts";
 import { zoneShot } from "./zone-cameras.ts";
 
 const presets = await loadPresets();
@@ -31,6 +31,7 @@ const luauCountsSchema = z.strictObject({
   overlapping: z.number().int(),
   floating: z.number().int(),
   unreachable: z.number().int(),
+  placement: z.number().int(),
 });
 
 const issueCountsSchema = luauCountsSchema.extend({
@@ -96,6 +97,7 @@ const checkedMapSchema = z.strictObject({
     overlapping: z.array(checkIssueSchema),
     floating: z.array(checkIssueSchema),
     unreachable: z.array(checkIssueSchema),
+    placement: z.array(checkIssueSchema),
   }),
   warnings: z.array(z.string()),
 });
@@ -208,6 +210,7 @@ export function createCheckMapTool(
       `Checks a map built by build_map for overlapping parts, floating parts (not connected to the ground or terrain) and zones and objective points that a walk from any SpawnLocation cannot reach (Studio pathfinding; a pair of spawn and target over ${String(MAX_PATH_STUDS)} studs apart is reported as an unreachable issue whose detail starts with tooFar). ` +
       `Optional objectives [{ name, x, y, z }] add targets and an optional preset (a build_map style preset name) sets the agent size from its size rules. ` +
       `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. With a preset it also reads the map's props and reports scale issues (a prop's height outside the preset's heightRatio of the avatar height, naming the prop) and rotation issues (a prop whose yaw is not a multiple of 90 degrees or that is tilted, where the preset's rule does not allow free rotation). ` +
+      `It also reports placement issues for each prop (at its declared size about its pivot) that has no floor part under its center and four footprint corners, overlaps a wall part, or stands inside a doorway's clearance box (the opening's width, the wall's thickness plus an agent radius on each face, and the agent's height; needs the spec, else only the floor and wall rules apply); the detail names the rule. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles): withinBudget is false and warnings name each zone over a limit, without failing passed; warnings also name any model outside the map that stands between a spawn and a target it cannot reach; issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
       `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
@@ -239,10 +242,13 @@ export function createCheckMapTool(
           overlapToleranceStuds: config.overlapToleranceStuds,
           maxIssuesPerKind: config.maxIssuesPerKind,
           floorNameSuffix: config.floorNameSuffix,
+          wallNameInfix: config.wallNameInfix,
           agentRadiusStuds: agent.radius,
           agentHeightStuds: agent.height,
           maxPathStuds: MAX_PATH_STUDS,
           objectives: input.objectives ?? input.spec?.objectives ?? [],
+          // Doorway clearance needs the spec's layout; without a spec no doorway is known.
+          doorways: input.spec === undefined ? [] : doorwayClearanceBoxes(input.spec, agent),
         },
         resultSchema: checkedMapSchema,
       });
@@ -260,6 +266,7 @@ export function createCheckMapTool(
         ...checked.issues.overlapping,
         ...checked.issues.floating,
         ...checked.issues.unreachable,
+        ...checked.issues.placement,
         ...sizeRuleIssues.slice(0, config.maxIssuesPerKind),
         ...scaleIssues.slice(0, config.maxIssuesPerKind),
         ...rotationIssues.slice(0, config.maxIssuesPerKind),
@@ -276,6 +283,7 @@ export function createCheckMapTool(
         counts.overlapping +
         counts.floating +
         counts.unreachable +
+        counts.placement +
         counts.sizeRule +
         counts.scale +
         counts.rotation;

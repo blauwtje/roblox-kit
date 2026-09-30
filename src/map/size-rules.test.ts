@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
-import { findSizeRuleIssues } from "./size-rules.ts";
+import { doorwayClearanceBoxes, findDoorways, findSizeRuleIssues } from "./size-rules.ts";
 
 const rules = { minDoorwayWidth: 10, minHallwayWidth: 12, minWallHeight: 12 };
 
@@ -79,4 +79,30 @@ await test("a hallway shorter than it is wide is measured across its direction, 
     assert.equal(narrow.length, 1, `${direction}: 8 wide`);
     assert.match(narrow[0]?.detail ?? "", /Hallway "hub-vault-hallway" is 8 studs wide/);
   }
+});
+
+await test("findDoorways lists each opening with its room, side and width", () => {
+  const spec = relationMapSpecSchema.parse({
+    mapId: "m",
+    rooms: [{ ...hub, doors: [{ side: "east", offset: 5 }] }],
+  });
+  const [doorway, ...others] = findDoorways(spec);
+  assert.ok(doorway);
+  assert.deepEqual(others, []);
+  assert.equal(doorway.room, "hub");
+  assert.equal(doorway.side, "east");
+  assert.equal(doorway.width, 6);
+  assert.deepEqual(doorway.position, { x: 19.5, y: 0, z: 5 });
+});
+
+await test("a doorway's clearance box spans its width, the wall and an agent radius on both faces, and the agent height", () => {
+  const spec = relationMapSpecSchema.parse({
+    mapId: "m",
+    rooms: [{ ...hub, doors: [{ side: "east", offset: 5 }] }],
+  });
+  const [box] = doorwayClearanceBoxes(spec, { radius: 1.5, height: 5 });
+  assert.ok(box);
+  assert.equal(box.room, "hub");
+  assert.deepEqual(box.min, { x: 19.5 - (0.5 + 3), y: 0, z: 5 - 3 });
+  assert.deepEqual(box.max, { x: 19.5 + (0.5 + 3), y: 5, z: 5 + 3 });
 });

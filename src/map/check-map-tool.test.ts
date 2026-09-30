@@ -26,8 +26,8 @@ function checkedMap(overrides: object = {}): string {
     partCount: 9,
     zoneCount: 2,
     reachabilityChecked: true,
-    counts: { overlapping: 0, floating: 0, unreachable: 0 },
-    issues: { overlapping: [], floating: [], unreachable: [] },
+    counts: { overlapping: 0, floating: 0, unreachable: 0, placement: 0 },
+    issues: { overlapping: [], floating: [], unreachable: [], placement: [] },
     warnings: [],
     ...overrides,
   });
@@ -114,8 +114,8 @@ await test("issues are listed inline up to a cap and all of them are stored unde
   const unreachable = [issueOf("unreachable", "vault-floor")];
   const studio = studioReturning(
     checkedMap({
-      counts: { overlapping: 15, floating: 10, unreachable: 1 },
-      issues: { overlapping, floating, unreachable },
+      counts: { overlapping: 15, floating: 10, unreachable: 1, placement: 0 },
+      issues: { overlapping, floating, unreachable, placement: [] },
     }),
   );
   const { reports, tool, run } = setup(studio);
@@ -127,6 +127,7 @@ await test("issues are listed inline up to a cap and all of them are stored unde
     overlapping: 15,
     floating: 10,
     unreachable: 1,
+    placement: 0,
     sizeRule: 0,
     scale: 0,
     rotation: 0,
@@ -163,8 +164,13 @@ await test("the server serves a stored report at its linked uri and refuses an u
   const tool = createCheckMapTool(reports);
   const studio = studioReturning(
     checkedMap({
-      counts: { overlapping: 0, floating: 1, unreachable: 0 },
-      issues: { overlapping: [], floating: [issueOf("floating", "crate")], unreachable: [] },
+      counts: { overlapping: 0, floating: 1, unreachable: 0, placement: 0 },
+      issues: {
+        overlapping: [],
+        floating: [issueOf("floating", "crate")],
+        unreachable: [],
+        placement: [],
+      },
     }),
   );
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -228,7 +234,7 @@ await test("check-map.luau reports a part as floating when none of five downward
     floatingSource.indexOf("\nend"),
   );
   assert.equal(originBlock.match(/Vector3\.new\(/g)?.length, 5);
-  assert.ok(floatingSource.includes("box.part.Position.X"));
+  assert.ok(floatingSource.includes("Vector3.new(center.X, originY, center.Z)"));
   assert.ok(floatingSource.includes("workspace:Raycast(origin, reach, params)"));
   assert.ok(floatingSource.includes("Vector3.new(0, -2 * tolerance, 0)"));
   // The part's own body is excluded from its rays, and non-colliding parts are neither cast from nor hit.
@@ -295,11 +301,12 @@ await test("a warning from Studio naming a model outside the map is passed on", 
   const { tool, run } = setup(
     studioReturning(
       checkedMap({
-        counts: { overlapping: 0, floating: 0, unreachable: 1 },
+        counts: { overlapping: 0, floating: 0, unreachable: 1, placement: 0 },
         issues: {
           overlapping: [],
           floating: [],
           unreachable: [issueOf("unreachable", "vault-floor")],
+          placement: [],
         },
         warnings: [blocked],
       }),
@@ -391,6 +398,7 @@ await test("a preset with a spec adds sizeRule issues to the counts and the repo
       overlapping: 0,
       floating: 0,
       unreachable: 0,
+      placement: 0,
       sizeRule: 0,
       scale: 0,
       rotation: 0,
@@ -424,4 +432,73 @@ await test("with a preset, props out of scale or off the grid become scale and r
   assert.equal(structured.counts.scale, 1);
   assert.equal(structured.counts.rotation, 1);
   assert.equal(reports.get(structured.reportId)?.issues.length, 2);
+});
+
+await test("placement issues from Studio are counted, fail the check and keep their part paths", async () => {
+  const placement = [
+    issueOf("placement", "bench-1"),
+    {
+      ...issueOf("placement", "bench-2"),
+      parts: [partPath("bench-2"), partPath("hall-wall-east-1")],
+    },
+  ];
+  const studio = studioReturning(
+    checkedMap({
+      counts: { overlapping: 0, floating: 0, unreachable: 0, placement: 2 },
+      issues: { overlapping: [], floating: [], unreachable: [], placement },
+    }),
+  );
+  const { reports, run } = setup(studio);
+  const result = await run({ mapId: "arena" });
+  const structured = result.structuredContent as {
+    passed: boolean;
+    counts: { placement: number };
+    issues: CheckIssue[];
+    reportId: string;
+  };
+  assert.equal(structured.passed, false);
+  assert.equal(structured.counts.placement, 2);
+  assert.deepEqual(
+    structured.issues.map((issue) => issue.parts),
+    [[partPath("bench-1")], [partPath("bench-2"), partPath("hall-wall-east-1")]],
+  );
+  assert.equal(reports.get(structured.reportId)?.issues.length, 2);
+});
+
+await test("check-map.luau sends doorway clearance boxes from the spec and reports placement by three rules", async () => {
+  const spec = {
+    mapId: "arena",
+    rooms: [{ name: "a", x: 0, z: 0, width: 30, depth: 30, doors: [{ side: "east", offset: 0 }] }],
+  };
+  const studio = studioReturning(checkedMap());
+  await setup(studio).run({ mapId: "arena", preset: "train-station", spec });
+  const code = String(studio.requests[0]?.arguments["code"]);
+  assert.match(code, /"doorways":\[\{"room":"a","side":"east","min":\{/);
+  assert.match(code, /"wallNameInfix":"-wall-"/);
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  assert.ok(source.includes("no floor under its center or footprint corners"));
+  assert.ok(source.includes("overlaps the wall part"));
+  assert.ok(source.includes("inside the doorway clearance box"));
+});
+
+await test("check-map.luau flags a free-hanging prop with no floor but passes one whose bounds touch a wall", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const wallSource = source.slice(
+    source.indexOf("local function touchOrOverlap("),
+    source.indexOf("local function findPlacement("),
+  );
+  // Touching counts on every axis within the tolerance: a sign against a wall face is supported, bounds apart are not.
+  assert.ok(
+    wallSource.includes(
+      "extent.X >= -tolerance and extent.Y >= -tolerance and extent.Z >= -tolerance",
+    ),
+  );
+  assert.ok(wallSource.includes("if touchOrOverlap(bounds, wall) then\n\t\t\treturn true"));
+  assert.ok(wallSource.includes("return false"));
+  // The floor rule fires only when the prop neither rests on a floor nor touches a wall.
+  assert.ok(
+    source.includes(
+      "if not restsOnFloor(bounds, floorParams) and not restsOnWall(bounds, walls) then",
+    ),
+  );
 });

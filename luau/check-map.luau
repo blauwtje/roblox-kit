@@ -1,5 +1,6 @@
 --!strict
--- Checks one built map for overlapping parts, floating parts and zones or objectives a spawn cannot reach.
+-- Checks one built map for overlapping parts, floating parts, props out of place (not on a floor, inside a wall or
+-- in a doorway clearance box) and zones or objectives a spawn cannot reach.
 -- Returns counts plus capped issue lists, kept short because execute_luau cuts long results, and a warning per
 -- instance outside the map that stands in the way of a failed walk.
 type Arguments = {
@@ -8,10 +9,13 @@ type Arguments = {
 	overlapToleranceStuds: number,
 	maxIssuesPerKind: number,
 	floorNameSuffix: string,
+	wallNameInfix: string,
 	agentRadiusStuds: number,
 	agentHeightStuds: number,
 	maxPathStuds: number,
 	objectives: { { name: string, x: number, y: number, z: number } },
+	-- The clear space in front of each doorway, in world studs.
+	doorways: { { room: string, side: string, min: Position, max: Position } },
 }
 
 type Position = { x: number, y: number, z: number }
@@ -21,6 +25,11 @@ type Issue = {
 	parts: { string },
 	position: Position,
 	detail: string,
+}
+
+type Bounds = {
+	min: Vector3,
+	max: Vector3,
 }
 
 type Box = {
@@ -54,17 +63,23 @@ local function findMapModel(): Model
 	return model
 end
 
--- The axis-aligned box around a part in world space, which is exact for the unrotated parts build_map makes.
-local function boxOf(part: BasePart): Box
-	local halfSize = part.Size / 2
-	local rotation = part.CFrame.Rotation
+-- The axis-aligned bounds around a box of the given size at a pose in world space.
+local function boundsOf(pose: CFrame, size: Vector3): Bounds
+	local halfSize = size / 2
+	local rotation = pose.Rotation
 	local right, up, back = rotation.RightVector, rotation.UpVector, -rotation.LookVector
 	local halfExtent = Vector3.new(
 		math.abs(right.X) * halfSize.X + math.abs(up.X) * halfSize.Y + math.abs(back.X) * halfSize.Z,
 		math.abs(right.Y) * halfSize.X + math.abs(up.Y) * halfSize.Y + math.abs(back.Y) * halfSize.Z,
 		math.abs(right.Z) * halfSize.X + math.abs(up.Z) * halfSize.Y + math.abs(back.Z) * halfSize.Z
 	)
-	return { part = part, min = part.Position - halfExtent, max = part.Position + halfExtent }
+	return { min = pose.Position - halfExtent, max = pose.Position + halfExtent }
+end
+
+-- The axis-aligned box around a part in world space, which is exact for the unrotated parts build_map makes.
+local function boxOf(part: BasePart): Box
+	local bounds = boundsOf(part.CFrame, part.Size)
+	return { part = part, min = bounds.min, max = bounds.max }
 end
 
 local function collectBoxes(model: Model): { Box }
@@ -108,11 +123,11 @@ local function isGround(box: Box): boolean
 end
 
 local function newIssueLists(): { [string]: { Issue } }
-	return { overlapping = {}, floating = {}, unreachable = {} }
+	return { overlapping = {}, floating = {}, unreachable = {}, placement = {} }
 end
 
 local issues = newIssueLists()
-local issueCounts: { [string]: number } = { overlapping = 0, floating = 0, unreachable = 0 }
+local issueCounts: { [string]: number } = { overlapping = 0, floating = 0, unreachable = 0, placement = 0 }
 
 local function addIssue(issue: Issue)
 	issueCounts[issue.kind] += 1
@@ -123,7 +138,7 @@ local function addIssue(issue: Issue)
 end
 
 -- How far two boxes interpenetrate along each axis; negative on an axis where they are apart.
-local function overlapExtent(first: Box, second: Box): Vector3
+local function overlapExtent(first: Bounds, second: Bounds): Vector3
 	return Vector3.new(
 		math.min(first.max.X, second.max.X) - math.max(first.min.X, second.min.X),
 		math.min(first.max.Y, second.max.Y) - math.max(first.min.Y, second.min.Y),
@@ -184,13 +199,14 @@ end
 
 -- The five points a floating part is cast from: the middle of its bottom face and its four footprint corners,
 -- each pulled in by the tolerance so a corner ray does not slip past the edge of the part below.
-local function rayOrigins(box: Box): { Vector3 }
+local function rayOrigins(bounds: Bounds): { Vector3 }
 	local inset = arguments.overlapToleranceStuds
-	local originY = box.min.Y + inset
-	local minX, maxX = box.min.X + inset, box.max.X - inset
-	local minZ, maxZ = box.min.Z + inset, box.max.Z - inset
+	local originY = bounds.min.Y + inset
+	local minX, maxX = bounds.min.X + inset, bounds.max.X - inset
+	local minZ, maxZ = bounds.min.Z + inset, bounds.max.Z - inset
+	local center = (bounds.min + bounds.max) / 2
 	return {
-		Vector3.new(box.part.Position.X, originY, box.part.Position.Z),
+		Vector3.new(center.X, originY, center.Z),
 		Vector3.new(minX, originY, minZ),
 		Vector3.new(minX, originY, maxZ),
 		Vector3.new(maxX, originY, minZ),
@@ -260,6 +276,97 @@ local function findFloating(model: Model, boxes: { Box })
 				position = toPosition(part.Position),
 				detail = `no part or terrain within {tolerance} studs below its center or footprint corners leads down to the ground`,
 			})
+		end
+	end
+end
+
+-- Whether two bounds interpenetrate by more than the tolerance on every axis, so bounds that only touch do not count.
+local function interpenetrate(first: Bounds, second: Bounds): boolean
+	local extent = overlapExtent(first, second)
+	local tolerance = arguments.overlapToleranceStuds
+	return extent.X > tolerance and extent.Y > tolerance and extent.Z > tolerance
+end
+
+-- Whether any of a prop's five downward rays lands on a floor part within the tolerance below its bottom face.
+local function restsOnFloor(bounds: Bounds, floorParams: RaycastParams): boolean
+	local reach = Vector3.new(0, -2 * arguments.overlapToleranceStuds, 0)
+	for _, origin in rayOrigins(bounds) do
+		if workspace:Raycast(origin, reach, floorParams) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Whether two bounds touch or interpenetrate within the tolerance on every axis.
+local function touchOrOverlap(first: Bounds, second: Bounds): boolean
+	local extent = overlapExtent(first, second)
+	local tolerance = arguments.overlapToleranceStuds
+	return extent.X >= -tolerance and extent.Y >= -tolerance and extent.Z >= -tolerance
+end
+
+-- Whether a prop's bounds touch a wall part, which carries a wall-mounted prop such as a sign.
+local function restsOnWall(bounds: Bounds, walls: { Box }): boolean
+	for _, wall in walls do
+		if touchOrOverlap(bounds, wall) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Each ProceduralModel prop, at its declared Size about its pivot, must rest on a floor part or touch a wall part,
+-- stay out of every wall part and stay out of every doorway clearance box. A prop standing on another prop or on a set piece has no floor
+-- under its rays and is reported; the rule can be lifted by adding those parts to the rays' include list.
+local function findPlacement(model: Model, boxes: { Box }, floors: { BasePart })
+	local walls: { Box } = {}
+	for _, box in boxes do
+		if string.find(box.part.Name, arguments.wallNameInfix, 1, true) then
+			table.insert(walls, box)
+		end
+	end
+	local floorParams = RaycastParams.new()
+	floorParams.FilterType = Enum.RaycastFilterType.Include
+	floorParams.FilterDescendantsInstances = floors
+	for _, child in model:GetChildren() do
+		if not child:IsA("ProceduralModel") then
+			continue
+		end
+		local pivot = child:GetPivot()
+		local bounds = boundsOf(pivot, child.Size)
+		local path = child:GetFullName()
+		local position = toPosition(pivot.Position)
+		if not restsOnFloor(bounds, floorParams) and not restsOnWall(bounds, walls) then
+			addIssue({
+				kind = "placement",
+				parts = { path },
+				position = position,
+				detail = `no floor under its center or footprint corners within {arguments.overlapToleranceStuds * 2} studs below it, and it touches no wall`,
+			})
+		end
+		for _, wall in walls do
+			if interpenetrate(bounds, wall) then
+				addIssue({
+					kind = "placement",
+					parts = { path, wall.part:GetFullName() },
+					position = position,
+					detail = `overlaps the wall part {wall.part.Name}`,
+				})
+			end
+		end
+		for _, doorway in arguments.doorways do
+			local clearance = {
+				min = Vector3.new(doorway.min.x, doorway.min.y, doorway.min.z),
+				max = Vector3.new(doorway.max.x, doorway.max.y, doorway.max.z),
+			}
+			if interpenetrate(bounds, clearance) then
+				addIssue({
+					kind = "placement",
+					parts = { path },
+					position = position,
+					detail = `inside the doorway clearance box of the {doorway.side} wall of room "{doorway.room}"`,
+				})
+			end
 		end
 	end
 end
@@ -449,6 +556,7 @@ local boxes = collectBoxes(model)
 findOverlaps(model, boxes)
 findFloating(model, boxes)
 local spawns, floors = collectSpawnsAndFloors(boxes)
+findPlacement(model, boxes, floors)
 findUnreachableTargets(model, spawns, collectTargets(floors))
 
 return HttpService:JSONEncode({

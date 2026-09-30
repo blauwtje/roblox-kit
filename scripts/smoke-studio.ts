@@ -649,6 +649,7 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     output.counts.overlapping +
     output.counts.floating +
     output.counts.unreachable +
+    output.counts.placement +
     output.counts.sizeRule +
     output.counts.scale +
     output.counts.rotation;
@@ -659,6 +660,7 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     overlapping: 0,
     floating: 0,
     unreachable: 0,
+    placement: 0,
     sizeRule: 0,
     scale: 0,
     rotation: 0,

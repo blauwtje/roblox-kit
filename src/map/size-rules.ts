@@ -11,7 +11,7 @@ export type SizeRules = Pick<
   "minDoorwayWidth" | "minHallwayWidth" | "minWallHeight"
 >;
 
-type Side = "north" | "south" | "east" | "west";
+export type Side = "north" | "south" | "east" | "west";
 
 /** Gaps narrower than this are rounding, not doorways. */
 const GAP_EPSILON_STUDS = 1e-6;
@@ -91,24 +91,85 @@ function doorwaysOfSide(room: RoomParts, side: Side, walls: PartRecord[]) {
   return doorways;
 }
 
-function doorwayIssues(room: RoomParts, rules: SizeRules, mapId: string): CheckIssue[] {
-  const issues: CheckIssue[] = [];
-  const sides: Side[] = ["north", "south", "east", "west"];
-  for (const side of sides) {
+/** One opening in a room's wall, as laid out: where it stands, how wide it is and how thick the wall is. */
+export interface Doorway {
+  room: string;
+  side: Side;
+  width: number;
+  /** The center of the opening in the wall's middle, at y = 0. */
+  position: { x: number; y: number; z: number };
+  wallThickness: number;
+  /** The wall parts beside the opening, or the floor when the side has no wall. */
+  involved: PartRecord[];
+}
+
+const sides: Side[] = ["north", "south", "east", "west"];
+
+function doorwaysOfRoom(room: RoomParts): Doorway[] {
+  return sides.flatMap((side) => {
     const walls = room.walls.filter((wall) => sideOf(room, wall) === side);
-    const involved = walls.length > 0 ? walls : [room.floor];
-    for (const doorway of doorwaysOfSide(room, side, walls)) {
-      if (doorway.width < rules.minDoorwayWidth) {
-        issues.push({
-          kind: "sizeRule",
-          parts: involved.map((part) => partPath(mapId, part)),
-          position: doorway.position,
-          detail: `Doorway on the ${side} wall of room "${room.name}" is ${String(doorway.width)} studs wide; the preset needs at least ${String(rules.minDoorwayWidth)}.`,
-        });
-      }
-    }
-  }
-  return issues;
+    return doorwaysOfSide(room, side, walls).map((doorway) => ({
+      ...doorway,
+      room: room.name,
+      side,
+      wallThickness: room.floor.size.y,
+      involved: walls.length > 0 ? walls : [room.floor],
+    }));
+  });
+}
+
+function doorwayIssues(room: RoomParts, rules: SizeRules, mapId: string): CheckIssue[] {
+  return doorwaysOfRoom(room)
+    .filter((doorway) => doorway.width < rules.minDoorwayWidth)
+    .map((doorway) => ({
+      kind: "sizeRule",
+      parts: doorway.involved.map((part) => partPath(mapId, part)),
+      position: doorway.position,
+      detail: `Doorway on the ${doorway.side} wall of room "${room.name}" is ${String(doorway.width)} studs wide; the preset needs at least ${String(rules.minDoorwayWidth)}.`,
+    }));
+}
+
+/** Every doorway of the map the spec lays out, in the layout build_map builds. */
+export function findDoorways(spec: RelationMapSpec): Doorway[] {
+  return roomsOf(layoutMap(resolveRelations(spec)).parts).flatMap(doorwaysOfRoom);
+}
+
+/** The clear space in front of a doorway, in world studs. */
+export interface DoorwayClearanceBox {
+  room: string;
+  side: Side;
+  min: { x: number; y: number; z: number };
+  max: { x: number; y: number; z: number };
+}
+
+/**
+ * The volume a walking agent needs to pass each doorway: the opening's width along the wall, the wall's thickness
+ * plus an agent radius on both faces across it, and from the floor up to the agent's height.
+ */
+export function doorwayClearanceBoxes(
+  spec: RelationMapSpec,
+  agent: { radius: number; height: number },
+): DoorwayClearanceBox[] {
+  return findDoorways(spec).map((doorway) => {
+    const alongX = doorway.side === "north" || doorway.side === "south";
+    const alongHalf = doorway.width / 2;
+    const acrossHalf = doorway.wallThickness / 2 + 2 * agent.radius;
+    const { x, z } = doorway.position;
+    return {
+      room: doorway.room,
+      side: doorway.side,
+      min: {
+        x: x - (alongX ? alongHalf : acrossHalf),
+        y: 0,
+        z: z - (alongX ? acrossHalf : alongHalf),
+      },
+      max: {
+        x: x + (alongX ? alongHalf : acrossHalf),
+        y: agent.height,
+        z: z + (alongX ? acrossHalf : alongHalf),
+      },
+    };
+  });
 }
 
 function wallHeightIssues(room: RoomParts, rules: SizeRules, mapId: string): CheckIssue[] {
