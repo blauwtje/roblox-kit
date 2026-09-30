@@ -20,7 +20,6 @@ export const qualityAxes = [
 
 export type QualityAxis = (typeof qualityAxes)[number];
 
-/** One axis of a reviewer's answer: a note of what is visible in which image, and the score it supports. */
 const axisAnswerSchema = z.object({
   evidence: z.string().min(1),
   score: z.number().int().min(1).max(10),
@@ -41,7 +40,6 @@ export type QualityAnswer = z.output<typeof qualityAnswerSchema>;
 /** The median score of each axis over a room's reviewers. */
 export type AxisMedians = Record<QualityAxis, number>;
 
-/** Each reviewer's evidence note per axis, in reviewer order. */
 export type AxisEvidence = Record<QualityAxis, string[]>;
 
 /**
@@ -93,7 +91,7 @@ export function qualityBrief(
 }
 
 /** The middle score of `scores`; the lower middle one when their count is even. */
-function median(scores: number[]): number {
+export function median(scores: number[]): number {
   const sorted = [...scores].sort((left, right) => left - right);
   return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
 }
@@ -107,7 +105,6 @@ export function axisMedians(answers: QualityAnswer[]): AxisMedians {
   return medians;
 }
 
-/** The reviewers' evidence notes, gathered per axis. */
 export function axisEvidence(answers: QualityAnswer[]): AxisEvidence {
   const evidence = {} as AxisEvidence;
   for (const axis of qualityAxes) {

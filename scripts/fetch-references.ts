@@ -21,6 +21,7 @@ const referenceSetSchema = z.array(
     targetId: z.number().int(),
     version: z.string().min(1),
     note: z.string().min(1),
+    preset: z.string().min(1),
   }),
 );
 

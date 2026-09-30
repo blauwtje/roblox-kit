@@ -92,6 +92,9 @@ export const config = Object.freeze({
   qualityReviewTimeoutMs: 420_000,
   /** The score every axis median of a room must reach to pass the quality review, on the 1-10 scale. */
   visualPassScore: 7,
+  calibrationReferenceMeanFloor: 6,
+  calibrationBadAnchorMeanCeiling: 4,
+  calibrationAxisGap: 2,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,
