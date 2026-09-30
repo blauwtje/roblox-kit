@@ -286,10 +286,11 @@ function pieceFacingEntry(
 }
 
 /**
- * A sign at a door, its label on both faces. On a north or south wall it hangs in the doorway under the arch
- * lintel, its back face on the room-side face of the wall, facing into the room. On an east or west wall it sticks out from the wall beside the doorway
- * as a blade sign with its faces toward north and south, where the zone views look from; when doorways and
- * corners leave that wall no space, it hangs in the doorway instead.
+ * A sign at a door, its label on both faces. On a north or south wall it hangs flat on the wall beside the
+ * doorway, its back face on the room-side face of the wall, facing into the room. On an east or west wall it
+ * sticks out from the wall beside the doorway as a blade sign with its faces toward north and south, where
+ * the zone views look from. When doorways and corners leave that wall no space, it hangs in the doorway
+ * under the arch lintel instead.
  */
 function signAtDoor(
   room: RoomSpec,
@@ -310,14 +311,15 @@ function signAtDoor(
     facing: oppositeSide[door.side],
     seed,
   };
-  if (runsAlongX(door.side)) {
-    return placed(room, interior, inDoorway, attributes, height);
-  }
-  const reach = wallSpan(interior, door.side).length / 2 - cornerReachStuds - size.z / 2;
+  const flat = runsAlongX(door.side);
+  const lengthAlongWall = flat ? size.x : size.z;
+  const reach = wallSpan(interior, door.side).length / 2 - cornerReachStuds - lengthAlongWall / 2;
   try {
-    const along = alongClearOfDoors(room, interior, door.side, size.z, reach, door.offset);
-    const blade = { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
-    return placed(room, interior, blade, attributes, height);
+    const along = alongClearOfDoors(room, interior, door.side, lengthAlongWall, reach, door.offset);
+    const beside = flat
+      ? { ...inDoorway, along }
+      : { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
+    return placed(room, interior, beside, attributes, height);
   } catch (error) {
     if (!(error instanceof SetPieceMisfit)) {
       throw error;
