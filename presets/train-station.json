@@ -83,16 +83,7 @@
         }
       ],
       "signLabel": "CONCOURSE",
-      "roomNames": [
-        "waiting area",
-        "waiting hall",
-        "waiting room",
-        "waiting concourse",
-        "main hall",
-        "hall",
-        "station hall",
-        "lobby"
-      ]
+      "roomNames": ["waiting area", "hall", "station hall", "lobby"]
     },
     "platform": {
       "setPieces": ["track-bed", "platform-edge"],
