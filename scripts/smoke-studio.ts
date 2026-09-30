@@ -744,7 +744,24 @@ async function probeCaptureZones(connection: StudioConnection): Promise<string> 
   expectEqual("capture_zones remainingZones", output.remainingZones, []);
   // The output schema already requires a positive integer width and height per shot.
   const sizes = output.shots.map((shot) => `${String(shot.width)}x${String(shot.height)}`);
-  return `${String(images.length)} images, the top-down cutaway then two views per zone, sizes ${sizes.join(" ")}, warnings ${JSON.stringify(output.warnings)}`;
+  const eye = await callRealTool(
+    captureZonesTool,
+    { mapId: smokeMapSpec.mapId, views: ["eye"], cutaway: false },
+    connection,
+  );
+  // The eye view of each room, shot with ceilings shown.
+  expectEqual(
+    "capture_zones eye shots",
+    eye.output.shots.map((shot) => `${shot.zone}:${shot.view}`),
+    zoneNames.map((name) => `${name}:eye`),
+  );
+  expectEqual(
+    "capture_zones eye image count",
+    eye.content.filter((block) => block.type === "image").length,
+    zoneNames.length,
+  );
+  expectEqual("capture_zones eye remainingZones", eye.output.remainingZones, []);
+  return `${String(images.length)} images, the top-down cutaway then two views per zone, plus ${String(zoneNames.length)} eye views, sizes ${sizes.join(" ")}, warnings ${JSON.stringify(output.warnings)}`;
 }
 
 const playServerChecks = `

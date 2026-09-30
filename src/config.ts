@@ -73,6 +73,10 @@ export const config = Object.freeze({
   /** Decimals kept in a camera coordinate; a hundredth of a stud is far below a pixel. */
   cameraCoordinateDecimals: 2,
   zoneShotPitchDegrees: 55,
+  /** The eye view: the camera stands this high above the zone's lowest point, this far in from its -Z side, pitched down by eyePitchDegrees. */
+  eyeHeightStuds: 5,
+  eyeInsetStuds: 3,
+  eyePitchDegrees: 10,
   /** Studio's default camera field of view. */
   studioFieldOfViewDegrees: 70,
   /** Long-edge range in pixels a capture is expected to fall in; capture_zones warns outside it. */

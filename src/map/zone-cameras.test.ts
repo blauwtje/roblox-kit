@@ -65,7 +65,7 @@ await test("coordinates are rounded to hundredths of a stud", () => {
   }
 });
 
-await test("each zone gets views a, b and top in that order, all looking at the zone center", () => {
+await test("each zone gets views a, b, top and eye in that order; a, b and top look at the zone center", () => {
   const shots = zoneShots({ name: "start", bounds: room });
   assert.deepEqual(
     shots.map((shot) => [shot.zone, shot.view]),
@@ -73,11 +73,29 @@ await test("each zone gets views a, b and top in that order, all looking at the 
       ["start", "a"],
       ["start", "b"],
       ["start", "top"],
+      ["start", "eye"],
     ],
   );
-  for (const shot of shots) {
+  for (const shot of shots.filter((candidate) => candidate.view !== "eye")) {
     assert.deepEqual(shot.lookAt, [20, 6, 15]);
   }
+});
+
+await test("the eye view stands at eye height, inset from the -Z side, and looks at the room center pitched down", () => {
+  const eye = zoneShots({ name: "start", bounds: room })[3];
+  assert.ok(eye !== undefined);
+  assert.equal(eye.view, "eye");
+  assert.deepEqual(eye.cameraPosition, [
+    20,
+    room.min.y + config.eyeHeightStuds,
+    room.min.z + config.eyeInsetStuds,
+  ]);
+  assert.equal(eye.lookAt[0], 20);
+  assert.equal(eye.lookAt[2], 15);
+  const pitch = degrees(
+    Math.atan2(eye.cameraPosition[1] - eye.lookAt[1], eye.lookAt[2] - eye.cameraPosition[2]),
+  );
+  assert.ok(Math.abs(pitch - config.eyePitchDegrees) < 0.05, `pitch was ${String(pitch)}`);
 });
 
 await test("view a is the existing single zone shot", () => {

@@ -9,6 +9,9 @@ import { selectStudio, type StudioConnection } from "../studio/studio-connection
 import { wallBandNames } from "./room-details.ts";
 import { nearWallSideOfView, zoneShots, type Bounds, type ViewedZoneShot } from "./zone-cameras.ts";
 
+const zoneViewSchema = z.enum(["a", "b", "eye"]);
+type ZoneView = z.output<typeof zoneViewSchema>;
+
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const coordinatesSchema = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -19,6 +22,8 @@ const captureZonesInput = z.strictObject({
   zones: z.array(z.string().min(1)).min(1).optional(),
   /** False in a follow-up call for `remainingZones`, which already has the cutaway from the first call. */
   cutaway: z.boolean().default(true),
+  /** The views of each zone; `a` and `b` look from opposite sides over a cutaway, `eye` stands at player eye height with ceilings and walls shown. */
+  views: z.array(zoneViewSchema).min(1).default(["a", "b"]),
   /** Which Studio holds the map; optional while exactly one is connected. */
   studioId: z.string().min(1).optional(),
 });
@@ -33,8 +38,8 @@ const captureZonesOutput = z.strictObject({
     z.strictObject({
       /** The zone name; the top-down cutaway of the whole map carries the mapId. */
       zone: z.string(),
-      /** `a` and `b` look at the zone from opposite sides; `top` is the cutaway of the whole map from above. */
-      view: z.enum(["a", "b", "top"]),
+      /** `a` and `b` look at the zone from opposite sides; `eye` from player eye height inside it; `top` is the cutaway of the whole map from above. */
+      view: z.enum(["a", "b", "top", "eye"]),
       cameraPosition: coordinatesSchema,
       lookAt: coordinatesSchema,
       /** Pixels of the image, read from the image itself. */
@@ -177,31 +182,30 @@ function unionBounds(zones: MapZone[]): Bounds {
   };
 }
 
-/** Views `a` and `b` of one zone: two images. */
-const viewsPerZone = 2;
-
 /**
- * The shots of one call: the top-down cutaway of the whole map first (unless `withCutaway` is false), then the view pair of each
- * selected zone in order while the images fit `config.maxImagesPerCall`; the zones that do not fit
- * are returned by name and are never captured half.
+ * The shots of one call: the top-down cutaway of the whole map first (unless `withCutaway` is false), then the
+ * asked `views` of each selected zone (in the order a, b, eye) while the images fit `config.maxImagesPerCall`; the
+ * zones that do not fit are returned by name and are never captured half.
  */
 function planShots(
   mapId: string,
   allZones: MapZone[],
   selected: MapZone[],
   withCutaway: boolean,
+  views: ZoneView[],
 ): { plannedShots: ViewedZoneShot[]; remainingZones: string[] } {
   const wholeMap = zoneShots({ name: mapId, bounds: unionBounds(allZones) });
   const cutaway = withCutaway ? wholeMap.filter((shot) => shot.view === "top") : [];
+  const viewsPerZone = new Set(views).size;
   const zoneCapacity = Math.floor((config.maxImagesPerCall - cutaway.length) / viewsPerZone);
   const chosen = selected.slice(0, zoneCapacity);
   const remainingZones = selected.slice(zoneCapacity).map((zone) => zone.name);
-  const pairs = chosen.flatMap((zone) =>
+  const zoneViewShots = chosen.flatMap((zone) =>
     zoneShots({ name: zone.name, bounds: { min: zone.min, max: zone.max } }).filter(
-      (shot) => shot.view !== "top",
+      (shot) => shot.view !== "top" && views.includes(shot.view),
     ),
   );
-  return { plannedShots: [...cutaway, ...pairs], remainingZones };
+  return { plannedShots: [...cutaway, ...zoneViewShots], remainingZones };
 }
 
 /**
@@ -245,6 +249,27 @@ function nearWallPrefixes(mapId: string, shot: ViewedZoneShot): string[] {
   return infixes.map((infix) => `${shot.zone}${infix}${side}-`);
 }
 
+/** What a shot needs hidden: the ceilings (and the wall prefixes of `nearWallPrefixes`), or nothing for the eye view. */
+interface CutawayState {
+  hidden: boolean;
+  wallPrefixes: string[];
+}
+
+/** The eye view is shot with ceilings and every wall shown, as a player sees the room; every other view needs the cutaway. */
+function cutawayOfShot(mapId: string, shot: ViewedZoneShot): CutawayState {
+  if (shot.view === "eye") {
+    return { hidden: false, wallPrefixes: [] };
+  }
+  return { hidden: true, wallPrefixes: nearWallPrefixes(mapId, shot) };
+}
+
+function sameCutaway(first: CutawayState, second: CutawayState): boolean {
+  return (
+    first.hidden === second.hidden &&
+    first.wallPrefixes.join("\n") === second.wallPrefixes.join("\n")
+  );
+}
+
 /** Captures one shot through StudioMCP's `screen_capture` after `config.captureSettleMs`; the camera is set for that capture only. */
 async function captureShot(
   connection: StudioConnection,
@@ -278,10 +303,11 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     name: "capture_zones",
     title: "Capture zones",
     description:
-      `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top, named by the mapId), then two views per zone (room) from opposite sides (views a and b, at ${String(config.zoneShotPitchDegrees)} degrees pitch), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
+      `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top, named by the mapId), then the asked views per zone (room), by default two from opposite sides (views a and b, at ${String(config.zoneShotPitchDegrees)} degrees pitch), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with both its views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call, which passes cutaway false to skip the repeated cutaway). ` +
-      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures, and so is a zone's south (+Z) wall with its trim during view a, which looks over it; all are restored afterwards, also when a capture fails, and a call that finds parts a crashed call left hidden restores them first. Each capture waits ${String(config.captureSettleMs)} ms first so the lighting settles, which makes a call take that long per image. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
+      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with all its asked views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call, which passes cutaway false to skip the repeated cutaway). ` +
+      `Optional views lists the views of each zone (default a and b); view eye stands at player eye height (${String(config.eyeHeightStuds)} studs) ${String(config.eyeInsetStuds)} studs in from the zone's -Z side, looks at the zone center pitched down ${String(config.eyePitchDegrees)} degrees, and is shot with ceilings and all walls shown. ` +
+      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures of the other views, and so is a zone's south (+Z) wall with its trim during view a, which looks over it; all are restored afterwards, also when a capture fails, and a call that finds parts a crashed call left hidden restores them first. Each capture waits ${String(config.captureSettleMs)} ms first so the lighting settles, which makes a call take that long per image. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -314,17 +340,24 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         mapZones.zones,
         selected,
         input.cutaway,
+        input.views,
       );
       // One at a time: every capture moves the same Studio camera.
       const captured: { shot: ViewedZoneShot; image: ImageBlock }[] = [];
       try {
-        let hiddenWalls: string[] = [];
-        await setCutawayHidden(context.studio, studioId, input.mapId, true, hiddenWalls);
+        // The call start restored every part, so nothing is hidden yet.
+        let applied: CutawayState = { hidden: false, wallPrefixes: [] };
         for (const shot of plannedShots) {
-          const wallPrefixes = nearWallPrefixes(input.mapId, shot);
-          if (wallPrefixes.join("\n") !== hiddenWalls.join("\n")) {
-            await setCutawayHidden(context.studio, studioId, input.mapId, true, wallPrefixes);
-            hiddenWalls = wallPrefixes;
+          const needed = cutawayOfShot(input.mapId, shot);
+          if (!sameCutaway(needed, applied)) {
+            await setCutawayHidden(
+              context.studio,
+              studioId,
+              input.mapId,
+              needed.hidden,
+              needed.wallPrefixes,
+            );
+            applied = needed;
           }
           const image = await captureShot(context.studio, studioId, input.mapId, shot);
           captured.push({ shot, image });

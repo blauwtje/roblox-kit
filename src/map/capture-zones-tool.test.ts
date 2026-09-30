@@ -409,3 +409,35 @@ await test(
     settleTimer.mock.restore();
   },
 );
+
+await test("views eye shoots each zone with ceilings and walls shown, and views defaults to a and b", async () => {
+  const studio = studioWith(() => okImage());
+  const result = await run(studio, {
+    mapId: "arena",
+    zones: ["start"],
+    views: ["eye"],
+    cutaway: false,
+  });
+  const structured = captureZonesTool.outputSchema.parse(result.structuredContent);
+  assert.deepEqual(
+    structured.shots.map((shot) => [shot.zone, shot.view]),
+    [["start", "eye"]],
+  );
+  assert.deepEqual(callKinds(studio), ["restore", "read", "capture", "restore"]);
+  assert.deepEqual(captureZonesTool.inputSchema.parse({ mapId: "arena" }).views, ["a", "b"]);
+  assert.throws(() => captureZonesTool.inputSchema.parse({ mapId: "arena", views: ["top"] }));
+});
+
+await test("an eye shot after a cutaway shot restores the hidden parts before its capture", async () => {
+  const studio = studioWith(() => okImage());
+  await run(studio, { mapId: "arena", zones: ["start"], views: ["b", "eye"], cutaway: false });
+  assert.deepEqual(callKinds(studio), [
+    "restore",
+    "read",
+    "hide",
+    "capture",
+    "restore",
+    "capture",
+    "restore",
+  ]);
+});

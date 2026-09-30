@@ -24,9 +24,9 @@ function roundCoordinate(value: number): number {
 
 const degreesToRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
-export type ShotView = "a" | "b" | "top";
+export type ShotView = "a" | "b" | "top" | "eye";
 
-/** A zone shot tagged with the view it takes: `a` and `b` look from opposite sides, `top` from above. */
+/** A zone shot tagged with the view it takes: `a` and `b` look from opposite sides, `top` from above, `eye` from where a player stands. */
 export interface ViewedZoneShot extends ZoneShot {
   view: ShotView;
 }
@@ -62,20 +62,41 @@ function framedShot(zone: ZoneBounds, side: 1 | -1, pitchDegrees: number): ZoneS
 
 /**
  * The wall side each view hides for its shot: view `a` looks from +Z over the zone's south wall, which would
- * otherwise hide the strip of floor behind it; view `b` and `top` hide no wall.
+ * otherwise hide the strip of floor behind it; view `b`, `top` and `eye` hide no wall.
  */
 export const nearWallSideOfView: Partial<Record<ShotView, "south">> = { a: "south" };
+
+/**
+ * The eye-level shot of one zone: the camera stands `config.eyeHeightStuds` above the bottom of the zone's bounds
+ * and `config.eyeInsetStuds` in from the -Z side at the center, and looks toward the zone center pitched down by
+ * `config.eyePitchDegrees`.
+ */
+function eyeShot(zone: ZoneBounds): ZoneShot {
+  const { min, max } = zone.bounds;
+  const centerX = (min.x + max.x) / 2;
+  const centerZ = (min.z + max.z) / 2;
+  const cameraY = min.y + config.eyeHeightStuds;
+  const cameraZ = min.z + config.eyeInsetStuds;
+  const lookAtY =
+    cameraY - (centerZ - cameraZ) * Math.tan(degreesToRadians(config.eyePitchDegrees));
+  return {
+    zone: zone.name,
+    cameraPosition: [roundCoordinate(centerX), roundCoordinate(cameraY), roundCoordinate(cameraZ)],
+    lookAt: [roundCoordinate(centerX), roundCoordinate(lookAtY), roundCoordinate(centerZ)],
+  };
+}
 
 /** The single angled shot of one zone, from the +Z side at `config.zoneShotPitchDegrees`. */
 export function zoneShot(zone: ZoneBounds): ZoneShot {
   return framedShot(zone, 1, config.zoneShotPitchDegrees);
 }
 
-/** The three shots of one zone in order: view `a` from +Z, view `b` from -Z, then the `top` cutaway. */
+/** The four shots of one zone in order: view `a` from +Z, view `b` from -Z, the `top` cutaway, then the `eye` view. */
 export function zoneShots(zone: ZoneBounds): ViewedZoneShot[] {
   return [
     { ...framedShot(zone, 1, config.zoneShotPitchDegrees), view: "a" },
     { ...framedShot(zone, -1, config.zoneShotPitchDegrees), view: "b" },
     { ...framedShot(zone, 1, topViewPitchDegrees), view: "top" },
+    { ...eyeShot(zone), view: "eye" },
   ];
 }
