@@ -78,7 +78,7 @@ export const propDimensions = Object.freeze({
 const sides: Side[] = ["north", "south", "east", "west"];
 
 /** A rectangle on the floor plane, in coordinates relative to the room center. */
-interface Footprint {
+export interface Footprint {
   minX: number;
   maxX: number;
   minZ: number;
@@ -101,7 +101,7 @@ function pickFrom<Item>(items: readonly Item[], random: () => number): Item {
   return item;
 }
 
-function isPropKind(name: string): name is PropKind {
+export function isPropKind(name: string): name is PropKind {
   return (propKinds as readonly string[]).includes(name);
 }
 
@@ -129,7 +129,7 @@ export function roomBounds(spec: MapSpec, room: RoomSpec): RoomBounds {
 export const cornerReachStuds = detailDimensions.pillarSizeStuds + propDimensions.clearanceStuds;
 
 /** The four corners kept free for the corner pillars of `buildRoomDetails`. */
-function cornerFootprints(bounds: RoomBounds): Footprint[] {
+export function cornerFootprints(bounds: RoomBounds): Footprint[] {
   const reach = cornerReachStuds;
   return [-1, 1].flatMap((signX) =>
     [-1, 1].map((signZ) => ({
@@ -142,7 +142,7 @@ function cornerFootprints(bounds: RoomBounds): Footprint[] {
 }
 
 /** The strip in front of a doorway that props keep free. */
-function doorwayFootprint(bounds: RoomBounds, door: RoomSpec["doors"][number]): Footprint {
+export function doorwayFootprint(bounds: RoomBounds, door: RoomSpec["doors"][number]): Footprint {
   const halfOpening = bounds.doorWidth / 2 + propDimensions.clearanceStuds;
   const depth = propDimensions.doorwayDepthStuds;
   const alongMin = door.offset - halfOpening;
@@ -179,7 +179,7 @@ function doorwayFootprint(bounds: RoomBounds, door: RoomSpec["doors"][number]): 
   }
 }
 
-function overlaps(first: Footprint, second: Footprint): boolean {
+export function overlaps(first: Footprint, second: Footprint): boolean {
   return (
     first.minX < second.maxX &&
     first.maxX > second.minX &&

@@ -1,12 +1,16 @@
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import {
+  cornerFootprints,
   cornerReachStuds,
+  doorwayFootprint,
+  isPropKind,
+  overlaps,
   propDimensions,
   propKinds,
   propSize,
   roomBounds,
 } from "./prop-placement.ts";
-import type { PropKind, RoomBounds } from "./prop-placement.ts";
+import type { Footprint, RoomBounds } from "./prop-placement.ts";
 import type { SetPiecePlacement, SetPieceRecord } from "./set-piece-placement.ts";
 import type { Preset } from "../style/preset-schema.ts";
 
@@ -48,19 +52,6 @@ const trackWallMinOffsetStuds = 1;
 
 function isHorizontalWall(side: Side): boolean {
   return side === "north" || side === "south";
-}
-
-function isPropKind(name: string): name is PropKind {
-  return (propKinds as readonly string[]).includes(name);
-}
-
-function overlaps(first: Box, second: Box): boolean {
-  return (
-    first.minX < second.maxX &&
-    first.maxX > second.minX &&
-    first.minZ < second.maxZ &&
-    first.maxZ > second.minZ
-  );
 }
 
 /** The floor box a piece covers: its X length and Z depth swap when it is turned a quarter. */
@@ -122,24 +113,25 @@ function wallBox(
   }
 }
 
+/** A room-local footprint moved to the room's place in the world. */
+function inWorld(room: RoomSpec, footprint: Footprint): Box {
+  return {
+    minX: room.x + footprint.minX,
+    maxX: room.x + footprint.maxX,
+    minZ: room.z + footprint.minZ,
+    maxZ: room.z + footprint.maxZ,
+  };
+}
+
 /** Floor a piece never covers: the corner pillars, each doorway strip and door lane, and a spawn pad. */
 function keepOutBoxes(frame: RoomFrame): Box[] {
   const { room, interior } = frame;
   const clearance = propDimensions.clearanceStuds;
-  const boxes: Box[] = [];
-  for (const side of sideOrder) {
-    const half = isHorizontalWall(side) ? interior.halfWidth : interior.halfDepth;
-    boxes.push(wallBox(frame, side, -half, -half + cornerReachStuds, cornerReachStuds));
-    boxes.push(wallBox(frame, side, half - cornerReachStuds, half, cornerReachStuds));
-  }
+  const boxes: Box[] = cornerFootprints(interior).map((corner) => inWorld(room, corner));
   for (const door of room.doors) {
     const centerDepth = isHorizontalWall(door.side) ? interior.halfDepth : interior.halfWidth;
-    const stripHalf = interior.doorWidth / 2 + clearance;
     const laneHalf = interior.doorWidth / 2;
-    const stripDepth = propDimensions.doorwayDepthStuds;
-    boxes.push(
-      wallBox(frame, door.side, door.offset - stripHalf, door.offset + stripHalf, stripDepth),
-    );
+    boxes.push(inWorld(room, doorwayFootprint(interior, door)));
     boxes.push(
       wallBox(frame, door.side, door.offset - laneHalf, door.offset + laneHalf, centerDepth),
     );
