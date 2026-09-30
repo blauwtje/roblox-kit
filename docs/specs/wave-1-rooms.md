@@ -55,7 +55,7 @@ Recurring evidence notes, most frequent first, counted by keyword over the 54 no
 
 ## Plan basis
 Repository: /Users/thomash/Documents/Code/personal/tools/roblox-kit
-Branch: finished-looking-maps
+Branch: wave-1-rooms
 Worktree setup: none
 Land gate: npm run check
 
