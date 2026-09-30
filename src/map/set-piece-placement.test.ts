@@ -112,6 +112,37 @@ await test("every door of a typed room gets a sign with the room type's label an
   assert.equal(platformSign.yaw, northYaw);
 });
 
+await test("a sign in a north or south doorway has its back face on the room-side face of the wall above the doorway", () => {
+  const [platformSign] = piecesOf("sign", place(stationSpec));
+  assert.ok(platformSign);
+  // The platform is 40 deep with 1-stud walls, so the south wall's room-side face is at z 19.
+  const southInnerFace = 20 - 1;
+  assert.equal(platformSign.yaw, northYaw);
+  assert.equal(platformSign.pivot.z + propDimensions.sign.z / 2, southInnerFace);
+});
+
+await test("a sign hung in an east doorway has its back face on the room-side face of the wall above the doorway", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "narrow",
+    rooms: [
+      {
+        name: "hall",
+        roomType: "ticket-hall",
+        x: 0,
+        z: 0,
+        width: 30,
+        depth: 10,
+        doors: [{ side: "east", offset: 0 }],
+      },
+    ],
+  });
+  const [sign] = piecesOf("sign", place(spec));
+  assert.ok(sign);
+  const eastInnerFace = 15 - 1;
+  assert.equal(sign.yaw, 90);
+  assert.equal(sign.pivot.x + propDimensions.sign.z / 2, eastInnerFace);
+});
+
 await test("a sign at an east or west door sticks out beside the doorway with its faces north and south", () => {
   const eastSign = piecesOf("sign", place(stationSpec)).at(-1);
   assert.ok(eastSign);

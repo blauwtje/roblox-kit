@@ -286,8 +286,8 @@ function pieceFacingEntry(
 }
 
 /**
- * A sign at a door, its label on both faces. On a north or south wall it hangs just inside the doorway under
- * the arch lintel, facing into the room. On an east or west wall it sticks out from the wall beside the doorway
+ * A sign at a door, its label on both faces. On a north or south wall it hangs in the doorway under the arch
+ * lintel, its back face on the room-side face of the wall, facing into the room. On an east or west wall it sticks out from the wall beside the doorway
  * as a blade sign with its faces toward north and south, where the zone views look from; when doorways and
  * corners leave that wall no space, it hangs in the doorway instead.
  */
@@ -305,7 +305,7 @@ function signAtDoor(
     kind: "sign" as const,
     side: door.side,
     along: door.offset,
-    inset: detailDimensions.archDepthStuds + size.z / 2,
+    inset: size.z / 2,
     size,
     facing: oppositeSide[door.side],
     seed,
