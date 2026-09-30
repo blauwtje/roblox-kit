@@ -222,6 +222,7 @@ try {
   await assertViewportVisible(connection);
   const files = (await readdir(benchmarksUrl)).filter((name) => name.endsWith(".json")).sort();
   const failedPlaceChecks: string[] = [];
+  const failedQualityRooms: string[] = [];
   for (const file of files) {
     const line = await evaluate(file, connection);
     await appendFile(resultsUrl, `${JSON.stringify(line)}\n`);
@@ -250,10 +251,20 @@ try {
               .map(([axis, median]) => `${axis} ${String(median)}`)
               .join(", ");
       console.log(`  ${review.room} (${review.roomType}) quality: ${scores}`);
+      if (!review.passed) {
+        failedQualityRooms.push(`${line.benchmark} ${review.room} (${review.roomType}): ${scores}`);
+      }
     }
   }
+  const failures: string[] = [];
   if (failedPlaceChecks.length > 0) {
-    throw new Error(`The blind place check failed:\n${failedPlaceChecks.join("\n")}`);
+    failures.push(`The blind place check failed:\n${failedPlaceChecks.join("\n")}`);
+  }
+  if (failedQualityRooms.length > 0) {
+    failures.push(`Rooms below the pass score:\n${failedQualityRooms.join("\n")}`);
+  }
+  if (failures.length > 0) {
+    throw new Error(failures.join("\n"));
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
