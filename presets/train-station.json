@@ -31,20 +31,20 @@
     "Ambient": "#4a4740",
     "OutdoorAmbient": "#6b7280",
     "Brightness": 3,
-    "ExposureCompensation": 0.2,
+    "ExposureCompensation": 0,
     "EnvironmentDiffuseScale": 0.6,
     "EnvironmentSpecularScale": 0.5,
-    "ShadowSoftness": 0.3,
+    "ShadowSoftness": 0.05,
     "Atmosphere": {
       "Density": 0.25,
       "Offset": 0.1,
       "Color": "#c9c2b4",
       "Decay": "#8a7f70",
-      "Glare": 0.1,
+      "Glare": 0,
       "Haze": 1
     },
     "Bloom": {
-      "Intensity": 0.3,
+      "Intensity": 0,
       "Size": 20,
       "Threshold": 1.6
     }
@@ -52,18 +52,18 @@
   "lightingIntent": "bright and even overhead light with crisp shadows",
   "lightRoles": {
     "zoneMarker": {
-      "range": 30,
-      "brightness": 0.3,
+      "range": 40,
+      "brightness": 0.4,
       "color": "#f2d9a0"
     },
     "focal": {
-      "range": 45,
-      "brightness": 0.45,
+      "range": 60,
+      "brightness": 0.6,
       "color": "#ffe6b0"
     },
     "hero": {
-      "range": 80,
-      "brightness": 0.625,
+      "range": 100,
+      "brightness": 0.8,
       "color": "#fff1cf"
     }
   },
