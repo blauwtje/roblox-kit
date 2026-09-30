@@ -1,12 +1,12 @@
 {
   "palette": {
-    "colors": ["#3b3f45", "#8a7f70", "#c9c2b4", "#2a4a3c"],
+    "colors": ["#6b665e", "#8a7f70", "#c9c2b4", "#2a4a3c"],
     "accent": "#d9a441"
   },
   "surfaces": {
     "floor": {
-      "material": "Slate",
-      "color": "#3b3f45"
+      "material": "Marble",
+      "color": "#6b665e"
     },
     "wall": {
       "material": "Brick",

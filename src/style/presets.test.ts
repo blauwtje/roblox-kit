@@ -10,6 +10,7 @@ const builtInMaterials = new Set([
   "Concrete",
   "DiamondPlate",
   "Fabric",
+  "Marble",
   "Metal",
   "Neon",
   "Plaster",
