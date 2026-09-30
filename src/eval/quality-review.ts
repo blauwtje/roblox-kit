@@ -20,16 +20,20 @@ export const qualityAxes = [
 
 export type QualityAxis = (typeof qualityAxes)[number];
 
-const axisScoreSchema = z.number().int().min(1).max(10);
+/** One axis of a reviewer's answer: a note of what is visible in which image, and the score it supports. */
+const axisAnswerSchema = z.object({
+  evidence: z.string().min(1),
+  score: z.number().int().min(1).max(10),
+});
 
-/** What one reviewer answers, as `quality-prompt.md` asks for it: one score per axis, no reasoning. */
+/** What one reviewer answers, as `quality-prompt.md` asks for it: an evidence note and a score per axis. */
 const qualityAnswerSchema = z.object({
-  palette: axisScoreSchema,
-  focalHierarchy: axisScoreSchema,
-  negativeSpace: axisScoreSchema,
-  readability: axisScoreSchema,
-  atmosphere: axisScoreSchema,
-  lighting: axisScoreSchema,
+  palette: axisAnswerSchema,
+  focalHierarchy: axisAnswerSchema,
+  negativeSpace: axisAnswerSchema,
+  readability: axisAnswerSchema,
+  atmosphere: axisAnswerSchema,
+  lighting: axisAnswerSchema,
 });
 
 export type QualityAnswer = z.output<typeof qualityAnswerSchema>;
@@ -37,15 +41,19 @@ export type QualityAnswer = z.output<typeof qualityAnswerSchema>;
 /** The median score of each axis over a room's reviewers. */
 export type AxisMedians = Record<QualityAxis, number>;
 
+/** Each reviewer's evidence note per axis, in reviewer order. */
+export type AxisEvidence = Record<QualityAxis, string[]>;
+
 /**
- * The quality review of one room: the per-axis medians, or why a reviewer gave no answer, which fails
- * the room.
+ * The quality review of one room: the per-axis medians with the evidence notes behind them, or why a
+ * reviewer gave no answer, which fails the room.
  */
 export interface QualityResult {
   room: string;
   genre: string;
   roomType: string;
   medians?: AxisMedians;
+  evidence?: AxisEvidence;
   error?: string;
   passed: boolean;
 }
@@ -94,9 +102,18 @@ function median(scores: number[]): number {
 export function axisMedians(answers: QualityAnswer[]): AxisMedians {
   const medians = {} as AxisMedians;
   for (const axis of qualityAxes) {
-    medians[axis] = median(answers.map((answer) => answer[axis]));
+    medians[axis] = median(answers.map((answer) => answer[axis].score));
   }
   return medians;
+}
+
+/** The reviewers' evidence notes, gathered per axis. */
+export function axisEvidence(answers: QualityAnswer[]): AxisEvidence {
+  const evidence = {} as AxisEvidence;
+  for (const axis of qualityAxes) {
+    evidence[axis] = answers.map((answer) => answer[axis].evidence);
+  }
+  return evidence;
 }
 
 /** Whether every axis median reaches `config.visualPassScore`; one weak axis fails the room. */
@@ -183,7 +200,8 @@ async function presetLightingIntent(genre: string): Promise<string> {
 
 /**
  * Scores one room: `config.qualityReviewersPerRoom` fresh reviewers each rate its captures (eye view first)
- * against the references and the preset's lighting intent, and each axis takes the median. A reviewer that fails, times out or answers
+ * against the references and the preset's lighting intent, and each axis takes the median of the scores
+ * and keeps every evidence note. A reviewer that fails, times out or answers
  * off-schema fails the room with its error, so one room cannot stop the others.
  */
 export async function reviewRoomQuality(
@@ -205,6 +223,7 @@ export async function reviewRoomQuality(
       genre,
       roomType,
       medians,
+      evidence: axisEvidence(answers),
       passed: reachesPassScore(medians),
     };
   } catch (error) {

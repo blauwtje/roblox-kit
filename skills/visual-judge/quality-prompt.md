@@ -8,7 +8,7 @@ The brief for the reference-scored reviewer (SKILL.md, step 6). Send it the text
 - `<reference paths>` are the reference images, one path per line. Each is a screenshot from a popular Roblox game. When a reference is itself scored (calibration), leave it out of this list.
 - `<capture paths>` are the room's captures, one path per line: the eye view first, then the cutaway views a and b when present.
 
-The script copies every image under a neutral name first, so a file name cannot give the room or the game away. The reviewer's reasoning is read in the run and discarded; only the six scores are kept.
+The script copies every image under a neutral name first, so a file name cannot give the room or the game away. The script keeps each axis score for calibration and eval, and logs each evidence note with it.
 
 ---
 
@@ -55,22 +55,22 @@ Rate six axes, each from 1 to 10, against these anchors. A score between two anc
   - 5: readable, but only partly the intent.
   - 1: the opposite of the intent, flat outdoor sun or blown-out white.
 
-Before you answer, write your reasoning in plain text: for each axis in turn, name what you see in the captures, how it compares with the references, and which anchor it is closest to. Only then answer with this JSON, scores only:
+Answer with this JSON only. For each axis, `evidence` is a short note of at most two sentences naming what is visible in which image (such as `capture-1` or `reference-2`), and `score` is the anchor it is closest to:
 
 ```json
 {
-  "palette": 1,
-  "focalHierarchy": 1,
-  "negativeSpace": 1,
-  "readability": 1,
-  "atmosphere": 1,
-  "lighting": 1
+  "palette": { "evidence": "...", "score": 1 },
+  "focalHierarchy": { "evidence": "...", "score": 1 },
+  "negativeSpace": { "evidence": "...", "score": 1 },
+  "readability": { "evidence": "...", "score": 1 },
+  "atmosphere": { "evidence": "...", "score": 1 },
+  "lighting": { "evidence": "...", "score": 1 }
 }
 ```
 
 Rules:
 
-- Choose each score from your written reasoning and the anchors. Never choose a score first.
+- Base each score on the evidence you name and the anchors.
 - Score each axis on its own. A strong axis does not lift a weak one, and a weak one does not pull down a strong one.
 - Use the whole scale. Give 8 or more only where the room matches the craft of the references on that axis, and 4 or less where it plainly falls short.
 - Each score is a whole number from 1 to 10.

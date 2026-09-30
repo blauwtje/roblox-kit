@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import {
+  axisEvidence,
   axisMedians,
   qualityAxes,
   qualityBrief,
@@ -21,7 +22,15 @@ function answer(scores: number[]): QualityAnswer {
     atmosphere = 1,
     lighting = 1,
   ] = scores;
-  return { palette, focalHierarchy, negativeSpace, readability, atmosphere, lighting };
+  const note = (score: number) => ({ evidence: `capture-1 shows a ${String(score)}.`, score });
+  return {
+    palette: note(palette),
+    focalHierarchy: note(focalHierarchy),
+    negativeSpace: note(negativeSpace),
+    readability: note(readability),
+    atmosphere: note(atmosphere),
+    lighting: note(lighting),
+  };
 }
 
 await test("the brief fills the five fields and carries nothing of the prompt's notes or the spec", async () => {
@@ -53,8 +62,14 @@ await test("the brief names every axis the answer is scored on", async () => {
   const brief = qualityBrief(promptText, "g", "r", "dim", [], []);
   for (const axis of qualityAxes) {
     assert.match(brief, new RegExp(`\\*\\*${axis}\\*\\*`));
-    assert.match(brief, new RegExp(`"${axis}": 1`));
+    assert.match(brief, new RegExp(`"${axis}": \\{ "evidence": "\\.\\.\\.", "score": 1 \\}`));
   }
+});
+
+await test("the brief asks for a visible evidence note and says nothing of discarded reasoning", async () => {
+  const promptText = await readFile(promptUrl, "utf8");
+  assert.match(promptText, /at most two sentences naming what is visible in which image/);
+  assert.doesNotMatch(promptText, /discard|thrown away|reasoning/i);
 });
 
 await test("a prompt without a rule before the brief is rejected", () => {
@@ -77,8 +92,14 @@ await test("each axis takes the median of the three reviewers, so one outlier mo
   });
 });
 
+await test("every reviewer's evidence note is kept per axis, in reviewer order", () => {
+  const evidence = axisEvidence([answer([9, 2, 7, 3, 8, 5]), answer([8, 3, 1, 4, 8, 6])]);
+  assert.deepEqual(evidence.palette, ["capture-1 shows a 9.", "capture-1 shows a 8."]);
+  assert.deepEqual(evidence.lighting, ["capture-1 shows a 5.", "capture-1 shows a 6."]);
+});
+
 await test("a room passes only when every axis median reaches the pass score", () => {
-  const passing = answer([7, 8, 9, 10, 7, 7]);
+  const passing = axisMedians([answer([7, 8, 9, 10, 7, 7])]);
   assert.equal(config.visualPassScore, 7);
   assert.equal(reachesPassScore(passing), true);
   assert.equal(reachesPassScore({ ...passing, lighting: 6 }), false);
