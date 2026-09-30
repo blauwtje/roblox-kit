@@ -33,14 +33,20 @@ function validPreset(exposure = 0.5) {
       },
       Bloom: { Intensity: 0.4, Size: 24, Threshold: 0.9 },
     },
+    lightingIntent: "bright, even",
     lightRoles: { zoneMarker: light, focal: light, hero: light },
     propKit: ["bench", "lamp"],
+    propRules: {
+      bench: { heightRatio: { min: 0.34, max: 0.75 }, freeRotation: false },
+      lamp: { heightRatio: { min: 1.03, max: 2.25 }, freeRotation: false },
+    },
     sizeRules: {
       agentRadius: 2,
       agentHeight: 5,
       minDoorwayWidth: 10,
       minHallwayWidth: 10,
       minWallHeight: 10,
+      avatarHeight: { min: 5, max: 6.5 },
     },
   };
 }

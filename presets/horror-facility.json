@@ -49,6 +49,7 @@
       "Threshold": 1.2
     }
   },
+  "lightingIntent": "moody, high contrast",
   "lightRoles": {
     "zoneMarker": {
       "range": 22,
@@ -67,6 +68,13 @@
     }
   },
   "propKit": ["pillar", "lamp", "stairs"],
+  "propRules": {
+    "pillar": { "freeRotation": false },
+    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
+    "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "lab-bench": { "heightRatio": { "min": 0.36, "max": 0.8 }, "freeRotation": false },
+    "cell-bars": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false }
+  },
   "roomTypes": {
     "lab": { "setPieces": ["lab-bench"], "signLabel": "LABORATORY" },
     "cell-block": { "setPieces": ["cell-bars"], "signLabel": "CELL BLOCK" }
@@ -76,6 +84,7 @@
     "agentHeight": 5,
     "minDoorwayWidth": 10,
     "minHallwayWidth": 10,
-    "minWallHeight": 12
+    "minWallHeight": 12,
+    "avatarHeight": { "min": 5, "max": 6.5 }
   }
 }

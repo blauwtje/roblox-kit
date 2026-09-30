@@ -49,6 +49,7 @@
       "Threshold": 1.6
     }
   },
+  "lightingIntent": "bright and even overhead light with crisp shadows",
   "lightRoles": {
     "zoneMarker": {
       "range": 30,
@@ -67,6 +68,19 @@
     }
   },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
+  "propRules": {
+    "bench": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
+    "pillar": { "freeRotation": false },
+    "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "departure-board": { "heightRatio": { "min": 1.15, "max": 2.5 }, "freeRotation": false },
+    "clock": { "heightRatio": { "min": 1.26, "max": 2.75 }, "freeRotation": false },
+    "ticket-machine": { "heightRatio": { "min": 0.69, "max": 1.5 }, "freeRotation": false },
+    "track-bed": { "heightRatio": { "min": 0.11, "max": 0.25 }, "freeRotation": false },
+    "platform-edge": { "heightRatio": { "min": 0.05, "max": 0.13 }, "freeRotation": false },
+    "ticket-counter": { "heightRatio": { "min": 0.92, "max": 2.0 }, "freeRotation": false }
+  },
   "roomTypes": {
     "concourse": {
       "setPieces": ["bench", "departure-board", "clock"],
@@ -119,6 +133,7 @@
     "agentHeight": 5,
     "minDoorwayWidth": 10,
     "minHallwayWidth": 12,
-    "minWallHeight": 16
+    "minWallHeight": 16,
+    "avatarHeight": { "min": 5, "max": 6.5 }
   }
 }

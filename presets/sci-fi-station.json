@@ -49,6 +49,7 @@
       "Threshold": 1.1
     }
   },
+  "lightingIntent": "cool, even panel light",
   "lightRoles": {
     "zoneMarker": {
       "range": 28,
@@ -67,6 +68,14 @@
     }
   },
   "propKit": ["pillar", "lamp", "stairs", "rail"],
+  "propRules": {
+    "pillar": { "freeRotation": false },
+    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
+    "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "control-console": { "heightRatio": { "min": 0.4, "max": 0.88 }, "freeRotation": false },
+    "crate-stack": { "heightRatio": { "min": 0.46, "max": 1.0 }, "freeRotation": false }
+  },
   "roomTypes": {
     "bridge": { "setPieces": ["control-console"], "signLabel": "BRIDGE" },
     "cargo-bay": { "setPieces": ["crate-stack"], "signLabel": "CARGO BAY" }
@@ -76,6 +85,7 @@
     "agentHeight": 5,
     "minDoorwayWidth": 10,
     "minHallwayWidth": 10,
-    "minWallHeight": 12
+    "minWallHeight": 12,
+    "avatarHeight": { "min": 5, "max": 6.5 }
   }
 }

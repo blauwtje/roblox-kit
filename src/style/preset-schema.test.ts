@@ -29,14 +29,20 @@ function validPreset() {
       },
       Bloom: { Intensity: 0.4, Size: 24, Threshold: 0.9 },
     },
+    lightingIntent: "bright and even",
     lightRoles: { zoneMarker: light, focal: light, hero: light },
     propKit: ["bench", "lamp"],
+    propRules: {
+      bench: { heightRatio: { min: 0.4, max: 0.8 }, freeRotation: false },
+      pillar: { freeRotation: false },
+    },
     sizeRules: {
       agentRadius: 2,
       agentHeight: 5,
       minDoorwayWidth: 10,
       minHallwayWidth: 10,
       minWallHeight: 10,
+      avatarHeight: { min: 5, max: 6.5 },
     },
   };
 }
@@ -193,4 +199,51 @@ await test("presetSchema rejects an arrangement missing a field of its shape or 
 await test("presetSchema rejects an empty accepted room name", () => {
   const roomTypes = { concourse: { ...concourse, roomNames: [""] } };
   assert.equal(presetSchema.safeParse({ ...validPreset(), roomTypes }).success, false);
+});
+
+await test("presetSchema needs a lighting intent, prop rules and an avatar height", () => {
+  const withoutIntent: Record<string, unknown> = validPreset();
+  delete withoutIntent["lightingIntent"];
+  assert.equal(presetSchema.safeParse(withoutIntent).success, false);
+  assert.equal(presetSchema.safeParse({ ...validPreset(), lightingIntent: "" }).success, false);
+
+  const withoutRules: Record<string, unknown> = validPreset();
+  delete withoutRules["propRules"];
+  assert.equal(presetSchema.safeParse(withoutRules).success, false);
+
+  const withoutAvatar = validPreset();
+  const sizeRules: Record<string, unknown> = withoutAvatar.sizeRules;
+  delete sizeRules["avatarHeight"];
+  assert.equal(presetSchema.safeParse(withoutAvatar).success, false);
+});
+
+await test("presetSchema accepts a prop rule without a height ratio and rejects one without freeRotation", () => {
+  const missingRotation = {
+    ...validPreset(),
+    propRules: { bench: { heightRatio: { min: 1, max: 2 } } },
+  };
+  assert.equal(presetSchema.safeParse(missingRotation).success, false);
+});
+
+await test("presetSchema rejects a height range whose min exceeds its max or is not positive", () => {
+  for (const heightRatio of [
+    { min: 2, max: 1 },
+    { min: 0, max: 1 },
+    { min: 1, max: 2, extra: 1 },
+  ]) {
+    const preset = { ...validPreset(), propRules: { bench: { heightRatio, freeRotation: false } } };
+    assert.equal(presetSchema.safeParse(preset).success, false);
+  }
+  const preset = validPreset();
+  preset.sizeRules.avatarHeight = { min: 7, max: 6 };
+  assert.equal(presetSchema.safeParse(preset).success, false);
+});
+
+await test("presetOverridesSchema accepts a partial avatar height and a prop rules override", () => {
+  const overrides = {
+    lightingIntent: "dim",
+    sizeRules: { avatarHeight: { max: 7 } },
+    propRules: { bench: { freeRotation: true } },
+  };
+  assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
 });

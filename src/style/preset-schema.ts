@@ -88,6 +88,19 @@ const arrangement = z.discriminatedUnion("shape", [
   }),
 ]);
 
+/** A closed numeric range; `min` may equal `max`. */
+const numberRange = z
+  .strictObject({ min: z.number().positive(), max: z.number().positive() })
+  .refine((range) => range.min <= range.max, "min must not exceed max");
+
+/** What a prop kind may look like: its height as a share of the avatar's, and whether it may stand at any yaw. */
+const propRule = z.strictObject({
+  /** Prop height divided by avatar height; absent when the room's wall height sets the prop's height. */
+  heightRatio: numberRange.optional(),
+  /** False keeps the prop square to its wall or row, on the 90-degree grid. */
+  freeRotation: z.boolean(),
+});
+
 /** What a room of one type shows: the set pieces that identify it, the arrangements that fill it, the text its signs carry and the room names a reviewer may call it. */
 const roomType = z.strictObject({
   /** Set-piece kinds placed in a room of this type. */
@@ -99,7 +112,7 @@ const roomType = z.strictObject({
   roomNames: z.array(z.string().min(1)).optional(),
 });
 
-/** One genre preset: palette, surface roles, lighting recipe, light roles, prop kit, room types and size rules. */
+/** One genre preset: palette, surface roles, lighting recipe and intent, light roles, prop kit and rules, room types and size rules. */
 export const presetSchema = z.strictObject({
   palette: z.strictObject({
     colors: z.array(hexColor).min(3).max(4),
@@ -113,6 +126,8 @@ export const presetSchema = z.strictObject({
     accent: surfaceRole,
   }),
   lighting,
+  /** The look the lighting recipe aims for, which the image rubric scores a room against. */
+  lightingIntent: z.string().min(1),
   /** Only the hero light casts shadows, so no role carries a shadows field. */
   lightRoles: z.strictObject({
     zoneMarker: lightRole,
@@ -121,6 +136,8 @@ export const presetSchema = z.strictObject({
   }),
   /** Names of the props this genre may place. */
   propKit: z.array(z.string().min(1)).min(1),
+  /** Scale and rotation rules keyed by prop kind, for every kind a room of this genre can place. */
+  propRules: z.record(z.string().min(1), propRule),
   /** Room types this genre offers, keyed by type name; a room without a type keeps the plain prop kit. */
   roomTypes: z.record(z.string().min(1), roomType).optional(),
   sizeRules: z.strictObject({
@@ -129,6 +146,8 @@ export const presetSchema = z.strictObject({
     minDoorwayWidth: z.number().positive(),
     minHallwayWidth: z.number().positive(),
     minWallHeight: z.number().positive(),
+    /** Studs tall the avatar spans, classic to humanoid; a prop's height ratio is measured against it. */
+    avatarHeight: numberRange,
   }),
 });
 
