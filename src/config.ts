@@ -86,6 +86,12 @@ export const config = Object.freeze({
   maxImagesPerCall: 11,
   /** Milliseconds one blind place check of `npm run eval:studio` (a headless `claude -p` reading two images) may take. */
   placeCheckTimeoutMs: 180_000,
+  /** Fresh reviewers that each score one room of `npm run eval:studio`; each axis takes their median. */
+  qualityReviewersPerRoom: 3,
+  /** Milliseconds one reference-scored reviewer (a headless `claude -p` reading every reference and capture) may take. */
+  qualityReviewTimeoutMs: 420_000,
+  /** The score every axis median of a room must reach to pass the quality review, on the 1-10 scale. */
+  visualPassScore: 7,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,
