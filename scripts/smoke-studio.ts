@@ -1,3 +1,4 @@
+import { parseArgs } from "node:util";
 import { z } from "zod";
 import { config } from "../src/config.ts";
 import { runLuauFile } from "../src/luau/run-luau-file.ts";
@@ -20,6 +21,9 @@ import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 const presets = await loadPresets();
+
+/** Server & Clients opens one Studio window per player, so it runs only on `--multiplayer`. */
+const { values: smokeOptions } = parseArgs({ options: { multiplayer: { type: "boolean" } } });
 
 const capabilitiesSchema = z.array(
   z.object({ capability: z.string(), ok: z.boolean(), detail: z.string() }),
@@ -847,7 +851,9 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
             2,
           ),
       ],
-      [
+    ];
+    if (smokeOptions.multiplayer === true) {
+      steps.push([
         "run_playtest multiplayer with 2 players",
         () =>
           probePlaytest(
@@ -861,8 +867,8 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
             },
             3,
           ),
-      ],
-    ];
+      ]);
+    }
     for (const [capability, attempt] of steps) {
       findings.push(await probeTool(capability, attempt));
     }
