@@ -16,3 +16,12 @@ Task 14 969a464: the fixture part name gets a running number (`-fixture-<n>`), b
 Task 14 969a464: the fixture Attachment keeps the name `<zone>-<role>-light`.
 Task 6 8aa3aed: every part of a prop takes the role color and material, with no per-part roles.
 Task 6 8aa3aed: unset attributes default to a new Part's own color and material (Plastic), which is today's look.
+Revision after the Task 10 eval (3e40298): no train-station room reached 7 (platform focalHierarchy 3, readability 4), so Tasks 15-26 add generated hero props as each room's focal point; asset packs, store and downloaded models stay out.
+Tasks 15-26: Blender runs headless (`blender -b --factory-startup -P`), as the animation skill runs it, so blender-mcp's integrations and default-on telemetry never load.
+Tasks 17-18: GLB over FBX: Open Cloud accepts `model/gltf-binary` for Models, and its JSON chunk gives triangles, bounds and names to a TypeScript check with no FBX parser; the first upload confirms Studio imports it.
+Task 18: one object per surface role, so each role becomes one MeshPart that build_map colors from the preset, as Task 6 colors primitive props; the palette stays in presets/.
+Task 22: asset ids live in `src/hero-props/hero-assets.json`, not presets/, because `loadPresets` parses every `.json` in presets/ as a preset.
+Task 22: the upload runs inside build_map, because plugin `userConfig` values reach only the plugin's MCP servers (via `env`) and hooks, not npm scripts.
+Task 23: a hero prop takes the slot of the set piece it replaces, and that set piece is the fallback, so a build without an uploaded asset looks as it does today.
+Task 16: the platform's train car replaces the track bed, which runs along the far (south) wall opposite the entry, inside the eye view.
+Task 25: the ticket hall's hero is its ticket counter, which holds the facing-entry slot; a ticket machine has no slot there.
