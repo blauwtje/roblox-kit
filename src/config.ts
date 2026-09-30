@@ -114,6 +114,16 @@ export const config = Object.freeze({
   /** Distinct recipe hashes of one hero-prop kind that may be reviewed; a further revision is refused. */
   maxHeroPropRounds: 3,
 
+  /** Open Cloud Assets API that a reviewed hero-prop GLB is uploaded to, and the operations it is polled at. */
+  openCloudAssetsUrl: "https://apis.roblox.com/assets/v1/assets",
+  openCloudOperationsUrl: "https://apis.roblox.com/assets/v1/operations/",
+  /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator's user id. */
+  openCloudApiKeyEnv: "ROBLOX_OPEN_CLOUD_API_KEY",
+  openCloudCreatorUserIdEnv: "ROBLOX_CREATOR_USER_ID",
+  /** Wait between two polls of an upload operation, and how many polls before the upload counts as failed. */
+  openCloudPollIntervalMs: 2000,
+  openCloudMaxPolls: 60,
+
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,
   maxPlaytestPlayers: 8,

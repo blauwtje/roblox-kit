@@ -13,7 +13,26 @@
     },
     "roblox-kit": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/src/server/main.ts"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/server/main.ts"],
+      "env": {
+        "ROBLOX_OPEN_CLOUD_API_KEY": "${user_config.roblox_open_cloud_api_key}",
+        "ROBLOX_CREATOR_USER_ID": "${user_config.roblox_creator_user_id}"
+      }
+    }
+  },
+  "userConfig": {
+    "roblox_open_cloud_api_key": {
+      "type": "string",
+      "title": "Roblox Open Cloud API key",
+      "description": "Open Cloud API key with Assets read and write permission, used to upload reviewed hero-prop models. Leave empty to keep set pieces in place of hero props.",
+      "sensitive": true,
+      "required": false
+    },
+    "roblox_creator_user_id": {
+      "type": "string",
+      "title": "Roblox creator user id",
+      "description": "Numeric Roblox user id that owns the uploaded hero-prop models.",
+      "required": false
     }
   }
 }
