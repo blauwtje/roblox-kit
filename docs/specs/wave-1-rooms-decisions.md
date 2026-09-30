@@ -14,3 +14,5 @@ Task 13 d08e58b: with lightFixtures every room's center light is a shadow-castin
 Task 14 969a464: the fixture record carries `pendant: boolean`, because the Luau cannot tell a pendant from a sconce by position (both sit under the tagged ceiling).
 Task 14 969a464: the fixture part name gets a running number (`-fixture-<n>`), because a zone holds many fixtures.
 Task 14 969a464: the fixture Attachment keeps the name `<zone>-<role>-light`.
+Task 6 8aa3aed: every part of a prop takes the role color and material, with no per-part roles.
+Task 6 8aa3aed: unset attributes default to a new Part's own color and material (Plastic), which is today's look.
