@@ -232,6 +232,7 @@ await test("a zone whose two views do not fit config.maxImagesPerCall is not cap
   const studio = studioWith(() => okImage(), JSON.stringify({ zones }));
   const result = await run(studio, { mapId: "arena" });
   const structured = captureZonesTool.outputSchema.parse(result.structuredContent);
+  assert.equal(config.maxImagesPerCall, 8);
   const capturedZones = Math.floor((config.maxImagesPerCall - 1) / 2);
   const imageCount = 1 + capturedZones * 2;
   assert.ok(imageCount <= config.maxImagesPerCall);

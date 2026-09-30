@@ -82,8 +82,8 @@ export const config = Object.freeze({
   /** Long-edge range in pixels a capture is expected to fall in; capture_zones warns outside it. */
   imageLongEdgeMin: 1000,
   imageLongEdgeMax: 1568,
-  /** Images capture_zones returns per call (1,924 tokens each at 1456x1030 under 25,000 output tokens); further zones go to remainingZones. */
-  maxImagesPerCall: 11,
+  /** Images capture_zones returns per call, which is also one judge round's cap (1,924 tokens each at 1456x1030); further zones go to remainingZones. */
+  maxImagesPerCall: 8,
   /** Milliseconds one blind place check of `npm run eval:studio` (a headless `claude -p` reading two images) may take. */
   placeCheckTimeoutMs: 180_000,
   /** Fresh reviewers that each score one room of `npm run eval:studio`; each axis takes their median. */
