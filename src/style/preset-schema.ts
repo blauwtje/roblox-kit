@@ -125,6 +125,8 @@ const propRule = z.strictObject({
   heightRatio: numberRange.optional(),
   /** False keeps the prop square to its wall or row, on the 90-degree grid. */
   freeRotation: z.boolean(),
+  /** The surface role whose color and material the prop's parts take; absent keeps the generator's own look. */
+  surface: z.enum(["floor", "wall", "trim", "ceiling", "accent"]).optional(),
 });
 
 /** What a room of one type shows: the set pieces that identify it, the arrangements that fill it, the text its signs carry and the room names a reviewer may call it. */

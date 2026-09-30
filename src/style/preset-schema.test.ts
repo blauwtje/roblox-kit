@@ -225,6 +225,18 @@ await test("presetSchema accepts a prop rule without a height ratio and rejects 
   assert.equal(presetSchema.safeParse(missingRotation).success, false);
 });
 
+await test("presetSchema accepts a prop rule with a surface role and rejects an unknown role", () => {
+  for (const surface of ["floor", "wall", "trim", "ceiling", "accent"]) {
+    const preset = { ...validPreset(), propRules: { bench: { freeRotation: false, surface } } };
+    assert.equal(presetSchema.safeParse(preset).success, true, surface);
+  }
+  const unknownRole = {
+    ...validPreset(),
+    propRules: { bench: { freeRotation: false, surface: "roof" } },
+  };
+  assert.equal(presetSchema.safeParse(unknownRole).success, false);
+});
+
 await test("presetSchema rejects a height range whose min exceeds its max or is not positive", () => {
   for (const heightRatio of [
     { min: 2, max: 1 },

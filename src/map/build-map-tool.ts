@@ -232,12 +232,32 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
   }
 }
 
+/** A prop with the generator attributes its preset surface role adds. */
+type StyledPropRecord = PropRecord & { attributes?: Record<string, string> };
+
+/** The prop with `SurfaceColor` and `SurfaceMaterial` from its kind's surface role; unchanged without a role. */
+function withSurface(prop: StyledPropRecord, style: Preset): StyledPropRecord {
+  const role = style.propRules[prop.kind]?.surface;
+  if (role === undefined) {
+    return prop;
+  }
+  const { color, material } = style.surfaces[role];
+  return {
+    ...prop,
+    attributes: { ...prop.attributes, SurfaceColor: color, SurfaceMaterial: material },
+  };
+}
+
 /**
  * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type
  * followed by its arrangements, which would collide with random kit props; warnings name each set piece
- * skipped for lack of space and each arrangement that placed nothing.
+ * skipped for lack of space and each arrangement that placed nothing; a prop whose rule names a surface role
+ * carries that role's color and material as attributes.
  */
-export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; warnings: string[] } {
+export function propsOf(
+  spec: MapSpec,
+  style: Preset,
+): { props: StyledPropRecord[]; warnings: string[] } {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
   const agent = { radius: style.sizeRules.agentRadius, height: style.sizeRules.agentHeight };
@@ -254,7 +274,7 @@ export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; wa
       ...placeProps(plainSpec, style.propKit, seed),
       ...setPieces.pieces,
       ...arrangements.pieces,
-    ],
+    ].map((prop) => withSurface(prop, style)),
     warnings: [...setPieces.warnings, ...arrangements.warnings],
   };
 }

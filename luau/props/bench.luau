@@ -30,8 +30,24 @@ local function addPart(targetContainer: Instance, name: string, size: Vector3, p
 	return part
 end
 
+local DEFAULT_SURFACE_COLOR = Color3.fromRGB(163, 162, 165)
+local DEFAULT_SURFACE_MATERIAL = "Plastic"
+
+-- Gives every part the preset surface role's color and material; the defaults are a new Part's own look.
+local function paintParts(targetContainer: Instance, attributes: { [string]: any })
+	local color: Color3 = attributes.SurfaceColor
+	local material = Enum.Material:FromName(attributes.SurfaceMaterial) :: Enum.Material
+	for _, child in targetContainer:GetChildren() do
+		if child:IsA("BasePart") then
+			child.Color = color
+			child.Material = material
+		end
+	end
+end
+
 local Generator = {}
-Generator.Attributes = { Seed = 0, Slats = 4 }
+Generator.Attributes =
+	{ Seed = 0, Slats = 4, SurfaceColor = DEFAULT_SURFACE_COLOR, SurfaceMaterial = DEFAULT_SURFACE_MATERIAL }
 
 function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance)
 	local size = params.Size
@@ -71,6 +87,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		Vector3.new(size.X, backrestHeight, BACKREST_DEPTH),
 		Vector3.new(0, seatTop + backrestHeight / 2, size.Z / 2 - BACKREST_DEPTH / 2)
 	)
+	paintParts(targetContainer, params.Attributes)
 	params:Pause()
 end
 

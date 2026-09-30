@@ -75,11 +75,23 @@
   },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
   "propRules": {
-    "bench": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
-    "pillar": { "freeRotation": false },
+    "bench": {
+      "heightRatio": { "min": 0.34, "max": 0.75 },
+      "freeRotation": false,
+      "surface": "trim"
+    },
+    "lamp": {
+      "heightRatio": { "min": 1.03, "max": 2.25 },
+      "freeRotation": false,
+      "surface": "accent"
+    },
+    "pillar": { "freeRotation": false, "surface": "wall" },
     "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "rail": {
+      "heightRatio": { "min": 0.34, "max": 0.75 },
+      "freeRotation": false,
+      "surface": "trim"
+    },
     "departure-board": { "heightRatio": { "min": 1.15, "max": 2.5 }, "freeRotation": false },
     "clock": { "heightRatio": { "min": 1.26, "max": 2.75 }, "freeRotation": false },
     "ticket-machine": { "heightRatio": { "min": 0.69, "max": 1.5 }, "freeRotation": false },

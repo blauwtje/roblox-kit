@@ -447,6 +447,36 @@ await test("propsOf furnishes a typed room with its arrangements after its set p
   assert.match(warnings[0] ?? "", /pillar/);
 });
 
+await test("propsOf gives a prop whose rule names a surface role that role's color and material, and leaves the rest unchanged", async () => {
+  const preset = (await loadPresets()).get("cozy-town");
+  assert.ok(preset !== undefined);
+  const lampRule = preset.propRules["lamp"];
+  const benchRule = preset.propRules["bench"];
+  assert.ok(lampRule !== undefined && benchRule !== undefined);
+  const style = {
+    ...preset,
+    propKit: ["lamp", "bench"],
+    propRules: {
+      ...preset.propRules,
+      lamp: { ...lampRule, surface: "accent" as const },
+      bench: { ...benchRule, surface: undefined },
+    },
+  };
+  const { props } = propsOf(mapSpecSchema.parse(twoRoomSpec), style);
+  const lamps = props.filter((prop) => prop.kind === "lamp");
+  const benches = props.filter((prop) => prop.kind === "bench");
+  assert.ok(lamps.length > 0 && benches.length > 0, "the plain rooms place both kinds");
+  for (const lamp of lamps) {
+    assert.deepEqual(lamp.attributes, {
+      SurfaceColor: style.surfaces.accent.color,
+      SurfaceMaterial: style.surfaces.accent.material,
+    });
+  }
+  for (const bench of benches) {
+    assert.equal(bench.attributes, undefined);
+  }
+});
+
 await test("passes Studio's error text on, such as an unknown material", async () => {
   const message = "Unknown Roblox material name(s): Marbel. Use names from Enum.Material.";
   await assert.rejects(
