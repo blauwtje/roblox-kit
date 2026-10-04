@@ -1,10 +1,41 @@
+# Dependencies and build output
 node_modules/
-docs/research.md
-docs/repos.md
-docs/research-parts/
-docs/prompt.md
-.DS_Store
-.claude/scheduled_tasks.lock
+coverage/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.roblox-kit/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Roblox Studio lock files
+*.rbxl.lock
+*.rbxlx.lock
+
+# Private docs: specs, research notes and prompts
+docs/
+
+# Eval output and downloaded references
 eval/captures/
 eval/references/
-.roblox-kit/
+
+# Agent and editor state
+.exo/
+.claude/settings.local.json
+.claude/scheduled_tasks.*
+.claude/worktrees/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
