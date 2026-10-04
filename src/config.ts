@@ -113,6 +113,15 @@ export const config = Object.freeze({
   /** Tried in order when that variable is unset: a name looked up on PATH, then an absolute install path. */
   blenderFallbackPaths: ["blender", "/Applications/Blender.app/Contents/MacOS/Blender"],
   blenderTimeoutMs: 120_000,
+
+  /** ProfileStore, the player-saving library the `data` skill's templates are type-checked against, as `<scope>/<name>` on Wally. */
+  profileStorePackage: "lm-loleris/profilestore",
+  profileStoreVersion: "1.0.3",
+  /** Where the Wally package contents of that version are unpacked; git-ignored, under the repository root. */
+  profileStoreCacheFolder: ".roblox-kit/cache",
+  /** The Wally registry endpoint that serves a package's zip, and the `Wally-Version` header it requires. */
+  wallyPackageContentsUrl: "https://api.wally.run/v1/package-contents/",
+  wallyClientVersion: "0.3.2",
   /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
   heroPropSizeToleranceStuds: 0.1,
   /** Milliseconds one hero-prop render reviewer (a headless `claude -p` reading three renders) may take. */
