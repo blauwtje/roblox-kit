@@ -2,11 +2,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 export interface ToolRun {
   status: number | null;
   output: string;
-  missing: boolean;
+  spawnError: string | undefined;
 }
 
 export type ToolRunner = (tool: string, args: string[], cwd: string) => ToolRun;
@@ -16,8 +17,15 @@ export interface HookResult {
   stderr: string;
 }
 
-const stylerConfigNames = ["stylua.toml", ".stylua.toml"];
-const linterConfigNames = ["selene.toml"];
+const checks = [
+  { tool: "stylua", configNames: ["stylua.toml", ".stylua.toml"] },
+  { tool: "selene", configNames: ["selene.toml"] },
+];
+
+// A Rokit shim that cannot resolve its tool exits 1 with a line such as
+// "ERROR Failed to find tool 'stylua' in any project manifest file". StyLua and
+// Selene print their own errors in lowercase, so this prefix marks a tool that never started.
+const rokitErrorPrefix = "ERROR ";
 
 export function findConfigFolder(startFolder: string, names: string[]): string | undefined {
   let folder = startFolder;
@@ -32,27 +40,38 @@ export function findConfigFolder(startFolder: string, names: string[]): string |
 export const runTool: ToolRunner = (tool, args, cwd) => {
   const result = spawnSync(tool, args, { cwd, encoding: "utf8" });
   const error: NodeJS.ErrnoException | undefined = result.error;
-  const missing = error?.code === "ENOENT";
-  return { status: result.status, output: `${result.stdout}${result.stderr}`, missing };
+  const spawnError = error?.code === "ENOENT" ? "not found on PATH" : error?.message;
+  return { status: result.status, output: `${result.stdout}${result.stderr}`, spawnError };
 };
 
-export function checkLuauFile(filePath: string, run: ToolRunner = runTool): HookResult {
-  const passed: HookResult = { exitCode: 0, stderr: "" };
-  const absolutePath = path.resolve(filePath);
-  if (!absolutePath.endsWith(".luau") || !existsSync(absolutePath)) return passed;
+function startFailure(toolRun: ToolRun): string | undefined {
+  if (toolRun.spawnError !== undefined) return toolRun.spawnError;
+  if (toolRun.status === 0) return undefined;
+  const firstLine = stripVTControlCharacters(toolRun.output).trimStart().split("\n")[0] ?? "";
+  if (!firstLine.startsWith(rokitErrorPrefix)) return undefined;
+  return firstLine.slice(rokitErrorPrefix.length).trim();
+}
 
-  const fileFolder = path.dirname(absolutePath);
-  const styleFolder = findConfigFolder(fileFolder, stylerConfigNames);
-  if (styleFolder !== undefined) {
-    const format = run("stylua", [absolutePath], styleFolder);
-    if (!format.missing && format.status !== 0) return { exitCode: 2, stderr: format.output };
+export function checkLuauFile(filePath: string, run: ToolRunner = runTool): HookResult {
+  const absolutePath = path.resolve(filePath);
+  if (!absolutePath.endsWith(".luau") || !existsSync(absolutePath)) {
+    return { exitCode: 0, stderr: "" };
   }
 
-  const lintFolder = findConfigFolder(fileFolder, linterConfigNames);
-  if (lintFolder === undefined) return passed;
-  const lint = run("selene", [absolutePath], lintFolder);
-  if (lint.missing || lint.status === 0) return passed;
-  return { exitCode: 2, stderr: lint.output };
+  const fileFolder = path.dirname(absolutePath);
+  let skipNotes = "";
+  for (const { tool, configNames } of checks) {
+    const configFolder = findConfigFolder(fileFolder, configNames);
+    if (configFolder === undefined) continue;
+    const toolRun = run(tool, [absolutePath], configFolder);
+    const failure = startFailure(toolRun);
+    if (failure !== undefined) {
+      skipNotes += `${tool} skipped: ${failure}\n`;
+      continue;
+    }
+    if (toolRun.status !== 0) return { exitCode: 2, stderr: `${skipNotes}${toolRun.output}` };
+  }
+  return { exitCode: 0, stderr: skipNotes };
 }
 
 export function filePathFromInput(stdinText: string): string | undefined {

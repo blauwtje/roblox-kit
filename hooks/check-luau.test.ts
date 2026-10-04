@@ -19,11 +19,24 @@ function makeProject(configNames: string[]): { file: string; folder: string } {
   return { file, folder };
 }
 
-function recordingRunner(calls: Call[], lintStatus = 0, missing = false): ToolRunner {
+function recordingRunner(calls: Call[], lintStatus = 0, spawnError?: string): ToolRunner {
   return (tool, _args, cwd) => {
     calls.push({ tool, cwd });
     const failed = tool === "selene" && lintStatus !== 0;
-    return { status: lintStatus, output: failed ? "selene says no" : "", missing };
+    return { status: lintStatus, output: failed ? "selene says no" : "", spawnError };
+  };
+}
+
+const shimFailure =
+  "\u001b[31mERROR\u001b[0m Failed to find tool 'stylua' in any project manifest file.\n" +
+  "Add the tool to a project using 'rokit add' before running it.\n";
+
+function shimStyluaRunner(calls: Call[], lintStatus: number): ToolRunner {
+  const lint = recordingRunner(calls, lintStatus);
+  return (tool, args, cwd) => {
+    if (tool !== "stylua") return lint(tool, args, cwd);
+    calls.push({ tool, cwd });
+    return { status: 1, output: shimFailure, spawnError: undefined };
   };
 }
 
@@ -64,7 +77,7 @@ await test("a StyLua failure exits 2 with its output on stderr", () => {
   const calls: Call[] = [];
   const runner: ToolRunner = (tool, _args, cwd) => {
     calls.push({ tool, cwd });
-    return { status: 1, output: "stylua says no", missing: false };
+    return { status: 1, output: "stylua says no", spawnError: undefined };
   };
   const result = checkLuauFile(file, runner);
   assert.deepEqual(result, { exitCode: 2, stderr: "stylua says no" });
@@ -74,10 +87,38 @@ await test("a StyLua failure exits 2 with its output on stderr", () => {
   );
 });
 
-await test("a tool missing from PATH is skipped", () => {
+await test("a tool missing from PATH is skipped with one line naming it", () => {
   const { file } = makeProject(["stylua.toml", "selene.toml"]);
-  const result = checkLuauFile(file, recordingRunner([], 1, true));
-  assert.deepEqual(result, { exitCode: 0, stderr: "" });
+  const result = checkLuauFile(file, recordingRunner([], 1, "not found on PATH"));
+  assert.deepEqual(result, {
+    exitCode: 0,
+    stderr: "stylua skipped: not found on PATH\nselene skipped: not found on PATH\n",
+  });
+});
+
+await test("a Rokit shim failure for StyLua is reported and Selene still runs", () => {
+  const { file, folder } = makeProject(["stylua.toml", "selene.toml"]);
+  const calls: Call[] = [];
+  const result = checkLuauFile(file, shimStyluaRunner(calls, 0));
+  assert.deepEqual(result, {
+    exitCode: 0,
+    stderr: "stylua skipped: Failed to find tool 'stylua' in any project manifest file.\n",
+  });
+  assert.deepEqual(calls, [
+    { tool: "stylua", cwd: folder },
+    { tool: "selene", cwd: folder },
+  ]);
+});
+
+await test("a Selene error still exits 2 after a Rokit shim failure for StyLua", () => {
+  const { file } = makeProject(["stylua.toml", "selene.toml"]);
+  const result = checkLuauFile(file, shimStyluaRunner([], 1));
+  assert.deepEqual(result, {
+    exitCode: 2,
+    stderr:
+      "stylua skipped: Failed to find tool 'stylua' in any project manifest file.\n" +
+      "selene says no",
+  });
 });
 
 await test("non-Luau and missing files are ignored", () => {
