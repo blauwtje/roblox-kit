@@ -127,6 +127,24 @@ await test("the concourse's departure board replaces its departure-board set pie
   assert.ok(board.size.height <= setPiece.size.y, `board ${String(board.size.height)} studs high`);
 });
 
+await test("the ticket hall's ticket counter replaces its ticket-counter set piece and fits its span", async () => {
+  const { preset, setPieces } = await placeBenchmarkSetPieces();
+  const counter = preset.heroProps?.["ticket-counter"];
+  assert.ok(counter !== undefined);
+  assert.equal(counter.replaces, "ticket-counter");
+  assert.deepEqual(preset.roomTypes?.["ticket-hall"]?.heroProps, ["ticket-counter"]);
+  const setPiece = setPieces.find((piece) => piece.kind === "ticket-counter");
+  assert.ok(setPiece !== undefined);
+  assert.ok(
+    counter.size.width <= setPiece.size.x,
+    `counter ${String(counter.size.width)} studs wide`,
+  );
+  assert.ok(
+    counter.size.height <= setPiece.size.y,
+    `counter ${String(counter.size.height)} studs high`,
+  );
+});
+
 /** Half the extent of a cylinder along each axis: half its length on its axis, its radius on the other two. */
 function cylinderHalfExtent(cylinder: { radius: number; length: number; axis: "x" | "y" | "z" }) {
   const along = cylinder.length / 2;

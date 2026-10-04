@@ -621,6 +621,140 @@
           "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
         }
       ]
+    },
+    "ticket-counter": {
+      "description": "a long station ticket counter with a dark-green body holding three brick panels, a pale top, two dark-glass ticket windows on amber sills between green posts, and a pale canopy with amber label bars under a raised green pediment",
+      "replaces": "ticket-counter",
+      "size": { "width": 13.6, "height": 7.6, "depth": 3.0 },
+      "triangleBudget": 800,
+      "parts": [
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.2, "z": 0 },
+          "size": { "width": 13.6, "height": 0.4, "depth": 3.0 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 2.0, "z": 0.1 },
+          "size": { "width": 13.0, "height": 3.2, "depth": 2.6 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": -4.2, "y": 1.9, "z": 1.45 },
+          "size": { "width": 3.6, "height": 2.0, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": 0, "y": 1.9, "z": 1.45 },
+          "size": { "width": 3.6, "height": 2.0, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": 4.2, "y": 1.9, "z": 1.45 },
+          "size": { "width": 3.6, "height": 2.0, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 0, "y": 3.3, "z": 1.45 },
+          "size": { "width": 12.4, "height": 0.2, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 3.8, "z": 0 },
+          "size": { "width": 13.6, "height": 0.4, "depth": 3.0 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": -6.4, "y": 5.3, "z": -1.0 },
+          "size": { "width": 0.8, "height": 2.6, "depth": 0.6 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 6.4, "y": 5.3, "z": -1.0 },
+          "size": { "width": 0.8, "height": 2.6, "depth": 0.6 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 5.3, "z": -1.0 },
+          "size": { "width": 0.8, "height": 2.6, "depth": 0.6 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -3.2, "y": 5.3, "z": -1.0 },
+          "size": { "width": 5.4, "height": 2.4, "depth": 0.3 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 3.2, "y": 5.3, "z": -1.0 },
+          "size": { "width": 5.4, "height": 2.4, "depth": 0.3 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3.2, "y": 4.25, "z": -0.6 },
+          "size": { "width": 5.4, "height": 0.3, "depth": 0.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.2, "y": 4.25, "z": -0.6 },
+          "size": { "width": 5.4, "height": 0.3, "depth": 0.5 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 6.9, "z": -0.5 },
+          "size": { "width": 13.6, "height": 0.6, "depth": 2.0 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3.2, "y": 6.9, "z": 0.55 },
+          "size": { "width": 3.6, "height": 0.3, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.2, "y": 6.9, "z": 0.55 },
+          "size": { "width": 3.6, "height": 0.3, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 7.4, "z": -0.5 },
+          "size": { "width": 4.4, "height": 0.4, "depth": 1.6 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 0, "y": 7.4, "z": 0.35 },
+          "size": { "width": 3.2, "height": 0.2, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3.2, "y": 4.05, "z": 0.6 },
+          "size": { "width": 2.0, "height": 0.1, "depth": 0.8 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.2, "y": 4.05, "z": 0.6 },
+          "size": { "width": 2.0, "height": 0.1, "depth": 0.8 }
+        }
+      ]
     }
   },
   "roomTypes": {
@@ -656,6 +790,7 @@
     },
     "ticket-hall": {
       "setPieces": ["ticket-counter"],
+      "heroProps": ["ticket-counter"],
       "arrangements": [
         { "shape": "along-walls", "piece": "bench", "spacing": 5, "walls": "doorless", "inset": 2 },
         { "shape": "rows", "piece": "rail", "spacing": 4, "perRow": 3 },
