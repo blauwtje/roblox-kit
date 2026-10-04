@@ -33,7 +33,11 @@ interface SurfaceColor {
 }
 
 /** The color, and optionally the material, of the surface roles a part can take; a preset's `surfaces` fits this shape. */
-export type SurfaceColors = Record<"floor" | "wall", SurfaceColor> & { ceiling?: SurfaceColor };
+export type SurfaceColors = Record<"floor" | "wall", SurfaceColor> & {
+  ceiling?: SurfaceColor;
+  /** Marks the spawn pad; a style without it paints the pad as its floor. */
+  accent?: SurfaceColor;
+};
 
 /** Neutral grays used when the map spec has no style. */
 const defaultSurfaceColors: SurfaceColors = {
@@ -60,12 +64,14 @@ interface RoomStyle {
   floorMaterial: string;
   wallMaterial: string;
   ceilingMaterial: string;
+  spawnMaterial: string;
   wallHeight: number;
   wallThickness: number;
   doorWidth: number;
   floorColor: string;
   wallColor: string;
   ceilingColor: string;
+  spawnColor: string;
 }
 
 /** A stretch of wall, measured along the wall from its center. */
@@ -78,24 +84,27 @@ const sides: Side[] = ["north", "south", "east", "west"];
 
 /** Room settings win over map settings, which win over the style's surface material, which wins over the config defaults. */
 function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): RoomStyle {
+  const floorMaterial =
+    room.floorMaterial ??
+    spec.floorMaterial ??
+    surfaces.floor.material ??
+    config.defaultFloorMaterial;
   return {
-    floorMaterial:
-      room.floorMaterial ??
-      spec.floorMaterial ??
-      surfaces.floor.material ??
-      config.defaultFloorMaterial,
+    floorMaterial,
     wallMaterial:
       room.wallMaterial ??
       spec.wallMaterial ??
       surfaces.wall.material ??
       config.defaultWallMaterial,
     ceilingMaterial: surfaces.ceiling?.material ?? config.defaultCeilingMaterial,
+    spawnMaterial: surfaces.accent?.material ?? floorMaterial,
     wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
     wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
     doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
     floorColor: surfaces.floor.color,
     wallColor: surfaces.wall.color,
     ceilingColor: surfaces.ceiling?.color ?? defaultCeilingColor,
+    spawnColor: surfaces.accent?.color ?? surfaces.floor.color,
   };
 }
 
@@ -197,17 +206,17 @@ function ceilingPart(room: RoomSpec, style: RoomStyle): PartRecord {
   };
 }
 
-/** A pad as wide as a door, standing on the floor at the room center. */
+/** A pad as wide as a door, standing on the floor at the room center, in the accent surface. */
 function spawnPart(room: RoomSpec, style: RoomStyle): PartRecord {
   return {
     name: `${room.name}${config.spawnNameSuffix}`,
     room: room.name,
     kind: "spawn",
-    role: "floor",
-    color: style.floorColor,
+    role: "accent",
+    color: style.spawnColor,
     position: { x: room.x, y: style.wallThickness / 2, z: room.z },
     size: { x: style.doorWidth, y: style.wallThickness, z: style.doorWidth },
-    material: style.floorMaterial,
+    material: style.spawnMaterial,
   };
 }
 

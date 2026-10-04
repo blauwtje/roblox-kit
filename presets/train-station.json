@@ -1,12 +1,12 @@
 {
   "palette": {
-    "colors": ["#3b3f45", "#8a7f70", "#c9c2b4", "#2a4a3c"],
+    "colors": ["#6b665e", "#8a7f70", "#c9c2b4", "#2a4a3c"],
     "accent": "#d9a441"
   },
   "surfaces": {
     "floor": {
-      "material": "Slate",
-      "color": "#3b3f45"
+      "material": "Marble",
+      "color": "#6b665e"
     },
     "wall": {
       "material": "Brick",
@@ -31,20 +31,20 @@
     "Ambient": "#4a4740",
     "OutdoorAmbient": "#6b7280",
     "Brightness": 3,
-    "ExposureCompensation": 0.2,
+    "ExposureCompensation": 0,
     "EnvironmentDiffuseScale": 0.6,
     "EnvironmentSpecularScale": 0.5,
-    "ShadowSoftness": 0.3,
+    "ShadowSoftness": 0.05,
     "Atmosphere": {
       "Density": 0.25,
       "Offset": 0.1,
       "Color": "#c9c2b4",
       "Decay": "#8a7f70",
-      "Glare": 0.1,
+      "Glare": 0,
       "Haze": 1
     },
     "Bloom": {
-      "Intensity": 0.3,
+      "Intensity": 0,
       "Size": 20,
       "Threshold": 1.6
     }
@@ -52,40 +52,717 @@
   "lightingIntent": "bright and even overhead light with crisp shadows",
   "lightRoles": {
     "zoneMarker": {
-      "range": 30,
-      "brightness": 0.3,
+      "range": 40,
+      "brightness": 0.4,
       "color": "#f2d9a0"
     },
     "focal": {
-      "range": 45,
-      "brightness": 0.45,
+      "range": 60,
+      "brightness": 0.6,
       "color": "#ffe6b0"
     },
     "hero": {
-      "range": 80,
-      "brightness": 0.625,
+      "range": 100,
+      "brightness": 0.8,
       "color": "#fff1cf"
     }
   },
+  "lightFixtures": {
+    "kind": "sconce",
+    "spacing": 10,
+    "height": 8,
+    "size": { "width": 2, "height": 3, "depth": 1 }
+  },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
   "propRules": {
-    "bench": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
-    "pillar": { "freeRotation": false },
+    "bench": {
+      "heightRatio": { "min": 0.34, "max": 0.75 },
+      "freeRotation": false,
+      "surface": "trim"
+    },
+    "lamp": {
+      "heightRatio": { "min": 1.03, "max": 2.25 },
+      "freeRotation": false,
+      "surface": "accent"
+    },
+    "pillar": { "freeRotation": false, "surface": "wall" },
     "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
+    "rail": {
+      "heightRatio": { "min": 0.34, "max": 0.75 },
+      "freeRotation": false,
+      "surface": "trim"
+    },
     "departure-board": { "heightRatio": { "min": 1.15, "max": 2.5 }, "freeRotation": false },
     "clock": { "heightRatio": { "min": 1.26, "max": 2.75 }, "freeRotation": false },
     "ticket-machine": { "heightRatio": { "min": 0.69, "max": 1.5 }, "freeRotation": false },
-    "track-bed": { "heightRatio": { "min": 0.11, "max": 0.25 }, "freeRotation": false },
+    "track-bed": {
+      "heightRatio": { "min": 0.11, "max": 0.25 },
+      "freeRotation": false,
+      "depth": 10
+    },
     "platform-edge": { "heightRatio": { "min": 0.05, "max": 0.13 }, "freeRotation": false },
     "ticket-counter": { "heightRatio": { "min": 0.92, "max": 2.0 }, "freeRotation": false }
+  },
+  "heroProps": {
+    "train-car": {
+      "description": "a low-poly passenger train car standing on two rails, a dominant green body with a lit amber window band, a pale waist stripe and a pale roof",
+      "replaces": "track-bed",
+      "size": { "width": 40, "height": 7.8, "depth": 7 },
+      "triangleBudget": 2000,
+      "parts": [
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.4, "z": -2.5 },
+          "size": { "width": 40, "height": 0.4, "depth": 0.5 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.4, "z": 2.5 },
+          "size": { "width": 40, "height": 0.4, "depth": 0.5 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -18, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -13.5, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -9, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -4.5, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 4.5, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 9, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 13.5, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 18, "y": 0.1, "z": 0 },
+          "size": { "width": 0.8, "height": 0.2, "depth": 6.4 }
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -14, "y": 1.5, "z": -2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": -14, "y": 1.5, "z": -2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -14, "y": 1.5, "z": 2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": -14, "y": 1.5, "z": 2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -14, "y": 1.5, "z": 0 },
+          "radius": 0.2,
+          "length": 5.2,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -10, "y": 1.5, "z": -2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": -10, "y": 1.5, "z": -2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -10, "y": 1.5, "z": 2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": -10, "y": 1.5, "z": 2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": -10, "y": 1.5, "z": 0 },
+          "radius": 0.2,
+          "length": 5.2,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 10, "y": 1.5, "z": -2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": 10, "y": 1.5, "z": -2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 10, "y": 1.5, "z": 2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": 10, "y": 1.5, "z": 2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 10, "y": 1.5, "z": 0 },
+          "radius": 0.2,
+          "length": 5.2,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 14, "y": 1.5, "z": -2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": 14, "y": 1.5, "z": -2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 14, "y": 1.5, "z": 2.5 },
+          "radius": 0.9,
+          "length": 0.5,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "accent",
+          "center": { "x": 14, "y": 1.5, "z": 2.5 },
+          "radius": 0.35,
+          "length": 0.7,
+          "axis": "z"
+        },
+        {
+          "shape": "cylinder",
+          "role": "floor",
+          "center": { "x": 14, "y": 1.5, "z": 0 },
+          "radius": 0.2,
+          "length": 5.2,
+          "axis": "z"
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 2.7, "z": 0 },
+          "size": { "width": 38, "height": 0.6, "depth": 5.2 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 5, "z": 0 },
+          "size": { "width": 38.4, "height": 4, "depth": 6.4 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 3.9, "z": 0 },
+          "size": { "width": 38.4, "height": 0.3, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -15, "y": 5.5, "z": 0 },
+          "size": { "width": 4.4, "height": 1.7, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -9, "y": 5.5, "z": 0 },
+          "size": { "width": 4.4, "height": 1.7, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3, "y": 5.5, "z": 0 },
+          "size": { "width": 4.4, "height": 1.7, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3, "y": 5.5, "z": 0 },
+          "size": { "width": 4.4, "height": 1.7, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 9, "y": 5.5, "z": 0 },
+          "size": { "width": 4.4, "height": 1.7, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 15, "y": 5.5, "z": 0 },
+          "size": { "width": 4.4, "height": 1.7, "depth": 6.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -19.25, "y": 4.5, "z": 0 },
+          "size": { "width": 0.1, "height": 3, "depth": 2.2 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -19.6, "y": 3.2, "z": 0 },
+          "size": { "width": 0.8, "height": 0.5, "depth": 0.8 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 19.25, "y": 4.5, "z": 0 },
+          "size": { "width": 0.1, "height": 3, "depth": 2.2 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 19.6, "y": 3.2, "z": 0 },
+          "size": { "width": 0.8, "height": 0.5, "depth": 0.8 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 7.2, "z": 0 },
+          "size": { "width": 40, "height": 0.4, "depth": 7 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 7.6, "z": 0 },
+          "size": { "width": 34, "height": 0.4, "depth": 3.4 }
+        }
+      ]
+    },
+    "departure-board": {
+      "description": "a free-standing station departure board on two posts, a dark-green frame around a dark panel carrying four rows of amber time, destination and platform bars on both faces, under a pale cap",
+      "replaces": "departure-board",
+      "size": { "width": 12, "height": 9.7, "depth": 1.4 },
+      "triangleBudget": 800,
+      "parts": [
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -5.2, "y": 0.25, "z": 0 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 1.4 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": -5.2, "y": 1.5, "z": 0 },
+          "size": { "width": 0.8, "height": 2.0, "depth": 0.8 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 5.2, "y": 0.25, "z": 0 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 1.4 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 5.2, "y": 1.5, "z": 0 },
+          "size": { "width": 0.8, "height": 2.0, "depth": 0.8 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 5.8, "z": 0 },
+          "size": { "width": 11.4, "height": 6.6, "depth": 1.0 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 5.8, "z": 0 },
+          "size": { "width": 10.4, "height": 5.6, "depth": 1.2 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 9.4, "z": 0 },
+          "size": { "width": 12, "height": 0.6, "depth": 1.4 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 7.8, "z": -0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -0.6000000000000001, "y": 7.8, "z": -0.65 },
+          "size": { "width": 4.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 7.8, "z": -0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 7.8, "z": 0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -0.6000000000000001, "y": 7.8, "z": 0.65 },
+          "size": { "width": 4.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 7.8, "z": 0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 6.6, "z": -0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -1.2, "y": 6.6, "z": -0.65 },
+          "size": { "width": 3.4, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 6.6, "z": -0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 6.6, "z": 0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -1.2, "y": 6.6, "z": 0.65 },
+          "size": { "width": 3.4, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 6.6, "z": 0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 5.4, "z": -0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -0.7999999999999998, "y": 5.4, "z": -0.65 },
+          "size": { "width": 4.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 5.4, "z": -0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 5.4, "z": 0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -0.7999999999999998, "y": 5.4, "z": 0.65 },
+          "size": { "width": 4.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 5.4, "z": 0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 4.2, "z": -0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -1.4, "y": 4.2, "z": -0.65 },
+          "size": { "width": 3.0, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 4.2, "z": -0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -4.0, "y": 4.2, "z": 0.65 },
+          "size": { "width": 1.6, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -1.4, "y": 4.2, "z": 0.65 },
+          "size": { "width": 3.0, "height": 0.5, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.6, "y": 4.2, "z": 0.65 },
+          "size": { "width": 1.2, "height": 0.5, "depth": 0.1 }
+        }
+      ]
+    },
+    "ticket-counter": {
+      "description": "a long station ticket counter with a dark-green body holding three brick panels, a pale top, two dark-glass ticket windows on amber sills between green posts, and a pale canopy with amber label bars under a raised green pediment",
+      "replaces": "ticket-counter",
+      "size": { "width": 13.6, "height": 7.6, "depth": 3.0 },
+      "triangleBudget": 800,
+      "parts": [
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 0, "y": 0.2, "z": 0 },
+          "size": { "width": 13.6, "height": 0.4, "depth": 3.0 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 2.0, "z": 0.1 },
+          "size": { "width": 13.0, "height": 3.2, "depth": 2.6 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": -4.2, "y": 1.9, "z": 1.45 },
+          "size": { "width": 3.6, "height": 2.0, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": 0, "y": 1.9, "z": 1.45 },
+          "size": { "width": 3.6, "height": 2.0, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "wall",
+          "center": { "x": 4.2, "y": 1.9, "z": 1.45 },
+          "size": { "width": 3.6, "height": 2.0, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 0, "y": 3.3, "z": 1.45 },
+          "size": { "width": 12.4, "height": 0.2, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 3.8, "z": 0 },
+          "size": { "width": 13.6, "height": 0.4, "depth": 3.0 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": -6.4, "y": 5.3, "z": -1.0 },
+          "size": { "width": 0.8, "height": 2.6, "depth": 0.6 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 6.4, "y": 5.3, "z": -1.0 },
+          "size": { "width": 0.8, "height": 2.6, "depth": 0.6 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 5.3, "z": -1.0 },
+          "size": { "width": 0.8, "height": 2.6, "depth": 0.6 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": -3.2, "y": 5.3, "z": -1.0 },
+          "size": { "width": 5.4, "height": 2.4, "depth": 0.3 }
+        },
+        {
+          "shape": "box",
+          "role": "floor",
+          "center": { "x": 3.2, "y": 5.3, "z": -1.0 },
+          "size": { "width": 5.4, "height": 2.4, "depth": 0.3 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3.2, "y": 4.25, "z": -0.6 },
+          "size": { "width": 5.4, "height": 0.3, "depth": 0.5 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.2, "y": 4.25, "z": -0.6 },
+          "size": { "width": 5.4, "height": 0.3, "depth": 0.5 }
+        },
+        {
+          "shape": "box",
+          "role": "ceiling",
+          "center": { "x": 0, "y": 6.9, "z": -0.5 },
+          "size": { "width": 13.6, "height": 0.6, "depth": 2.0 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3.2, "y": 6.9, "z": 0.55 },
+          "size": { "width": 3.6, "height": 0.3, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.2, "y": 6.9, "z": 0.55 },
+          "size": { "width": 3.6, "height": 0.3, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "trim",
+          "center": { "x": 0, "y": 7.4, "z": -0.5 },
+          "size": { "width": 4.4, "height": 0.4, "depth": 1.6 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 0, "y": 7.4, "z": 0.35 },
+          "size": { "width": 3.2, "height": 0.2, "depth": 0.1 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": -3.2, "y": 4.05, "z": 0.6 },
+          "size": { "width": 2.0, "height": 0.1, "depth": 0.8 }
+        },
+        {
+          "shape": "box",
+          "role": "accent",
+          "center": { "x": 3.2, "y": 4.05, "z": 0.6 },
+          "size": { "width": 2.0, "height": 0.1, "depth": 0.8 }
+        }
+      ]
+    }
   },
   "roomTypes": {
     "concourse": {
       "setPieces": ["bench", "departure-board", "clock"],
+      "heroProps": ["departure-board"],
       "arrangements": [
-        { "shape": "grid", "piece": "pillar", "spacing": 12 },
+        { "shape": "grid", "piece": "pillar", "spacing": 9 },
         { "shape": "rows", "piece": "bench", "spacing": 6, "perRow": 3 },
         {
           "shape": "along-walls",
@@ -93,35 +770,37 @@
           "spacing": 5,
           "walls": "doorless",
           "inset": 2,
-          "max": 3
+          "max": 6
         }
       ],
       "signLabel": "CONCOURSE",
       "roomNames": ["waiting area", "hall", "station hall", "lobby"]
     },
     "platform": {
-      "setPieces": ["track-bed", "platform-edge"],
+      "setPieces": ["track-bed", "platform-edge", "clock"],
+      "heroProps": ["train-car"],
       "arrangements": [
         { "shape": "along-length", "piece": "lamp", "spacing": 8, "inset": 1 },
         { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 5 },
         { "shape": "along-length", "piece": "pillar", "spacing": 8, "inset": 10 },
-        { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 15 }
+        { "shape": "along-length", "piece": "bench", "spacing": 8, "inset": 13 }
       ],
       "signLabel": "PLATFORM 1",
       "roomNames": ["track", "station platform"]
     },
     "ticket-hall": {
       "setPieces": ["ticket-counter"],
+      "heroProps": ["ticket-counter"],
       "arrangements": [
-        { "shape": "along-walls", "piece": "bench", "spacing": 6, "walls": "doorless", "inset": 2 },
+        { "shape": "along-walls", "piece": "bench", "spacing": 5, "walls": "doorless", "inset": 2 },
         { "shape": "rows", "piece": "rail", "spacing": 4, "perRow": 3 },
-        { "shape": "grid", "piece": "lamp", "spacing": 7 },
+        { "shape": "along-walls", "piece": "lamp", "spacing": 7, "walls": "doorless", "inset": 1 },
         {
           "shape": "along-walls",
           "piece": "ticket-machine",
           "spacing": 3,
           "walls": "doorless",
-          "inset": 2
+          "inset": 4
         }
       ],
       "signLabel": "TICKETS",

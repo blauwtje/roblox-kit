@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { tools } from "../server/main.ts";
-import { buildMapTool, propsOf } from "./build-map-tool.ts";
+import { buildMapTool, buildMapToolWith, propsOf } from "./build-map-tool.ts";
+import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import { mapSpecSchema } from "./map-spec.ts";
 import { loadPresets } from "../style/load-preset.ts";
 
@@ -212,18 +216,41 @@ await test("a style sends its lights per zone and applies its lighting recipe af
   const lighting = String(connection.requests[6]?.arguments["code"]);
   assert.equal(connection.requests.length, 7);
   const { lights } = requestArguments(connection, 5) as {
-    lights: { zone: string; part: string; role: string; shadows: boolean }[];
+    lights: {
+      zone: string;
+      part: string;
+      role: string;
+      shadows: boolean;
+      fixture?: { pendant: boolean };
+    }[];
   };
-  assert.deepEqual(
-    lights.map((light) => [light.zone, light.part, light.role, light.shadows]),
-    [
-      ["start", "start-floor", "hero", true],
-      ["start", "start-floor", "focal", false],
-      ["hall", "hall-floor", "zoneMarker", false],
-    ],
-  );
+  for (const zone of ["start", "hall"]) {
+    const zoneLights = lights.filter((light) => light.zone === zone);
+    assert.ok(zoneLights.every((light) => light.part === `${zone}-floor`));
+    assert.ok(zoneLights.every((light) => light.fixture === undefined || !light.fixture.pendant));
+    assert.deepEqual(
+      zoneLights.filter((light) => light.role === "hero").map((light) => light.shadows),
+      [true],
+    );
+    assert.equal(
+      zoneLights.filter((light) => light.role === "focal").length,
+      zone === "start" ? 1 : 0,
+    );
+    const fixtureLights = zoneLights.filter((light) => light.fixture !== undefined);
+    assert.ok(fixtureLights.length > 0, `${zone} has fixtures`);
+    assert.ok(fixtureLights.every((light) => light.role === "zoneMarker" && !light.shadows));
+  }
   assert.ok(lighting.includes('"recipe"'));
   assert.ok(lighting.includes('"mapId":"two-rooms"'));
+});
+
+await test("the lighting phase carries what places a fixture at each ceiling light", async () => {
+  const connection = styledStudio();
+  await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  const lightingArguments = requestArguments(connection, 5);
+  assert.equal(lightingArguments["ceilingTag"], config.ceilingTag);
+  assert.equal(lightingArguments["ceilingDropStuds"], config.lightCeilingDropStuds);
+  assert.equal(lightingArguments["fixtureSizeStuds"], config.lightFixtureSizeStuds);
 });
 
 await test("without a style no lights are sent and the last request only restores Lighting", async () => {
@@ -424,6 +451,36 @@ await test("propsOf furnishes a typed room with its arrangements after its set p
   assert.match(warnings[0] ?? "", /pillar/);
 });
 
+await test("propsOf gives a prop whose rule names a surface role that role's color and material, and leaves the rest unchanged", async () => {
+  const preset = (await loadPresets()).get("cozy-town");
+  assert.ok(preset !== undefined);
+  const lampRule = preset.propRules["lamp"];
+  const benchRule = preset.propRules["bench"];
+  assert.ok(lampRule !== undefined && benchRule !== undefined);
+  const style = {
+    ...preset,
+    propKit: ["lamp", "bench"],
+    propRules: {
+      ...preset.propRules,
+      lamp: { ...lampRule, surface: "accent" as const },
+      bench: { ...benchRule, surface: undefined },
+    },
+  };
+  const { props } = propsOf(mapSpecSchema.parse(twoRoomSpec), style);
+  const lamps = props.filter((prop) => prop.kind === "lamp");
+  const benches = props.filter((prop) => prop.kind === "bench");
+  assert.ok(lamps.length > 0 && benches.length > 0, "the plain rooms place both kinds");
+  for (const lamp of lamps) {
+    assert.deepEqual(lamp.attributes, {
+      SurfaceColor: style.surfaces.accent.color,
+      SurfaceMaterial: style.surfaces.accent.material,
+    });
+  }
+  for (const bench of benches) {
+    assert.equal(bench.attributes, undefined);
+  }
+});
+
 await test("passes Studio's error text on, such as an unknown material", async () => {
   const message = "Unknown Roblox material name(s): Marbel. Use names from Enum.Material.";
   await assert.rejects(
@@ -448,4 +505,100 @@ await test("build-map.luau is strict, guards its build with a recording and chec
   assert.ok(source.includes("RobloxKitLightingSnapshot"));
   assert.ok(source.includes("PointLight"));
   assert.ok(source.indexOf("assertMaterialsExist()") < source.indexOf("TryBeginRecording"));
+});
+
+/** The train-station benchmark, whose platform lists the train-car hero prop in place of its track bed. */
+const benchmarkSpec = JSON.parse(
+  await readFile(new URL("../../eval/benchmarks/train-station.json", import.meta.url), "utf8"),
+) as object;
+const trainStation = (await loadPresets()).get("train-station");
+assert.ok(trainStation !== undefined);
+const trainCarHash = await heroRecipeHash(trainStation, "train-car");
+
+/** A temporary hero-assets.json, recording the train car when `recorded`, and a hero-props folder with no reviews. */
+async function fakeHeroSources(recorded: boolean): Promise<HeroPropSources> {
+  const directory = await mkdtemp(join(tmpdir(), "build-map-heroes-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  const assets = recorded ? { [trainCarHash]: { kind: "train-car", assetId: "987654" } } : {};
+  await writeFile(assetsFile, JSON.stringify(assets));
+  await mkdir(join(directory, "hero-props"));
+  const heroPropsDirectory = pathToFileURL(join(directory, "hero-props/"));
+  return {
+    assetsFile,
+    heroPropsDirectory,
+    credentials: () => Promise.reject(new Error("an unreviewed hero prop looks up no credentials")),
+  };
+}
+
+const propsPhaseIndex = phaseNames.indexOf("props");
+
+await test("a recorded hero asset is sent to the props phase in the slot of the set piece it replaces", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(true));
+  const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  const propsPhase = requestArguments(studio, propsPhaseIndex);
+  const heroProps = propsPhase["heroProps"] as { kind: string; assetId: string; size: object }[];
+  const trainCars = heroProps.filter((hero) => hero.kind === "train-car");
+  assert.equal(trainCars.length, 1);
+  const [hero] = trainCars;
+  assert.ok(hero !== undefined);
+  assert.equal(hero.kind, "train-car");
+  assert.equal(hero.assetId, "987654");
+  assert.deepEqual(hero.size, { x: 40, y: 7.8, z: 7 });
+  const props = propsPhase["props"] as { kind: string }[];
+  assert.ok(!props.some((prop) => prop.kind === "track-bed"), "the track bed gives up its slot");
+  assert.ok(!("track-bed" in (propsPhase["generators"] as object)));
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.ok(!structured.warnings.some((warning) => warning.includes("hero prop train-car")));
+  assert.equal(structured.phases[propsPhaseIndex]?.partCount, props.length + heroProps.length);
+});
+
+await test("without a recorded hero asset the set piece stays and the result says why", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(false));
+  const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  const propsPhase = requestArguments(studio, propsPhaseIndex);
+  const heroProps = propsPhase["heroProps"] as { kind: string }[];
+  assert.ok(!heroProps.some((hero) => hero.kind === "train-car"));
+  const props = propsPhase["props"] as { kind: string }[];
+  assert.ok(props.some((prop) => prop.kind === "track-bed"));
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  const heroWarnings = structured.warnings.filter((warning) =>
+    warning.includes("hero prop train-car"),
+  );
+  assert.equal(heroWarnings.length, 1);
+  assert.match(
+    heroWarnings[0] ?? "",
+    /keeps its track-bed set piece instead of hero prop train-car/,
+  );
+  assert.match(heroWarnings[0] ?? "", /no passed review/);
+});
+
+await test("build-map.luau loads each hero asset, scales it to its size and colors its MeshParts without collision", async () => {
+  const source = await readFile(new URL("../../luau/build-map.luau", import.meta.url), "utf8");
+  for (const fragment of [
+    "InsertService:LoadAsset",
+    ":ScaleTo(",
+    "MeshPart",
+    "surfaces[",
+    "CanCollide = false",
+    "CanTouch = false",
+    "CanQuery = false",
+    "RobloxKitHeroKind",
+    "arguments.heroProps",
+  ]) {
+    assert.ok(source.includes(fragment), `build-map.luau has ${fragment}`);
+  }
+});
+
+await test("check-map.luau's placement check covers the hero Models", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const placedBox = source.slice(
+    source.indexOf("local function placedBox"),
+    source.indexOf("local function findPlacement"),
+  );
+  assert.ok(source.includes('HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"'));
+  assert.ok(placedBox.includes("HERO_KIND_ATTRIBUTE_NAME") && placedBox.includes("GetBoundingBox"));
+  const placement = source.slice(source.indexOf("local function findPlacement"));
+  assert.ok(placement.includes("placedBox(child)"));
 });

@@ -46,6 +46,8 @@ export const config = Object.freeze({
 
   /** How far below the ceiling a room light hangs. */
   lightCeilingDropStuds: 1,
+  /** Side of the cube fixture that build_map hangs from the ceiling at each ceiling light. */
+  lightFixtureSizeStuds: 1,
   /** Height above the floor of the focal light over a spawn pad. */
   focalLightHeightStuds: 6,
 
@@ -99,6 +101,32 @@ export const config = Object.freeze({
   calibrationBadAnchorMeanCeiling: 4,
   calibrationAxisGap: 2,
   evalWaveRoomTypes: ["platform", "concourse", "ticket-hall"],
+
+  /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
+  heroPropsFolder: ".roblox-kit/hero-props",
+  /** The Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
+  blenderPath: "/opt/homebrew/bin/blender",
+  blenderTimeoutMs: 120_000,
+  /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
+  heroPropSizeToleranceStuds: 0.1,
+  /** Milliseconds one hero-prop render reviewer (a headless `claude -p` reading three renders) may take. */
+  heroPropReviewTimeoutMs: 180_000,
+  /** Distinct recipe hashes of one hero-prop kind that may be reviewed; a further revision is refused. */
+  maxHeroPropRounds: 3,
+
+  /** Open Cloud Assets API that a reviewed hero-prop GLB is uploaded to, and the operations it is polled at. */
+  openCloudAssetsUrl: "https://apis.roblox.com/assets/v1/assets",
+  openCloudOperationsUrl: "https://apis.roblox.com/assets/v1/operations/",
+  /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator: a user id or a group id. */
+  openCloudApiKeyEnv: "ROBLOX_OPEN_CLOUD_API_KEY",
+  openCloudCreatorUserIdEnv: "ROBLOX_CREATOR_USER_ID",
+  openCloudCreatorGroupIdEnv: "ROBLOX_CREATOR_GROUP_ID",
+  /** Gitignored files, under the repository root, read when the variables are unset: the key (trimmed), and the creator as {"groupId":"<digits>"} or {"userId":"<digits>"}. */
+  openCloudKeyFile: ".roblox-kit/open-cloud-key",
+  openCloudCreatorFile: ".roblox-kit/open-cloud-creator.json",
+  /** Wait between two polls of an upload operation, and how many polls before the upload counts as failed. */
+  openCloudPollIntervalMs: 2000,
+  openCloudMaxPolls: 60,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,

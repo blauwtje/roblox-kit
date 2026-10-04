@@ -3,9 +3,13 @@
 -- `arguments.phase`. The shell phase replaces the Model of the same id and the terrain it filled and
 -- adds the walls and terrain; the later phases find that Model and add to it: floors, spawns and
 -- ceilings, then doorway arches, then trim details, then props, then lights. Each light record becomes
--- a PointLight under an Attachment under the floor part of its zone. Ceilings are tagged and decorative,
--- as are the detail parts. Each prop becomes a ProceduralModel running the ModuleScript of its kind
--- under the Model, generated before the props phase returns. Reports the number of parts in the Model
+-- a PointLight under an Attachment under its fixture box, a Neon part tagged like the ceilings only for a
+-- pendant, or without one under the floor part of its zone; a light without a box within `ceilingDropStuds` of
+-- the ceiling above it also gets a Neon fixture part against that ceiling, tagged like the ceilings.
+-- Ceilings are tagged and decorative, as are the detail parts and fixtures. Each prop becomes a ProceduralModel running the ModuleScript of its kind
+-- under the Model, generated before the props phase returns. Each hero prop is its uploaded asset loaded with
+-- InsertService into a Model named "<kind>-hero-<n>", scaled to its size, centered on its pivot and turned by its
+-- yaw, its MeshParts colored from the surface each is named after, anchored and decorative. Reports the number of parts in the Model
 -- after the phase (the BaseParts that are children of the Model); the shell phase also reports
 -- whether it replaced a map.
 type Vector = { x: number, y: number, z: number }
@@ -32,6 +36,17 @@ type PropRecord = {
 	attributes: { [string]: string }?,
 }
 
+type HeroPropRecord = {
+	kind: string,
+	assetId: string,
+	-- Center of the hero's box; `size.x` is the width it is scaled to, and `yaw` its turn in degrees about Y.
+	pivot: Vector,
+	yaw: number,
+	size: Vector,
+	-- Hex color and material name of each surface role a MeshPart may be named after.
+	surfaces: { [string]: { color: string, material: string } },
+}
+
 type Variant = {
 	baseMaterial: string,
 	studsPerTile: number,
@@ -44,6 +59,8 @@ type LightRecord = {
 	position: Vector,
 	range: number,
 	shadows: boolean,
+	-- The visible box that holds the light; a pendant hangs from the ceiling and hides with it.
+	fixture: { position: Vector, size: Vector, pendant: boolean }?,
 	brightness: number,
 	color: string,
 }
@@ -67,7 +84,11 @@ type Arguments = {
 	props: { PropRecord }?,
 	-- Source text of the generator of each prop kind.
 	generators: { [string]: string }?,
+	heroProps: { HeroPropRecord }?,
 	ceilingTag: string?,
+	-- Lighting phase: how far below a ceiling a light may hang to get a fixture, and the fixture's side.
+	ceilingDropStuds: number?,
+	fixtureSizeStuds: number?,
 	terrainFills: { TerrainFill }?,
 	-- Flat MaterialVariant of each surface role that has one.
 	variants: { [string]: Variant }?,
@@ -78,11 +99,15 @@ type Arguments = {
 local TERRAIN_ATTRIBUTE_NAME = "RobloxKitTerrainFills"
 -- Attribute on the map Model holding the Lighting snapshot; apply-lighting.luau owns it and a rebuild carries it over.
 local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
+local FIXTURE_TOLERANCE_STUDS = 0.001
+-- Attribute naming a hero Model's kind; check-map.luau finds hero Models by it.
+local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
 
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local InsertService = game:GetService("InsertService")
 local MaterialService = game:GetService("MaterialService")
 
 local function toVector3(vector: Vector): Vector3
@@ -248,15 +273,42 @@ local function countPartChildren(model: Model): number
 	return count
 end
 
--- A light hangs from an Attachment on its zone's floor part, so it adds no part to the map.
-local function addLight(model: Model, record: LightRecord)
-	local floor = model:FindFirstChild(record.part)
-	if not floor or not floor:IsA("BasePart") then
+-- A Neon box in the light's color; only a pendant is tagged, so cutaways hide it with the ceilings.
+local function addFixtureBox(model: Model, record: LightRecord, fixtureNumber: number): Part
+	local box = record.fixture
+	local ceilingTag = arguments.ceilingTag
+	if not box or not ceilingTag then
+		error("A fixture box needs its record's fixture and ceilingTag.", 0)
+	end
+	local fixture = Instance.new("Part")
+	fixture.Name = `{record.zone}-{record.role}-fixture-{fixtureNumber}`
+	fixture.Anchored = true
+	fixture.CanCollide = false
+	fixture.CanTouch = false
+	fixture.CanQuery = false
+	fixture.Material = Enum.Material.Neon
+	fixture.Color = Color3.fromHex(record.color)
+	fixture.Size = toVector3(box.size)
+	fixture.Position = toVector3(box.position)
+	if box.pendant then
+		CollectionService:AddTag(fixture, ceilingTag)
+	end
+	fixture.Parent = model
+	return fixture
+end
+
+-- A light hangs from an Attachment on its fixture box when it has one, else on its zone's floor part, which adds no part.
+local function addLight(model: Model, record: LightRecord, fixtureNumber: number)
+	local holder = model:FindFirstChild(record.part)
+	if record.fixture then
+		holder = addFixtureBox(model, record, fixtureNumber)
+	end
+	if not holder or not holder:IsA("BasePart") then
 		error(`Light "{record.role}" of zone "{record.zone}" has no floor part named "{record.part}".`, 0)
 	end
 	local attachment = Instance.new("Attachment")
 	attachment.Name = `{record.zone}-{record.role}-light`
-	attachment.Parent = floor
+	attachment.Parent = holder
 	attachment.WorldPosition = toVector3(record.position)
 	local light = Instance.new("PointLight")
 	light.Range = record.range
@@ -264,6 +316,45 @@ local function addLight(model: Model, record: LightRecord)
 	light.Color = Color3.fromHex(record.color)
 	light.Shadows = record.shadows
 	light.Parent = attachment
+end
+
+-- The bottom face height of the tagged ceiling over the point, if any.
+local function ceilingBottomOver(model: Model, position: Vector, ceilingTag: string): number?
+	for _, tagged in CollectionService:GetTagged(ceilingTag) do
+		if tagged:IsDescendantOf(model) and tagged:IsA("BasePart") then
+			local offset = tagged.CFrame:PointToObjectSpace(toVector3(position))
+			if math.abs(offset.X) <= tagged.Size.X / 2 and math.abs(offset.Z) <= tagged.Size.Z / 2 then
+				return tagged.Position.Y - tagged.Size.Y / 2
+			end
+		end
+	end
+	return nil
+end
+
+-- A Neon cube against the ceiling over a light within the drop of it; it hides with the ceilings by their tag.
+local function addFixture(model: Model, record: LightRecord)
+	local ceilingTag, dropStuds, sizeStuds =
+		arguments.ceilingTag, arguments.ceilingDropStuds, arguments.fixtureSizeStuds
+	if not ceilingTag or not dropStuds or not sizeStuds then
+		error("A lighting phase needs ceilingTag, ceilingDropStuds and fixtureSizeStuds.", 0)
+	end
+	local ceilingBottom = ceilingBottomOver(model, record.position, ceilingTag)
+	-- Studio positions carry float error, so the drop is compared with a tolerance.
+	if not ceilingBottom or ceilingBottom - record.position.y > dropStuds + FIXTURE_TOLERANCE_STUDS then
+		return
+	end
+	local fixture = Instance.new("Part")
+	fixture.Name = `{record.zone}-{record.role}-fixture`
+	fixture.Anchored = true
+	fixture.CanCollide = false
+	fixture.CanTouch = false
+	fixture.CanQuery = false
+	fixture.Material = Enum.Material.Neon
+	fixture.Color = Color3.fromHex(record.color)
+	fixture.Size = Vector3.new(sizeStuds, sizeStuds, sizeStuds)
+	fixture.Position = Vector3.new(record.position.x, ceilingBottom - sizeStuds / 2, record.position.z)
+	CollectionService:AddTag(fixture, ceilingTag)
+	fixture.Parent = model
 end
 
 local function findModel(): Model
@@ -279,8 +370,15 @@ local function findModel(): Model
 end
 
 local function addLights(model: Model)
+	local fixtureCount = 0
 	for _, record in arguments.lights or {} do
-		addLight(model, record)
+		if record.fixture then
+			fixtureCount += 1
+		end
+		addLight(model, record, fixtureCount)
+		if not record.fixture then
+			addFixture(model, record)
+		end
 	end
 end
 
@@ -290,8 +388,65 @@ local function addParts(model: Model)
 	end
 end
 
+-- Colors one hero MeshPart from the surface its name names; a name that names no surface fails the build.
+local function paintHeroPart(part: MeshPart, record: HeroPropRecord)
+	local surface = record.surfaces[part.Name]
+	if not surface then
+		local roles = {}
+		for role in record.surfaces do
+			table.insert(roles, role)
+		end
+		table.sort(roles)
+		local known = table.concat(roles, ", ")
+		error(
+			`Hero prop {record.kind} (asset {record.assetId}) has a MeshPart named "{part.Name}", which names none of its surfaces: {known}.`,
+			0
+		)
+	end
+	part.Color = Color3.fromHex(surface.color)
+	part.Material = materialNamed(surface.material)
+end
+
+-- The hero props, each its asset loaded into a Model named "<kind>-hero-<n>", scaled so its width is `size.x`,
+-- centered on its pivot and turned by its yaw; every part is anchored and neither collides, touches nor is queried.
+local function addHeroProps(model: Model)
+	local countByKind: { [string]: number } = {}
+	for _, record in arguments.heroProps or {} do
+		local assetId = tonumber(record.assetId)
+		if not assetId then
+			error(`Hero prop {record.kind} has the asset id "{record.assetId}", which is not a number.`, 0)
+		end
+		local hero = InsertService:LoadAsset(assetId)
+		local _, extents = hero:GetBoundingBox()
+		if extents.X <= 0 then
+			error(`Hero prop {record.kind} (asset {record.assetId}) has no width to scale.`, 0)
+		end
+		hero:ScaleTo(hero:GetScale() * record.size.x / extents.X)
+		for _, descendant in hero:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+				descendant.CanTouch = false
+				descendant.CanQuery = false
+				if descendant:IsA("MeshPart") then
+					paintHeroPart(descendant, record)
+				end
+			end
+		end
+		local center = hero:GetBoundingBox()
+		hero.WorldPivot = CFrame.new(center.Position)
+		hero:PivotTo(CFrame.new(toVector3(record.pivot)) * CFrame.Angles(0, math.rad(record.yaw), 0))
+		local count = (countByKind[record.kind] or 0) + 1
+		countByKind[record.kind] = count
+		hero.Name = `{record.kind}-hero-{count}`
+		hero:SetAttribute(HERO_KIND_ATTRIBUTE_NAME, record.kind)
+		hero.Parent = model
+	end
+end
+
 local function addPropModels(model: Model)
 	local proceduralModels = addProps(model, addGenerators(model))
+	addHeroProps(model)
 	waitForGeneration(proceduralModels)
 end
 

@@ -172,6 +172,11 @@ function alongClearOfClearances(
   return { along: (longest.start + longest.end) / 2, length: longest.end - longest.start };
 }
 
+/** Studs a track piece stands away from its wall: the preset's `depth` for the kind, else the generator's own. */
+function trackDepthOf(kind: "track-bed" | "platform-edge", propRules: Preset["propRules"]): number {
+  return propRules[kind]?.depth ?? propDimensions[kind].z;
+}
+
 /**
  * Track bed against the wall and the platform edge in front of it, its warning strip facing the track. Both
  * span the same stretch of the wall, which stops short of any doorway clearance box reaching into their depth.
@@ -182,11 +187,13 @@ function trackPiece(
   kind: "track-bed" | "platform-edge",
   seed: number,
   clearances: DoorwayClearanceBox[],
+  propRules: Preset["propRules"],
 ): SetPieceRecord {
   const side = longestDoorlessWall(room, interior, kind);
   const { length, across } = wallSpan(interior, side);
-  const trackDepth = propDimensions["track-bed"].z;
-  const pieceDepth = trackDepth + propDimensions["platform-edge"].z;
+  const trackDepth = trackDepthOf("track-bed", propRules);
+  const edgeDepth = trackDepthOf("platform-edge", propRules);
+  const pieceDepth = trackDepth + edgeDepth;
   assertFits(room, kind, length - 2 * cornerReachStuds);
   assertFits(room, kind, across - pieceDepth);
   const span = alongClearOfClearances(
@@ -197,8 +204,12 @@ function trackPiece(
     length / 2 - cornerReachStuds,
     clearances,
   );
-  const size = { ...propDimensions[kind], x: span.length };
-  const inset = kind === "track-bed" ? trackDepth / 2 : trackDepth + size.z / 2;
+  const size = {
+    ...propDimensions[kind],
+    x: span.length,
+    z: kind === "track-bed" ? trackDepth : edgeDepth,
+  };
+  const inset = kind === "track-bed" ? trackDepth / 2 : trackDepth + edgeDepth / 2;
   const facing = kind === "track-bed" ? oppositeSide[side] : side;
   return placed(room, interior, { kind, side, along: span.along, inset, size, facing, seed });
 }
@@ -286,10 +297,11 @@ function pieceFacingEntry(
 }
 
 /**
- * A sign at a door, its label on both faces. On a north or south wall it hangs just inside the doorway under
- * the arch lintel, facing into the room. On an east or west wall it sticks out from the wall beside the doorway
- * as a blade sign with its faces toward north and south, where the zone views look from; when doorways and
- * corners leave that wall no space, it hangs in the doorway instead.
+ * A sign at a door, its label on both faces. On a north or south wall it hangs flat on the wall beside the
+ * doorway, its back face on the room-side face of the wall, facing into the room. On an east or west wall it
+ * sticks out from the wall beside the doorway as a blade sign with its faces toward north and south, where
+ * the zone views look from. When doorways and corners leave that wall no space, it hangs in the doorway
+ * under the arch lintel instead.
  */
 function signAtDoor(
   room: RoomSpec,
@@ -305,19 +317,20 @@ function signAtDoor(
     kind: "sign" as const,
     side: door.side,
     along: door.offset,
-    inset: detailDimensions.archDepthStuds + size.z / 2,
+    inset: size.z / 2,
     size,
     facing: oppositeSide[door.side],
     seed,
   };
-  if (runsAlongX(door.side)) {
-    return placed(room, interior, inDoorway, attributes, height);
-  }
-  const reach = wallSpan(interior, door.side).length / 2 - cornerReachStuds - size.z / 2;
+  const flat = runsAlongX(door.side);
+  const lengthAlongWall = flat ? size.x : size.z;
+  const reach = wallSpan(interior, door.side).length / 2 - cornerReachStuds - lengthAlongWall / 2;
   try {
-    const along = alongClearOfDoors(room, interior, door.side, size.z, reach, door.offset);
-    const blade = { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
-    return placed(room, interior, blade, attributes, height);
+    const along = alongClearOfDoors(room, interior, door.side, lengthAlongWall, reach, door.offset);
+    const beside = flat
+      ? { ...inDoorway, along }
+      : { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
+    return placed(room, interior, beside, attributes, height);
   } catch (error) {
     if (!(error instanceof SetPieceMisfit)) {
       throw error;
@@ -369,6 +382,7 @@ function setPiecesOfRoom(
   accent: string,
   seed: number,
   clearances: DoorwayClearanceBox[],
+  propRules: Preset["propRules"],
 ): SetPiecePlacement {
   const roomType = room.roomType === undefined ? undefined : roomTypes[room.roomType];
   if (roomType === undefined) {
@@ -382,7 +396,7 @@ function setPiecesOfRoom(
     const kind = setPieceKind(room, name);
     try {
       if (kind === "track-bed" || kind === "platform-edge") {
-        pieces.push(trackPiece(room, interior, kind, seed, clearances));
+        pieces.push(trackPiece(room, interior, kind, seed, clearances, propRules));
       } else if (standingKinds.has(kind)) {
         pieces.push(standingPiece(room, interior, kind, standingSlot, seed));
         standingSlot += 1;
@@ -407,7 +421,8 @@ function setPiecesOfRoom(
  * against the wall opposite the entry door (the room's first door) looking at it, and every typed room gets a
  * sign at each door. Rooms without a type get none.
  * The track pieces stop short of the `clearances` (doorway clearance boxes of the map); without them a piece may
- * stand in a doorway's path.
+ * stand in a doorway's path. A `depth` on the track bed's or platform edge's entry in `propRules` sets how far
+ * that piece stands from the wall in place of the generator's own depth.
  * A piece its room has no space for is skipped with a warning; a piece with no generator throws.
  */
 export function placeSetPieces(
@@ -416,12 +431,13 @@ export function placeSetPieces(
   accent: string,
   seed: number,
   clearances: DoorwayClearanceBox[] = [],
+  propRules: Preset["propRules"] = {},
 ): SetPiecePlacement {
   if (roomTypes === undefined) {
     return { pieces: [], warnings: [] };
   }
   const placements = spec.rooms.map((room) =>
-    setPiecesOfRoom(spec, room, roomTypes, accent, seed, clearances),
+    setPiecesOfRoom(spec, room, roomTypes, accent, seed, clearances, propRules),
   );
   return {
     pieces: placements.flatMap((placement) => placement.pieces),

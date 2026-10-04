@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
+import { placeArrangements } from "../map/arrangement-placement.ts";
+import { relationMapSpecSchema } from "../map/map-spec.ts";
+import { resolveRelations } from "../map/relation-solver.ts";
+import { placeSetPieces } from "../map/set-piece-placement.ts";
+import { doorwayClearanceBoxes } from "../map/size-rules.ts";
 import { loadPresets } from "./load-preset.ts";
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
@@ -10,6 +16,7 @@ const builtInMaterials = new Set([
   "Concrete",
   "DiamondPlate",
   "Fabric",
+  "Marble",
   "Metal",
   "Neon",
   "Plaster",
@@ -41,5 +48,136 @@ await test("every bundled preset meets the size rules check_map enforces", async
     assert.ok(preset.sizeRules.minDoorwayWidth >= 10, `${name} doorway`);
     assert.ok(preset.sizeRules.minHallwayWidth >= 10, `${name} hallway`);
     assert.ok(preset.sizeRules.minWallHeight >= 10, `${name} wall height`);
+  }
+});
+
+const minPiecesPerQuadrant = 2;
+
+/** The train station preset with the eval benchmark map resolved and its set pieces placed. */
+async function placeBenchmarkSetPieces() {
+  const preset = (await loadPresets()).get("train-station");
+  assert.ok(preset !== undefined);
+  const benchmark = new URL("../../eval/benchmarks/train-station.json", import.meta.url);
+  const spec = resolveRelations(
+    relationMapSpecSchema.parse(JSON.parse(await readFile(benchmark, "utf8"))),
+  );
+  const seed = spec.seed ?? 0;
+  const agent = { radius: preset.sizeRules.agentRadius, height: preset.sizeRules.agentHeight };
+  const { pieces } = placeSetPieces(
+    spec,
+    preset.roomTypes,
+    preset.palette.accent,
+    seed,
+    doorwayClearanceBoxes(spec, agent),
+    preset.propRules,
+  );
+  return { preset, spec, seed, setPieces: pieces };
+}
+
+await test("the train station's concourse and ticket hall arrange at least two pieces in each quarter of the floor", async () => {
+  const { preset, spec, seed, setPieces } = await placeBenchmarkSetPieces();
+  const { pieces } = placeArrangements(spec, preset.roomTypes, setPieces, seed);
+  for (const roomName of ["concourse", "ticket-hall"]) {
+    const room = spec.rooms.find((candidate) => candidate.name === roomName);
+    assert.ok(room !== undefined, roomName);
+    const inRoom = pieces.filter(
+      (piece) =>
+        Math.abs(piece.pivot.x - room.x) <= room.width / 2 &&
+        Math.abs(piece.pivot.z - room.z) <= room.depth / 2,
+    );
+    for (const sideOfX of [-1, 1]) {
+      for (const sideOfZ of [-1, 1]) {
+        const inQuadrant = inRoom.filter(
+          (piece) =>
+            (piece.pivot.x - room.x) * sideOfX > 1 && (piece.pivot.z - room.z) * sideOfZ > 1,
+        );
+        assert.ok(
+          inQuadrant.length >= minPiecesPerQuadrant,
+          `${roomName}: ${String(inQuadrant.length)} pieces in quadrant x${String(sideOfX)} z${String(sideOfZ)}`,
+        );
+      }
+    }
+  }
+});
+
+await test("the platform's train car replaces its track bed and fits the track bed's span", async () => {
+  const { preset, setPieces } = await placeBenchmarkSetPieces();
+  const trainCar = preset.heroProps?.["train-car"];
+  assert.ok(trainCar !== undefined);
+  assert.equal(trainCar.replaces, "track-bed");
+  assert.deepEqual(preset.roomTypes?.["platform"]?.heroProps, ["train-car"]);
+  const trackBed = setPieces.find((piece) => piece.kind === "track-bed");
+  assert.ok(trackBed !== undefined);
+  assert.ok(
+    trainCar.size.width <= trackBed.size.x,
+    `car ${String(trainCar.size.width)} studs long, track bed ${String(trackBed.size.x)}`,
+  );
+  assert.ok(trainCar.size.depth <= trackBed.size.z, "the car stands within the track bed's depth");
+});
+
+await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {
+  const { preset, setPieces } = await placeBenchmarkSetPieces();
+  const board = preset.heroProps?.["departure-board"];
+  assert.ok(board !== undefined);
+  assert.equal(board.replaces, "departure-board");
+  assert.deepEqual(preset.roomTypes?.["concourse"]?.heroProps, ["departure-board"]);
+  const setPiece = setPieces.find((piece) => piece.kind === "departure-board");
+  assert.ok(setPiece !== undefined);
+  assert.ok(board.size.width <= setPiece.size.x, `board ${String(board.size.width)} studs wide`);
+  assert.ok(board.size.height <= setPiece.size.y, `board ${String(board.size.height)} studs high`);
+});
+
+await test("the ticket hall's ticket counter replaces its ticket-counter set piece and fits its span", async () => {
+  const { preset, setPieces } = await placeBenchmarkSetPieces();
+  const counter = preset.heroProps?.["ticket-counter"];
+  assert.ok(counter !== undefined);
+  assert.equal(counter.replaces, "ticket-counter");
+  assert.deepEqual(preset.roomTypes?.["ticket-hall"]?.heroProps, ["ticket-counter"]);
+  const setPiece = setPieces.find((piece) => piece.kind === "ticket-counter");
+  assert.ok(setPiece !== undefined);
+  assert.ok(
+    counter.size.width <= setPiece.size.x,
+    `counter ${String(counter.size.width)} studs wide`,
+  );
+  assert.ok(
+    counter.size.height <= setPiece.size.y,
+    `counter ${String(counter.size.height)} studs high`,
+  );
+});
+
+/** Half the extent of a cylinder along each axis: half its length on its axis, its radius on the other two. */
+function cylinderHalfExtent(cylinder: { radius: number; length: number; axis: "x" | "y" | "z" }) {
+  const along = cylinder.length / 2;
+  return {
+    x: cylinder.axis === "x" ? along : cylinder.radius,
+    y: cylinder.axis === "y" ? along : cylinder.radius,
+    z: cylinder.axis === "z" ? along : cylinder.radius,
+  };
+}
+
+await test("every part of each hero prop lies inside the prop's size", async () => {
+  const heroProps = (await loadPresets()).get("train-station")?.heroProps;
+  assert.ok(heroProps !== undefined);
+  for (const [kind, heroProp] of Object.entries(heroProps)) {
+    const { width, height, depth } = heroProp.size;
+    for (const part of heroProp.parts) {
+      const half =
+        part.shape === "box"
+          ? { x: part.size.width / 2, y: part.size.height / 2, z: part.size.depth / 2 }
+          : part.shape === "cylinder"
+            ? cylinderHalfExtent(part)
+            : undefined;
+      assert.ok(half !== undefined, `${part.shape} part is not checked`);
+      assert.ok(
+        Math.abs(part.center.x) + half.x <= width / 2 + 1e-9,
+        `${kind}: part exceeds the width`,
+      );
+      assert.ok(part.center.y - half.y >= -1e-9, `${kind}: part sinks below the floor`);
+      assert.ok(part.center.y + half.y <= height + 1e-9, `${kind}: part exceeds the height`);
+      assert.ok(
+        Math.abs(part.center.z) + half.z <= depth / 2 + 1e-9,
+        `${kind}: part exceeds the depth`,
+      );
+    }
   }
 });

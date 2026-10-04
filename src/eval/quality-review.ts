@@ -1,10 +1,8 @@
-import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
-import { promisify } from "node:util";
+import { readFile } from "node:fs/promises";
+import { extname } from "node:path";
 import { z } from "zod";
 import { config } from "../config.ts";
+import { askHeadlessReviewer } from "../shared/ask-headless-reviewer.ts";
 import { loadPresets } from "../style/load-preset.ts";
 
 const promptUrl = new URL("../../skills/visual-judge/quality-prompt.md", import.meta.url);
@@ -54,13 +52,6 @@ export interface QualityResult {
   evidence?: AxisEvidence;
   error?: string;
   passed: boolean;
-}
-
-/** The answer's JSON Schema for `claude --json-schema`, which rejects zod's `$schema` key. */
-function answerJsonSchema(): string {
-  const schema: Record<string, unknown> = { ...z.toJSONSchema(qualityAnswerSchema) };
-  delete schema["$schema"];
-  return JSON.stringify(schema);
 }
 
 /**
@@ -118,13 +109,9 @@ export function reachesPassScore(medians: AxisMedians): boolean {
   return qualityAxes.every((axis) => medians[axis] >= config.visualPassScore);
 }
 
-const run = promisify(execFile);
-
 /**
- * Asks a fresh headless Claude Code session, which can only read, to score a room's captures against the
- * references. The images are copied into an empty temporary folder as `reference-N` and `capture-N`, so
- * neither the file names nor the repository can give the room or the game away; the folder is removed
- * afterwards.
+ * Asks a fresh reviewer to score a room's captures against the references. The images go in as `reference-N`
+ * and `capture-N`, so neither the file names nor the repository can give the room or the game away.
  */
 async function askReviewer(
   genre: string,
@@ -133,57 +120,30 @@ async function askReviewer(
   referencePaths: string[],
   capturePaths: string[],
 ): Promise<QualityAnswer> {
-  const folder = await mkdtemp(join(tmpdir(), "roblox-kit-quality-review-"));
-  try {
-    const neutralName = (prefix: string) => (path: string, index: number) =>
-      `${prefix}-${String(index + 1)}${extname(path)}`;
-    const referenceNames = referencePaths.map(neutralName("reference"));
-    const captureNames = capturePaths.map(neutralName("capture"));
-    const imageNames = [...referenceNames, ...captureNames];
-    const copies = [...referencePaths, ...capturePaths].map((path, index) =>
-      copyFile(path, join(folder, imageNames[index] ?? "")),
-    );
-    await Promise.all(copies);
-    const brief = qualityBrief(
-      await readFile(promptUrl, "utf8"),
-      genre,
-      roomType,
-      lightingIntent,
-      referenceNames,
-      captureNames,
-    );
-    // The brief goes in on stdin: `-p` with no prompt argument reads it from there.
-    const pending = run(
-      "claude",
-      [
-        "-p",
-        "--tools",
-        "Read",
-        "--allowedTools",
-        "Read",
-        "--strict-mcp-config",
-        "--setting-sources",
-        "",
-        "--no-session-persistence",
-        "--output-format",
-        "json",
-        "--json-schema",
-        answerJsonSchema(),
-      ],
-      { cwd: folder, timeout: config.qualityReviewTimeoutMs, maxBuffer: 10 * 1024 * 1024 },
-    );
-    pending.child.stdin?.end(brief);
-    const { stdout } = await pending;
-    const reply = z
-      .object({ is_error: z.boolean(), result: z.string(), structured_output: z.unknown() })
-      .parse(JSON.parse(stdout));
-    if (reply.is_error) {
-      throw new Error(`The quality reviewer failed: ${reply.result}`);
-    }
-    return qualityAnswerSchema.parse(reply.structured_output);
-  } finally {
-    await rm(folder, { recursive: true, force: true });
-  }
+  const neutralName = (prefix: string) => (path: string, index: number) =>
+    `${prefix}-${String(index + 1)}${extname(path)}`;
+  const referenceNames = referencePaths.map(neutralName("reference"));
+  const captureNames = capturePaths.map(neutralName("capture"));
+  const imageNames = [...referenceNames, ...captureNames];
+  const images = [...referencePaths, ...capturePaths].map((path, index) => ({
+    path,
+    name: imageNames[index] ?? "",
+  }));
+  const brief = qualityBrief(
+    await readFile(promptUrl, "utf8"),
+    genre,
+    roomType,
+    lightingIntent,
+    referenceNames,
+    captureNames,
+  );
+  return askHeadlessReviewer({
+    reviewer: "quality",
+    schema: qualityAnswerSchema,
+    images,
+    brief,
+    timeoutMs: config.qualityReviewTimeoutMs,
+  });
 }
 
 /** The lighting intent the bundled preset named `genre` declares; throws when no such preset exists. */

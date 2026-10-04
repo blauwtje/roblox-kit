@@ -3,14 +3,17 @@ import { z } from "zod";
 import { config } from "../config.ts";
 import { applyLighting } from "../lighting/apply-lighting.ts";
 import { placeLights } from "../lighting/light-placement.ts";
+import type { FixtureBox } from "../lighting/light-placement.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
-import type { ToolDefinition } from "../server/tool-definition.ts";
+import type { ToolContext, ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
+import type { HeroPropSources } from "../hero-props/hero-prop-asset.ts";
+import { heroPropsOf, type HeroPropRecord } from "./hero-prop-placement.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
@@ -41,7 +44,7 @@ const buildMapOutput = z.strictObject({
   zones: z.array(
     z.strictObject({ name: z.string(), partCount: z.number().int(), bounds: boundsSchema }),
   ),
-  /** One line per set piece skipped because its room has no space for it. */
+  /** One line per set piece skipped because its room has no space for it, and per hero prop not built and why. */
   warnings: z.array(z.string()),
 });
 
@@ -132,14 +135,13 @@ interface LightRecord {
   position: Vector;
   range: number;
   shadows: boolean;
+  /** The visible fixture box that holds the light, and whether it hangs from the ceiling; absent for the center and focal lights. */
+  fixture?: FixtureBox & { pendant: boolean };
   brightness: number;
   color: string;
 }
 
-/**
- * The lights the style's light roles place, each tied to the floor part of the room centered where
- * the light hangs. Placements carry no room name; the first room with that center takes it.
- */
+/** The lights the style's light roles and fixtures place, each tied to the floor part of its zone's room. */
 function lightRecordsOf(
   spec: MapSpec,
   parts: PartRecord[],
@@ -148,18 +150,19 @@ function lightRecordsOf(
   if (style === undefined) {
     return [];
   }
-  return placeLights(spec, style.lightRoles).map((placement) => {
-    const room = spec.rooms.find(
-      (candidate) => candidate.x === placement.position.x && candidate.z === placement.position.z,
-    );
-    const floor = parts.find((part) => part.kind === "floor" && part.room === room?.name);
-    if (room === undefined || floor === undefined) {
+  return placeLights(spec, style.lightRoles, style.lightFixtures).map((placement) => {
+    const floor = parts.find((part) => part.kind === "floor" && part.room === placement.zone);
+    if (floor === undefined) {
       throw new Error(
-        `No room floor found for the ${placement.role} light at ${JSON.stringify(placement.position)}.`,
+        `No room floor found for the ${placement.role} light at ${JSON.stringify(placement.position)} of zone ${placement.zone}.`,
       );
     }
     const { brightness, color } = style.lightRoles[placement.role];
-    return { ...placement, zone: room.name, part: floor.name, brightness, color };
+    const fixture = placement.fixture && {
+      ...placement.fixture,
+      pendant: style.lightFixtures?.kind === "pendant",
+    };
+    return { ...placement, fixture, part: floor.name, brightness, color };
   });
 }
 
@@ -169,6 +172,8 @@ interface BuildContext {
   terrainFills: TerrainFill[];
   variants: Record<string, Variant>;
   generators: Record<string, string>;
+  /** The hero props the props phase loads from their assets, beside the set pieces left in `props`. */
+  heroProps: HeroPropRecord[];
   /** Every material name of the build, checked by the shell phase before anything is built. */
   materials: string[];
 }
@@ -193,8 +198,13 @@ function phaseArguments(
     },
     openings: { parts: phase.parts, variants: build.variants },
     surfaces: { parts: phase.parts, variants: build.variants },
-    props: { props: phase.parts, generators: build.generators },
-    lighting: { lights: phase.parts },
+    props: { props: phase.parts, generators: build.generators, heroProps: build.heroProps },
+    lighting: {
+      lights: phase.parts,
+      ceilingTag: config.ceilingTag,
+      ceilingDropStuds: config.lightCeilingDropStuds,
+      fixtureSizeStuds: config.lightFixtureSizeStuds,
+    },
   };
   return { ...base, ...argumentsByPhase[phase.name] };
 }
@@ -226,12 +236,32 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
   }
 }
 
+/** A prop with the generator attributes its preset surface role adds. */
+type StyledPropRecord = PropRecord & { attributes?: Record<string, string> };
+
+/** The prop with `SurfaceColor` and `SurfaceMaterial` from its kind's surface role; unchanged without a role. */
+function withSurface(prop: StyledPropRecord, style: Preset): StyledPropRecord {
+  const role = style.propRules[prop.kind]?.surface;
+  if (role === undefined) {
+    return prop;
+  }
+  const { color, material } = style.surfaces[role];
+  return {
+    ...prop,
+    attributes: { ...prop.attributes, SurfaceColor: color, SurfaceMaterial: material },
+  };
+}
+
 /**
  * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type
  * followed by its arrangements, which would collide with random kit props; warnings name each set piece
- * skipped for lack of space and each arrangement that placed nothing.
+ * skipped for lack of space and each arrangement that placed nothing; a prop whose rule names a surface role
+ * carries that role's color and material as attributes.
  */
-export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; warnings: string[] } {
+export function propsOf(
+  spec: MapSpec,
+  style: Preset,
+): { props: StyledPropRecord[]; warnings: string[] } {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
   const agent = { radius: style.sizeRules.agentRadius, height: style.sizeRules.agentHeight };
@@ -241,6 +271,7 @@ export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; wa
     style.palette.accent,
     seed,
     doorwayClearanceBoxes(spec, agent),
+    style.propRules,
   );
   const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
   return {
@@ -248,94 +279,133 @@ export function propsOf(spec: MapSpec, style: Preset): { props: PropRecord[]; wa
       ...placeProps(plainSpec, style.propKit, seed),
       ...setPieces.pieces,
       ...arrangements.pieces,
-    ],
+    ].map((prop) => withSurface(prop, style)),
     warnings: [...setPieces.warnings, ...arrangements.warnings],
   };
+}
+
+/** The stored preset of `name`, which resolveStyle has already found. */
+function presetNamed(name: string): Preset {
+  const preset = presets.get(name);
+  if (preset === undefined) throw new Error(`Unknown style preset "${name}".`);
+  return preset;
+}
+
+/** Builds the map phase by phase; `heroSources` says where hero-prop uploads and reviews are looked up. */
+async function buildMap(
+  input: z.output<typeof buildMapInput>,
+  context: ToolContext,
+  heroSources: HeroPropSources,
+) {
+  // Resolving relations and the style and laying out first keep a spec that cannot be built from touching Studio.
+  const spec = resolveRelations(input);
+  const style = spec.style === undefined ? undefined : resolveStyle(presets, spec.style);
+  rejectUnknownRoomTypes(spec, style);
+  // A style is the switch for the decor: ceilings, trim details and props come with a preset, never without.
+  const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
+  const details: DetailPart[] =
+    style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
+  const placed = style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
+  const heroes =
+    style === undefined || spec.style === undefined
+      ? { props: placed.props, heroProps: [], warnings: [] }
+      : await heroPropsOf(
+          spec,
+          { name: spec.style.preset, base: presetNamed(spec.style.preset), style },
+          placed.props,
+          heroSources,
+        );
+  const { props, heroProps } = heroes;
+  const warnings = [...placed.warnings, ...heroes.warnings];
+  const heroSurfaces = heroProps.flatMap((hero) => Object.values(hero.surfaces));
+  const generators = await generatorsOf(props);
+  const variants = variantsOf(style);
+  const lights = lightRecordsOf(spec, layout.parts, style);
+  const build: BuildContext = {
+    mapId: input.mapId,
+    terrainFills: layout.terrainFills,
+    variants,
+    generators,
+    heroProps,
+    materials: materialsOf(
+      [...layout.parts, ...details, ...heroSurfaces],
+      layout.terrainFills,
+      variants,
+    ),
+  };
+  const studioId = await selectStudio(context.studio, input.studioId);
+  const phases = groupBuildPhases({ parts: layout.parts, details, props, lights });
+  let partCount = 0;
+  for (const [index, phase] of phases.entries()) {
+    try {
+      const built = await runLuauFile({
+        connection: context.studio,
+        studioId,
+        fileName: "build-map.luau",
+        datamodelType: "Edit",
+        arguments: phaseArguments(phase, build),
+        resultSchema: builtPhaseSchema,
+      });
+      partCount = built.partCount;
+      if (phase.name === "lighting") {
+        // Without a style the recipe is absent: the previous build's Lighting is restored.
+        await applyLighting({
+          connection: context.studio,
+          studioId,
+          mapsFolderName: config.mapsFolderName,
+          mapId: input.mapId,
+          recipe: style?.lighting,
+        });
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Building map "${input.mapId}" failed in the "${phase.name}" phase; the Model may be partial: ${reason}`,
+        { cause: error },
+      );
+    }
+    await context.reportProgress?.(index + 1, phases.length, phase.name);
+  }
+  const bounds = unionOf([
+    ...[...layout.parts, ...details].map((part) => boundsOfBox(part.position, part.size)),
+    ...layout.terrainFills.map(boundsOfFill),
+  ]);
+  return toolResult({
+    mapId: input.mapId,
+    partCount,
+    phases: phases.map((phase) => ({
+      name: phase.name,
+      partCount: phase.parts.length + (phase.name === "props" ? heroProps.length : 0),
+    })),
+    bounds,
+    zones: zonesOf([...layout.parts, ...details]),
+    warnings,
+  });
+}
+
+/** build_map with its hero props looked up and uploaded through `heroSources`, so a test can fake the record, credentials and fetch. */
+export function buildMapToolWith(heroSources: HeroPropSources): typeof buildMapTool {
+  return { ...buildMapTool, handler: (input, context) => buildMap(input, context, heroSources) };
 }
 
 export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapOutput> = {
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor, applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor (each light within ${String(config.lightCeilingDropStuds)} stud of a ceiling also gets a ${String(config.lightFixtureSizeStuds)}-stud Neon fixture part against the ceiling, tagged ${config.ceilingTag} so it hides with the ceilings), applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. A reviewed hero prop with no recorded asset is first uploaded once through Open Cloud (key from ${config.openCloudApiKeyEnv} or ${config.openCloudKeyFile}; creator from ${config.openCloudCreatorGroupIdEnv}, ${config.openCloudCreatorUserIdEnv} or ${config.openCloudCreatorFile}) and its id recorded; with no passed review, no key or creator, or a failed upload the set piece stays and a warning says why. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
     `The build runs in six phases (shell, floors and ceilings, openings, surfaces, props, lighting), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
-    `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), and one warning per set piece skipped because its room has no space for it.`,
+    `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why.`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: true,
-    openWorldHint: false,
+    openWorldHint: true,
   },
-  async handler(input, context) {
-    // Resolving relations and the style and laying out first keep a spec that cannot be built from touching Studio.
-    const spec = resolveRelations(input);
-    const style = spec.style === undefined ? undefined : resolveStyle(presets, spec.style);
-    rejectUnknownRoomTypes(spec, style);
-    // A style is the switch for the decor: ceilings, trim details and props come with a preset, never without.
-    const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
-    const details: DetailPart[] =
-      style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
-    const { props, warnings } =
-      style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
-    const generators = await generatorsOf(props);
-    const variants = variantsOf(style);
-    const lights = lightRecordsOf(spec, layout.parts, style);
-    const build: BuildContext = {
-      mapId: input.mapId,
-      terrainFills: layout.terrainFills,
-      variants,
-      generators,
-      materials: materialsOf([...layout.parts, ...details], layout.terrainFills, variants),
-    };
-    const studioId = await selectStudio(context.studio, input.studioId);
-    const phases = groupBuildPhases({ parts: layout.parts, details, props, lights });
-    let partCount = 0;
-    for (const [index, phase] of phases.entries()) {
-      try {
-        const built = await runLuauFile({
-          connection: context.studio,
-          studioId,
-          fileName: "build-map.luau",
-          datamodelType: "Edit",
-          arguments: phaseArguments(phase, build),
-          resultSchema: builtPhaseSchema,
-        });
-        partCount = built.partCount;
-        if (phase.name === "lighting") {
-          // Without a style the recipe is absent: the previous build's Lighting is restored.
-          await applyLighting({
-            connection: context.studio,
-            studioId,
-            mapsFolderName: config.mapsFolderName,
-            mapId: input.mapId,
-            recipe: style?.lighting,
-          });
-        }
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Building map "${input.mapId}" failed in the "${phase.name}" phase; the Model may be partial: ${reason}`,
-          { cause: error },
-        );
-      }
-      await context.reportProgress?.(index + 1, phases.length, phase.name);
-    }
-    const bounds = unionOf([
-      ...[...layout.parts, ...details].map((part) => boundsOfBox(part.position, part.size)),
-      ...layout.terrainFills.map(boundsOfFill),
-    ]);
-    return toolResult({
-      mapId: input.mapId,
-      partCount,
-      phases: phases.map((phase) => ({ name: phase.name, partCount: phase.parts.length })),
-      bounds,
-      zones: zonesOf([...layout.parts, ...details]),
-      warnings,
-    });
-  },
+  handler: (input, context) => buildMap(input, context, {}),
 };

@@ -225,6 +225,18 @@ await test("presetSchema accepts a prop rule without a height ratio and rejects 
   assert.equal(presetSchema.safeParse(missingRotation).success, false);
 });
 
+await test("presetSchema accepts a prop rule with a surface role and rejects an unknown role", () => {
+  for (const surface of ["floor", "wall", "trim", "ceiling", "accent"]) {
+    const preset = { ...validPreset(), propRules: { bench: { freeRotation: false, surface } } };
+    assert.equal(presetSchema.safeParse(preset).success, true, surface);
+  }
+  const unknownRole = {
+    ...validPreset(),
+    propRules: { bench: { freeRotation: false, surface: "roof" } },
+  };
+  assert.equal(presetSchema.safeParse(unknownRole).success, false);
+});
+
 await test("presetSchema rejects a height range whose min exceeds its max or is not positive", () => {
   for (const heightRatio of [
     { min: 2, max: 1 },
@@ -245,5 +257,142 @@ await test("presetOverridesSchema accepts a partial avatar height and a prop rul
     sizeRules: { avatarHeight: { max: 7 } },
     propRules: { bench: { freeRotation: true } },
   };
+  assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
+});
+
+const fixtureSize = { width: 2, height: 3, depth: 1 };
+
+await test("presetSchema accepts a sconce or a pendant fixture pattern, and works without one", () => {
+  const sconce = { kind: "sconce", spacing: 10, height: 8, size: fixtureSize };
+  const pendant = { kind: "pendant", spacing: 12, drop: 4, size: fixtureSize };
+  for (const lightFixtures of [sconce, pendant, undefined]) {
+    const result = presetSchema.safeParse({ ...validPreset(), lightFixtures });
+    assert.equal(result.success, true, JSON.stringify(lightFixtures));
+  }
+});
+
+await test("presetSchema rejects a fixture pattern with another kind's field, a missing field or a non-positive spacing", () => {
+  const invalid = [
+    { kind: "sconce", spacing: 10, drop: 4, size: fixtureSize },
+    { kind: "pendant", spacing: 10, height: 8, size: fixtureSize },
+    { kind: "sconce", spacing: 10, size: fixtureSize },
+    { kind: "sconce", spacing: 0, height: 8, size: fixtureSize },
+    { kind: "sconce", spacing: 10, height: 8, size: { width: 2, height: 3 } },
+    { kind: "lantern", spacing: 10, height: 8, size: fixtureSize },
+  ];
+  for (const lightFixtures of invalid) {
+    const result = presetSchema.safeParse({ ...validPreset(), lightFixtures });
+    assert.equal(result.success, false, JSON.stringify(lightFixtures));
+  }
+});
+
+const heroCar = {
+  description: "a low-poly train car",
+  replaces: "track-bed",
+  size: { width: 10, height: 12, depth: 40 },
+  triangleBudget: 20000,
+  parts: [
+    { shape: "box", role: "wall", center: { x: 0, y: 6, z: 0 }, size: fixtureSize },
+    {
+      shape: "cylinder",
+      role: "trim",
+      center: { x: 0, y: 1, z: 0 },
+      radius: 1,
+      length: 8,
+      axis: "x",
+    },
+    {
+      shape: "profile",
+      role: "accent",
+      center: { x: 0, y: 8, z: 0 },
+      points: [
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 2, y: 3 },
+      ],
+      depth: 20,
+    },
+  ],
+};
+
+const roomWithHero = (heroProps: string[]) => ({
+  concourse: { setPieces: ["departure-board"], signLabel: "Concourse", heroProps },
+});
+
+await test("presetSchema accepts a hero prop recipe with box, cylinder and profile parts and a room type that declares it", () => {
+  const preset = {
+    ...validPreset(),
+    heroProps: { "train-car": heroCar },
+    roomTypes: roomWithHero(["train-car"]),
+  };
+  assert.equal(presetSchema.safeParse(preset).success, true);
+});
+
+await test("presetSchema rejects a hero prop over 20000 triangles and accepts exactly 20000", () => {
+  const over = { ...heroCar, triangleBudget: 20001 };
+  assert.equal(
+    presetSchema.safeParse({ ...validPreset(), heroProps: { car: over } }).success,
+    false,
+  );
+  const atLimit = { ...heroCar, triangleBudget: 20000 };
+  assert.equal(
+    presetSchema.safeParse({ ...validPreset(), heroProps: { car: atLimit } }).success,
+    true,
+  );
+});
+
+await test("presetSchema rejects a hero prop recipe missing a field or carrying an unknown one", () => {
+  for (const field of ["description", "replaces", "size", "triangleBudget", "parts"]) {
+    const recipe = Object.fromEntries(Object.entries(heroCar).filter(([key]) => key !== field));
+    const preset = { ...validPreset(), heroProps: { car: recipe } };
+    assert.equal(presetSchema.safeParse(preset).success, false, field);
+  }
+  const extra = { ...heroCar, mesh: "car.glb" };
+  assert.equal(
+    presetSchema.safeParse({ ...validPreset(), heroProps: { car: extra } }).success,
+    false,
+  );
+});
+
+await test("presetSchema rejects a hero prop part with an unknown shape or role, another shape's field or too few profile points", () => {
+  const center = { x: 0, y: 0, z: 0 };
+  const invalidParts = [
+    { shape: "sphere", role: "wall", center, radius: 1 },
+    { shape: "box", role: "roof", center, size: fixtureSize },
+    { shape: "box", role: "wall", center, size: fixtureSize, radius: 1 },
+    { shape: "cylinder", role: "wall", center, radius: 1, length: 2, axis: "w" },
+    {
+      shape: "profile",
+      role: "wall",
+      center,
+      points: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      depth: 1,
+    },
+  ];
+  for (const part of invalidParts) {
+    const recipe = { ...heroCar, parts: [part] };
+    const preset = { ...validPreset(), heroProps: { car: recipe } };
+    assert.equal(presetSchema.safeParse(preset).success, false, JSON.stringify(part));
+  }
+});
+
+await test("presetSchema takes 1 or 2 hero prop kinds on a room type and rejects none or 3", () => {
+  for (const [kinds, accepted] of [
+    [["a"], true],
+    [["a", "b"], true],
+    [[], false],
+    [["a", "b", "c"], false],
+  ] as const) {
+    const preset = { ...validPreset(), roomTypes: roomWithHero([...kinds]) };
+    assert.equal(presetSchema.safeParse(preset).success, accepted, kinds.join());
+  }
+});
+
+await test("presetSchema works without hero props and presetOverridesSchema accepts a hero props override", () => {
+  assert.equal(presetSchema.safeParse(validPreset()).success, true);
+  const overrides = { heroProps: { "train-car": heroCar } };
   assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
 });

@@ -6,7 +6,12 @@
     },
     "roblox-kit": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/src/server/main.ts"]
+      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/src/server/main.ts"],
+      "env": {
+        "ROBLOX_OPEN_CLOUD_API_KEY": "${ROBLOX_OPEN_CLOUD_API_KEY:-}",
+        "ROBLOX_CREATOR_USER_ID": "${ROBLOX_CREATOR_USER_ID:-}",
+        "ROBLOX_CREATOR_GROUP_ID": "${ROBLOX_CREATOR_GROUP_ID:-}"
+      }
     }
   }
 }
