@@ -124,7 +124,8 @@ end
 local exactReasons: { [string]: number } = {
 	["RequestPickup.ownedByOther"] = 1,
 	["RequestPickup.tooFar"] = 1,
-	["RequestPickup.outsideItems"] = 1,
+	-- The item outside workspace.Pickups and the Workspace itself, which passes Blink's Instance(Model) check.
+	["RequestPickup.outsideItems"] = 2,
 	["DropItem.notFinite"] = 2,
 }
 local minimumReasons: { [string]: number } = {

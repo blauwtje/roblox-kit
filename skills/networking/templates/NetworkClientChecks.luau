@@ -105,8 +105,8 @@ return function(check: Check, player: Player)
 		return instance :: any
 	end
 
-	-- Wrong Instance classes: Blink's read function rejects them before game code runs. Workspace would pass,
-	-- because it inherits from Model, so the second case is the Pickups Folder.
+	-- Wrong Instance classes: Blink's read function rejects them before game code runs. Workspace is not one of
+	-- them, because it inherits from Model; it is sent below as context only game code can judge.
 	sendInOwnFrame(check, "a Part as the item", function()
 		Network.RequestPickup.Fire({ Item = anyModel(notModel) })
 	end)
@@ -139,6 +139,9 @@ return function(check: Check, player: Player)
 	end)
 	sendInOwnFrame(check, "an item outside workspace.Pickups", function()
 		Network.RequestPickup.Fire({ Item = anyModel(outside) })
+	end)
+	sendInOwnFrame(check, "the Workspace as the item", function()
+		Network.RequestPickup.Fire({ Item = workspace })
 	end)
 
 	-- Raw payloads that bypass Blink's client.
