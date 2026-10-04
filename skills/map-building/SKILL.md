@@ -24,6 +24,15 @@ Studio's built-in tools can place parts one at a time, but a hand-placed map arr
 7. **Run `check_map` after every build with `mapId`, `preset` and `spec`.** Without `preset` and `spec`, `sizeRule` is never checked. It reports `overlapping`, `floating`, `unreachable` and `sizeRule` issues with part paths and stud positions, and `sceneStats` per zone (`drawCalls`, `triangles`). Fix the spec until `passed` is true, because the next rebuild erases a Studio patch. `reachabilityChecked` false means no spawn: set `spawn: true` on one room. For `issuesOmitted` above 0, read the `reportUri` resource.
 8. **Capture only when the user needs to see it, then judge with the visual-judge skill.** `capture_zones` moves the Studio camera and returns one top-down cutaway of the whole map (view `top`), then views `a` and `b` of each zone; pass `zones` with the few rooms in question, because every image costs context. Zones beyond the per-call image cap come back in `remainingZones`; capture them with `cutaway: false` to skip the repeated cutaway. It needs an open Studio viewport. Use Studio's own tools (`search_game_tree`, `insert_asset`, `execute_luau`) only outside the map Model, which `build_map` owns.
 
+## Hero props
+
+A preset's `heroProps` recipes (size in studs, palette roles, `triangleBudget`, `replaces`) give a room a generated mesh as its focal point in place of one set piece. Never stand in a store or downloaded model, because the loop exists so every mesh comes from a recipe.
+
+1. **Generate, render and review with `npm run hero-props -- <preset> <kind>`.** Headless Blender writes `.roblox-kit/hero-props/<preset>-<kind>-<hash>/model.glb`, fails on a broken triangle budget, role or size, renders front, side and three-quarter views, and a fresh reviewer writes `review.json`. It passes only when every axis reaches 7.
+2. **Stop at three rounds.** Each new recipe hash of a kind counts one round, and the fourth is refused; ask the user instead of loosening the recipe check.
+3. **Ask before any upload.** A passed review is uploaded through Open Cloud with the key from the plugin's `roblox_open_cloud_api_key` setting (Assets Read and Write) and `roblox_creator_user_id`, and the asset id is recorded by recipe hash in `src/hero-props/hero-assets.json`, so an unchanged recipe never uploads again. No script runs the upload yet.
+4. **Read the fallback in `warnings`.** `build_map` loads a recorded asset as a non-colliding Model `<kind>-hero-<n>`; without one it keeps the set piece and its warning names why: no passed review, no key, or no recorded upload.
+
 ## Clean up the shared place
 
 The open place is shared and no tool deletes a map. Before finishing a test or demo build, destroy `Workspace.RobloxKitMaps.<mapId>` with `execute_luau`. Fill its terrain with Air first, using the fills stored in the Model's `RobloxKitTerrainFills` attribute as JSON, because destroying the Model leaves that terrain behind. Never touch a map you did not build.

@@ -137,6 +137,10 @@ Run `npm run check` for the type check, lint, format check, tests and plugin val
 
 Run `npm run eval:studio` against a running Studio to build, check and capture each benchmark in `eval/benchmarks/`. It runs the blind place check on each typed room and scores each room of the current wave (`config.evalWaveRoomTypes`) on the six image axes against the reference set. It appends one line per benchmark to `eval/results.jsonl` with the `check_map` issues, the axis medians and the reviewers' evidence notes, and fails when a place check fails or a scored room's `passed` is false, listing both. Run `node scripts/fetch-references.ts` first to download the reference images, and `node scripts/calibrate-review.ts` to check that the reviewer still separates the references from the known-bad anchors in `eval/anchors/bad/`.
 
+Run `npm run hero-props -- <preset> <kind>` to make one hero prop from its recipe in the preset's `heroProps`. Headless Blender (`config.blenderPath`) generates `.roblox-kit/hero-props/<preset>-<kind>-<hash>/model.glb` and checks its triangles, roles and size, then renders it from the front, side and three-quarter, and a fresh reviewer scores the renders against the recipe into `review.json`. The command exits 1 when the GLB fails its recipe or the review does not pass. A kind gets at most three rounds (distinct recipe hashes); a fourth is refused.
+
+A passed hero prop is uploaded through Open Cloud with an API key that has Assets Read and Write permission, set in the plugin's `roblox_open_cloud_api_key` option, and the owning `roblox_creator_user_id`. The asset id is recorded by recipe hash in `src/hero-props/hero-assets.json`, so an unchanged recipe never uploads again. The upload exists as a library function; no script runs it yet. `build_map` builds each recorded hero prop as a non-colliding Model in place of the set piece its recipe replaces. Without a recorded asset it keeps the set piece and returns a warning saying why: no passed review, no key, or no recorded upload.
+
 ## License
 
 MIT
