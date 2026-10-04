@@ -3,8 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { pathToFileURL } from "node:url";
-import { config } from "../config.ts";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { recipeHash } from "../hero-props/recipe-hash.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
@@ -12,7 +11,6 @@ import { resolveStyle } from "../style/resolve-style.ts";
 import { propsOf } from "./build-map-tool.ts";
 import { readHeroAssets } from "../hero-props/hero-asset-store.ts";
 import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
-import { lookUpOpenCloudCredentials } from "../hero-props/open-cloud-credentials.ts";
 import { heroPropsOf } from "./hero-prop-placement.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
 import { resolveRelations } from "./relation-solver.ts";
@@ -44,52 +42,13 @@ const recipe = base.heroProps?.["train-car"];
 assert.ok(recipe !== undefined);
 const hash = await heroRecipeHash(base, "train-car");
 
-/** Open Cloud answers for a fake fetch: each call gets the next one, and every call is counted; no network. */
-function fakeFetch(responses: Response[]): { fetchFn: typeof fetch; calls: string[] } {
-  const calls: string[] = [];
-  const fetchFn: typeof fetch = (input) => {
-    calls.push(new Request(input).url);
-    const next = responses.shift();
-    return next === undefined
-      ? Promise.reject(new Error("unexpected fetch"))
-      : Promise.resolve(next);
-  };
-  return { fetchFn, calls };
-}
-
-const testCredentials = { apiKey: "test-key", creator: { groupId: "718128661" } };
-
-/**
- * A temporary hero-assets.json and hero-props folder; `recorded` writes the train car's asset record. With
- * `hasCredentials` the lookup finds test credentials, else it is the real lookup over an empty environment
- * and a project root with no key files. `fetchFn` answers the Open Cloud calls.
- */
-async function fakeSources(options: {
-  recorded?: boolean;
-  review?: { hash: string; passed: boolean; glb?: boolean };
-  hasCredentials?: boolean;
-  fetchFn?: typeof fetch;
-}): Promise<HeroPropSources> {
+/** A temporary hero-assets.json; `recorded` writes the train car's asset record. */
+async function fakeSources(options: { recorded?: boolean }): Promise<HeroPropSources> {
   const directory = await mkdtemp(join(tmpdir(), "hero-placement-"));
   const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
   const assets = options.recorded ? { [hash]: { kind: "train-car", assetId: "123456" } } : {};
   await writeFile(assetsFile, JSON.stringify(assets));
-  const heroPropsDirectory = pathToFileURL(join(directory, "hero-props/"));
-  if (options.review !== undefined) {
-    const folder = join(directory, "hero-props", `train-station-train-car-${hash}`);
-    await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, "review.json"), JSON.stringify(options.review));
-    await writeFile(join(folder, "model.glb"), new Uint8Array([0x67, 0x6c, 0x54, 0x46]));
-  }
-  const root = pathToFileURL(`${directory}/`);
-  return {
-    assetsFile,
-    heroPropsDirectory,
-    credentials: options.hasCredentials
-      ? () => Promise.resolve({ credentials: testCredentials })
-      : () => lookUpOpenCloudCredentials({}, root),
-    transport: { fetchFn: options.fetchFn ?? fakeFetch([]).fetchFn, pollIntervalMs: 0 },
-  };
+  return { assetsFile };
 }
 
 const platform = spec.rooms.find((room) => room.roomType === "platform");
@@ -154,67 +113,32 @@ await test("the surfaces come from the resolved style while the hash stays the b
   assert.equal(result.heroProps[0]?.surfaces["floor"]?.color, "#123456");
 });
 
-await test("without a passed review the set piece stays and the warning says so", async () => {
-  for (const review of [undefined, { hash, passed: false }, { hash: "other", passed: true }]) {
-    const sources = await fakeSources({ review, hasCredentials: true });
-    const result = await heroPropsOf(spec, preset, placed.props, sources);
-    assert.deepEqual(result.props, placed.props);
-    assert.deepEqual(result.heroProps, []);
-    assert.equal(result.warnings.length, 1);
-    assert.match(result.warnings[0] ?? "", /"platform" keeps its track-bed/);
-    assert.match(result.warnings[0] ?? "", new RegExp(`train-car \\(recipe ${hash}\\)`));
-    assert.match(result.warnings[0] ?? "", /no passed review/);
-  }
-});
-
-await test("a passed review without an API key keeps the set piece and names the key", async () => {
-  const sources = await fakeSources({ review: { hash, passed: true } });
+await test("without a recorded asset the set piece stays and the warning says to upload from a clone", async () => {
+  const sources = await fakeSources({});
   const result = await heroPropsOf(spec, preset, placed.props, sources);
   assert.deepEqual(result.props, placed.props);
+  assert.deepEqual(result.heroProps, []);
   assert.equal(result.warnings.length, 1);
-  assert.match(result.warnings[0] ?? "", new RegExp(`${config.openCloudApiKeyEnv} is not set`));
-  assert.match(result.warnings[0] ?? "", new RegExp(config.openCloudKeyFile));
-  assert.doesNotMatch(result.warnings[0] ?? "", /npm run hero-props/);
+  assert.match(result.warnings[0] ?? "", /"platform" keeps its track-bed/);
+  assert.match(result.warnings[0] ?? "", new RegExp(`train-car \\(recipe ${hash}\\)`));
+  assert.match(
+    result.warnings[0] ?? "",
+    /generate and upload it from a clone of the roblox-kit repo/,
+  );
+  assert.doesNotMatch(result.warnings[0] ?? "", /API_KEY|key file|npm run/i);
 });
 
-await test("a passed review with credentials uploads the GLB once, records it and reuses the id afterwards", async () => {
-  const finished = {
-    path: "operations/op1",
-    operationId: "op1",
-    done: true,
-    response: { assetId: "9001" },
-  };
-  const { fetchFn, calls } = fakeFetch([Response.json(finished)]);
-  const sources = await fakeSources({
-    review: { hash, passed: true },
-    hasCredentials: true,
-    fetchFn,
-  });
-  const first = await heroPropsOf(spec, preset, placed.props, sources);
-  assert.deepEqual(first.warnings, []);
-  assert.equal(first.heroProps[0]?.assetId, "9001");
-  assert.ok(!first.props.includes(trackBed), "the track bed is replaced");
+await test("a passed review alone uploads nothing and records nothing", async () => {
+  const sources = await fakeSources({});
   assert.ok(sources.assetsFile !== undefined);
-  assert.deepEqual(await readHeroAssets(sources.assetsFile), {
-    [hash]: { kind: "train-car", assetId: "9001" },
-  });
-  const second = await heroPropsOf(spec, preset, placed.props, sources);
-  assert.equal(second.heroProps[0]?.assetId, "9001");
-  assert.equal(calls.length, 1, "the recorded id is reused without a second upload");
-});
-
-await test("a failed upload keeps the set piece and says the upload failed", async () => {
-  const { fetchFn } = fakeFetch([Response.json({ message: "forbidden" }, { status: 403 })]);
-  const sources = await fakeSources({
-    review: { hash, passed: true },
-    hasCredentials: true,
-    fetchFn,
-  });
+  const directory = fileURLToPath(new URL(".", sources.assetsFile));
+  const folder = join(directory, "hero-props", `train-station-train-car-${hash}`);
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "review.json"), JSON.stringify({ hash, passed: true }));
   const result = await heroPropsOf(spec, preset, placed.props, sources);
   assert.deepEqual(result.props, placed.props);
   assert.equal(result.warnings.length, 1);
-  assert.match(result.warnings[0] ?? "", /the upload failed.*403/);
-  assert.doesNotMatch(result.warnings[0] ?? "", /test-key/);
+  assert.deepEqual(await readHeroAssets(sources.assetsFile), {});
 });
 
 await test("a room with no set piece to replace gets a warning and no hero prop", async () => {
@@ -238,8 +162,6 @@ await test("a style whose room types name no hero props reads nothing and change
   );
   const result = await heroPropsOf(plain, { name: "cozy-town", base: cozy, style: cozy }, [], {
     assetsFile: missing,
-    heroPropsDirectory: missing,
-    credentials: () => Promise.reject(new Error("no credentials are looked up")),
   });
   assert.deepEqual(result, { props: [], heroProps: [], warnings: [] });
 });

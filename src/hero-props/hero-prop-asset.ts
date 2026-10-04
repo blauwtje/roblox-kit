@@ -14,10 +14,14 @@ const heroGeneratorScript = new URL("./generate-hero-prop.py", import.meta.url);
 const defaultHeroPropsDirectory = new URL(`../../${config.heroPropsFolder}/`, import.meta.url);
 const reviewFileName = "review.json";
 
-/** Where a hero prop's upload record, generated folders, credentials and Open Cloud calls come from. */
+/** Where build_map looks up a hero prop's recorded asset; it reads nothing else and uploads nothing. */
 export interface HeroPropSources {
   /** The record of uploaded hero props by recipe hash; defaults to the committed `hero-assets.json`. */
   assetsFile?: URL;
+}
+
+/** Where the upload script finds a hero prop's record, generated folders, credentials and Open Cloud calls. */
+export interface HeroPropUploadSources extends HeroPropSources {
   /** The folder of generated `<preset>-<kind>-<hash>` folders, each with its `review.json`. */
   heroPropsDirectory?: URL;
   /** Asked only when a reviewed hero prop has no recorded upload; defaults to the environment and key files. */
@@ -62,21 +66,34 @@ async function hasPassedReview(folder: URL, hash: string): Promise<boolean> {
 }
 
 /**
- * The asset of the stored preset's hero prop of `kind`: the recorded upload of its recipe hash, else, when
- * its review passed and credentials are found, a fresh upload that `uploadReviewedHeroProp` records. An
- * upload that fails is returned as `upload-failed`, so a build keeps the set piece and says why; a malformed
- * creator throws.
+ * The recorded asset of the preset's hero prop of `kind`, found by its recipe hash: a read-only lookup that
+ * never uploads. `assetId` is undefined when no upload is recorded for the hash.
+ */
+export async function recordedHeroAsset(
+  preset: Preset,
+  kind: string,
+  sources: HeroPropSources = {},
+): Promise<{ hash: string; assetId: string | undefined }> {
+  const hash = await heroRecipeHash(preset, kind);
+  const recorded = (await readHeroAssets(sources.assetsFile ?? heroAssetsFile))[hash];
+  return { hash, assetId: recorded?.kind === kind ? recorded.assetId : undefined };
+}
+
+/**
+ * The asset of the stored preset's hero prop of `kind`, for `scripts/upload-hero-props.ts` only: the recorded
+ * upload of its recipe hash, else, when its review passed and credentials are found, a fresh upload that
+ * `uploadReviewedHeroProp` records. An upload that fails is returned as `upload-failed`; a malformed creator
+ * throws.
  */
 export async function heroPropAsset(
   presetName: string,
   preset: Preset,
   kind: string,
-  sources: HeroPropSources = {},
+  sources: HeroPropUploadSources = {},
 ): Promise<HeroPropAsset> {
   const assetsFile = sources.assetsFile ?? heroAssetsFile;
-  const hash = await heroRecipeHash(preset, kind);
-  const recorded = (await readHeroAssets(assetsFile))[hash];
-  if (recorded?.kind === kind) return { hash, status: "recorded", assetId: recorded.assetId };
+  const { hash, assetId } = await recordedHeroAsset(preset, kind, sources);
+  if (assetId !== undefined) return { hash, status: "recorded", assetId };
   const folder = new URL(
     `${presetName}-${kind}-${hash}/`,
     sources.heroPropsDirectory ?? defaultHeroPropsDirectory,

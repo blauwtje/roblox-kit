@@ -291,7 +291,7 @@ function presetNamed(name: string): Preset {
   return preset;
 }
 
-/** Builds the map phase by phase; `heroSources` says where hero-prop uploads and reviews are looked up. */
+/** Builds the map phase by phase; `heroSources` says where recorded hero assets are looked up. */
 async function buildMap(
   input: z.output<typeof buildMapInput>,
   context: ToolContext,
@@ -383,7 +383,7 @@ async function buildMap(
   });
 }
 
-/** build_map with its hero props looked up and uploaded through `heroSources`, so a test can fake the record, credentials and fetch. */
+/** build_map with its recorded hero assets looked up through `heroSources`, so a test can fake the record. */
 export function buildMapToolWith(heroSources: HeroPropSources): typeof buildMapTool {
   return { ...buildMapTool, handler: (input, context) => buildMap(input, context, heroSources) };
 }
@@ -393,7 +393,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   title: "Build map",
   description:
     `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor (each light within ${String(config.lightCeilingDropStuds)} stud of a ceiling also gets a ${String(config.lightFixtureSizeStuds)}-stud Neon fixture part against the ceiling, tagged ${config.ceilingTag} so it hides with the ceilings), applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
-    `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. A reviewed hero prop with no recorded asset is first uploaded once through Open Cloud (key from ${config.openCloudApiKeyEnv} or ${config.openCloudKeyFile}; creator from ${config.openCloudCreatorGroupIdEnv}, ${config.openCloudCreatorUserIdEnv} or ${config.openCloudCreatorFile}) and its id recorded; with no passed review, no key or creator, or a failed upload the set piece stays and a warning says why. ` +
+    `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. build_map only reads recorded assets and never uploads; a hero prop with no recorded asset keeps its set piece and a warning says to generate and upload it from a clone of the roblox-kit repo. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +

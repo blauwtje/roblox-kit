@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -515,19 +515,13 @@ const trainStation = (await loadPresets()).get("train-station");
 assert.ok(trainStation !== undefined);
 const trainCarHash = await heroRecipeHash(trainStation, "train-car");
 
-/** A temporary hero-assets.json, recording the train car when `recorded`, and a hero-props folder with no reviews. */
+/** A temporary hero-assets.json, recording the train car when `recorded`. */
 async function fakeHeroSources(recorded: boolean): Promise<HeroPropSources> {
   const directory = await mkdtemp(join(tmpdir(), "build-map-heroes-"));
   const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
   const assets = recorded ? { [trainCarHash]: { kind: "train-car", assetId: "987654" } } : {};
   await writeFile(assetsFile, JSON.stringify(assets));
-  await mkdir(join(directory, "hero-props"));
-  const heroPropsDirectory = pathToFileURL(join(directory, "hero-props/"));
-  return {
-    assetsFile,
-    heroPropsDirectory,
-    credentials: () => Promise.reject(new Error("an unreviewed hero prop looks up no credentials")),
-  };
+  return { assetsFile };
 }
 
 const propsPhaseIndex = phaseNames.indexOf("props");
@@ -571,7 +565,7 @@ await test("without a recorded hero asset the set piece stays and the result say
     heroWarnings[0] ?? "",
     /keeps its track-bed set piece instead of hero prop train-car/,
   );
-  assert.match(heroWarnings[0] ?? "", /no passed review/);
+  assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
 });
 
 await test("build-map.luau loads each hero asset, scales it to its size and colors its MeshParts without collision", async () => {
