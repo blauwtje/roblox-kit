@@ -1,6 +1,6 @@
 # roblox-kit
 
-A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds five skills for Luau, map building, playtests, visual review and animation.
+A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds six skills for Luau, map building, playtests, visual review, animation and player data.
 
 ## Quick start
 
@@ -132,10 +132,13 @@ Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the serve
 | `playtest`     | Proving server and client behavior with `run_playtest`.                                                                                      |
 | `visual-judge` | Judging a built map by its screenshots with the plugin agents `visual-judge`, `place-check` and `quality-reviewer`, fixing it and repeating. |
 | `animation`    | Making a character animation from keyframes in Blender and exporting an FBX for R15.                                                         |
+| `data`         | Saving player data with ProfileStore and handling developer products and game passes in a Rojo + Wally game.                                 |
 
 ## Development
 
-Run `npm run check` for the type check, lint, format check, tests and plugin validation. Run `npm run smoke:studio` against a running Studio to build, check, capture and solo-playtest a three-room map; add `-- --multiplayer` to also playtest with 2 players.
+Run `npm run check` for the type check, lint, format check, tests and plugin validation. Run `npm run smoke:studio` against a running Studio to build, check, capture and solo-playtest a three-room map; add `-- --multiplayer` to also playtest with 2 players. Run `npm run smoke:data` against a running Studio to insert the `data` skill templates and ProfileStore into the open place, run their checks in a solo playtest and remove them again.
+
+The first `npm run typecheck:luau` (part of `npm run check`) or `npm run smoke:data` downloads the pinned ProfileStore from Wally into `.roblox-kit/cache/`, which is git-ignored; it type-checks the `data` templates and `smoke:data` inserts it. ProfileStore is never committed.
 
 Run `npm run eval:studio` against a running Studio to build, check and capture each benchmark in `eval/benchmarks/`. It runs the blind place check on each typed room and scores each room of the current wave (`config.evalWaveRoomTypes`) on the six image axes against the reference set. It appends one line per benchmark to `eval/results.jsonl` with the `check_map` issues, the axis medians and the reviewers' evidence notes, and fails when a place check fails or a scored room's `passed` is false, listing both. The top-level `checkPassed` of a line is the `check_map` result. Run `node scripts/fetch-references.ts` first to download the reference images, and `node scripts/calibrate-review.ts` to check that the reviewer still separates the references from the known-bad anchors in `eval/anchors/bad/`.
 
