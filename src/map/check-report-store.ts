@@ -31,13 +31,17 @@ export function checkReportUri(reportId: string): string {
   return `${config.checkReportUriPrefix}${reportId}`;
 }
 
-/** Full check reports, kept in memory for the life of the server process. */
+/** Full check reports, kept in memory for the life of the server process, at most `config.maxCheckReports`. */
 export class CheckReportStore {
   readonly #reports = new Map<string, CheckReport>();
 
   add(mapId: string, issues: CheckIssue[]): CheckReport {
     const report = { reportId: randomUUID(), mapId, issues };
     this.#reports.set(report.reportId, report);
+    if (this.#reports.size > config.maxCheckReports) {
+      const oldestReportId = this.#reports.keys().next().value;
+      if (oldestReportId !== undefined) this.#reports.delete(oldestReportId);
+    }
     return report;
   }
 

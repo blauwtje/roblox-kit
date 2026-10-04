@@ -62,6 +62,8 @@ export const config = Object.freeze({
   maxInlineIssues: 20,
   /** Issues check_map keeps per kind in the full report; counts stay exact. */
   maxIssuesPerKind: 100,
+  /** Full check reports kept in memory; the oldest is dropped past this. */
+  maxCheckReports: 50,
 
   /** Scene limits per zone camera of a spec that sets no performance budget. */
   maxDrawCalls: 1000,
