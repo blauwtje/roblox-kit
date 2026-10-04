@@ -53,3 +53,5 @@ Task 22 0599cec: userConfig keys are snake_case (roblox_open_cloud_api_key, robl
 Task 22 0599cec: uploadReviewedHeroProp is idempotent by hash and refuses without a passed review of that hash.
 Task 22 0599cec: failed upload records nothing; polling stops after config.openCloudMaxPolls (60 x 2s).
 Task 21 (user, 2026-09-30): after three failed rounds (8/6/7/6) the rule is fixed at its source: the track bed widens to 10 studs (two 5-stud grid cells) through a preset `depth` on the `track-bed` prop rule (new Task 27), the car grows to about 7 studs deep, its body takes the `trim` role, and Task 21 gets three new rounds; the old rounds file is kept as rounds-before-task-27.json.
+Task 21 f710b85: dropped the `wall` role from the car so the taupe-grey wall/floor blur is gone.
+Task 21 f710b85: wheels radius 0.9 in `floor` role with amber hubs, not dark-green `trim` as before.
