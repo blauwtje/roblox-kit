@@ -315,7 +315,23 @@ local function restsOnWall(bounds: Bounds, walls: { Box }): boolean
 	return false
 end
 
--- Each ProceduralModel prop, at its declared Size about its pivot, must rest on a floor part or touch a wall part,
+-- Attribute that build-map.luau sets on a hero Model, naming its kind.
+local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
+
+-- The pose and size a placed prop is checked at: a ProceduralModel's declared Size about its pivot, or a hero
+-- Model's bounding box; nil for any other child.
+local function placedBox(child: Instance): (CFrame?, Vector3?)
+	if child:IsA("ProceduralModel") then
+		return child:GetPivot(), child.Size
+	end
+	if child:IsA("Model") and child:GetAttribute(HERO_KIND_ATTRIBUTE_NAME) ~= nil then
+		return child:GetBoundingBox()
+	end
+	return nil, nil
+end
+
+-- Each ProceduralModel prop, at its declared Size about its pivot, and each hero Model, at its bounding box,
+-- must rest on a floor part or touch a wall part,
 -- stay out of every wall part and stay out of every doorway clearance box. A prop standing on another prop or on a set piece has no floor
 -- under its rays and is reported; the rule can be lifted by adding those parts to the rays' include list.
 local function findPlacement(model: Model, boxes: { Box }, floors: { BasePart })
@@ -329,11 +345,11 @@ local function findPlacement(model: Model, boxes: { Box }, floors: { BasePart })
 	floorParams.FilterType = Enum.RaycastFilterType.Include
 	floorParams.FilterDescendantsInstances = floors
 	for _, child in model:GetChildren() do
-		if not child:IsA("ProceduralModel") then
+		local pivot, size = placedBox(child)
+		if not pivot or not size then
 			continue
 		end
-		local pivot = child:GetPivot()
-		local bounds = boundsOf(pivot, child.Size)
+		local bounds = boundsOf(pivot, size)
 		local path = child:GetFullName()
 		local position = toPosition(pivot.Position)
 		if not restsOnFloor(bounds, floorParams) and not restsOnWall(bounds, walls) then

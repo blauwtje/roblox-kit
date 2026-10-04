@@ -7,7 +7,9 @@
 -- pendant, or without one under the floor part of its zone; a light without a box within `ceilingDropStuds` of
 -- the ceiling above it also gets a Neon fixture part against that ceiling, tagged like the ceilings.
 -- Ceilings are tagged and decorative, as are the detail parts and fixtures. Each prop becomes a ProceduralModel running the ModuleScript of its kind
--- under the Model, generated before the props phase returns. Reports the number of parts in the Model
+-- under the Model, generated before the props phase returns. Each hero prop is its uploaded asset loaded with
+-- InsertService into a Model named "<kind>-hero-<n>", scaled to its size, centered on its pivot and turned by its
+-- yaw, its MeshParts colored from the surface each is named after, anchored and decorative. Reports the number of parts in the Model
 -- after the phase (the BaseParts that are children of the Model); the shell phase also reports
 -- whether it replaced a map.
 type Vector = { x: number, y: number, z: number }
@@ -32,6 +34,17 @@ type PropRecord = {
 	-- A set piece also turns by `yaw` degrees about Y and sets its `attributes`; a name ending in "Color" holds a hex color.
 	yaw: number?,
 	attributes: { [string]: string }?,
+}
+
+type HeroPropRecord = {
+	kind: string,
+	assetId: string,
+	-- Center of the hero's box; `size.x` is the width it is scaled to, and `yaw` its turn in degrees about Y.
+	pivot: Vector,
+	yaw: number,
+	size: Vector,
+	-- Hex color and material name of each surface role a MeshPart may be named after.
+	surfaces: { [string]: { color: string, material: string } },
 }
 
 type Variant = {
@@ -71,6 +84,7 @@ type Arguments = {
 	props: { PropRecord }?,
 	-- Source text of the generator of each prop kind.
 	generators: { [string]: string }?,
+	heroProps: { HeroPropRecord }?,
 	ceilingTag: string?,
 	-- Lighting phase: how far below a ceiling a light may hang to get a fixture, and the fixture's side.
 	ceilingDropStuds: number?,
@@ -86,11 +100,14 @@ local TERRAIN_ATTRIBUTE_NAME = "RobloxKitTerrainFills"
 -- Attribute on the map Model holding the Lighting snapshot; apply-lighting.luau owns it and a rebuild carries it over.
 local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
 local FIXTURE_TOLERANCE_STUDS = 0.001
+-- Attribute naming a hero Model's kind; check-map.luau finds hero Models by it.
+local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
 
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local InsertService = game:GetService("InsertService")
 local MaterialService = game:GetService("MaterialService")
 
 local function toVector3(vector: Vector): Vector3
@@ -371,8 +388,65 @@ local function addParts(model: Model)
 	end
 end
 
+-- Colors one hero MeshPart from the surface its name names; a name that names no surface fails the build.
+local function paintHeroPart(part: MeshPart, record: HeroPropRecord)
+	local surface = record.surfaces[part.Name]
+	if not surface then
+		local roles = {}
+		for role in record.surfaces do
+			table.insert(roles, role)
+		end
+		table.sort(roles)
+		local known = table.concat(roles, ", ")
+		error(
+			`Hero prop {record.kind} (asset {record.assetId}) has a MeshPart named "{part.Name}", which names none of its surfaces: {known}.`,
+			0
+		)
+	end
+	part.Color = Color3.fromHex(surface.color)
+	part.Material = materialNamed(surface.material)
+end
+
+-- The hero props, each its asset loaded into a Model named "<kind>-hero-<n>", scaled so its width is `size.x`,
+-- centered on its pivot and turned by its yaw; every part is anchored and neither collides, touches nor is queried.
+local function addHeroProps(model: Model)
+	local countByKind: { [string]: number } = {}
+	for _, record in arguments.heroProps or {} do
+		local assetId = tonumber(record.assetId)
+		if not assetId then
+			error(`Hero prop {record.kind} has the asset id "{record.assetId}", which is not a number.`, 0)
+		end
+		local hero = InsertService:LoadAsset(assetId)
+		local _, extents = hero:GetBoundingBox()
+		if extents.X <= 0 then
+			error(`Hero prop {record.kind} (asset {record.assetId}) has no width to scale.`, 0)
+		end
+		hero:ScaleTo(hero:GetScale() * record.size.x / extents.X)
+		for _, descendant in hero:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+				descendant.CanTouch = false
+				descendant.CanQuery = false
+				if descendant:IsA("MeshPart") then
+					paintHeroPart(descendant, record)
+				end
+			end
+		end
+		local center = hero:GetBoundingBox()
+		hero.WorldPivot = CFrame.new(center.Position)
+		hero:PivotTo(CFrame.new(toVector3(record.pivot)) * CFrame.Angles(0, math.rad(record.yaw), 0))
+		local count = (countByKind[record.kind] or 0) + 1
+		countByKind[record.kind] = count
+		hero.Name = `{record.kind}-hero-{count}`
+		hero:SetAttribute(HERO_KIND_ATTRIBUTE_NAME, record.kind)
+		hero.Parent = model
+	end
+end
+
 local function addPropModels(model: Model)
 	local proceduralModels = addProps(model, addGenerators(model))
+	addHeroProps(model)
 	waitForGeneration(proceduralModels)
 end
 
