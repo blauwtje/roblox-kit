@@ -85,7 +85,13 @@ export class StudioMcpClient implements StudioConnection {
     if (result.isError || text === undefined) {
       throw new Error(`StudioMCP could not list Studios: ${text?.text ?? "empty result"}`);
     }
-    const parsed = listStudiosSchema.safeParse(JSON.parse(text.text));
+    let studioList: unknown;
+    try {
+      studioList = JSON.parse(text.text);
+    } catch {
+      throw new Error(`StudioMCP returned an unexpected Studio list: ${text.text}`);
+    }
+    const parsed = listStudiosSchema.safeParse(studioList);
     if (!parsed.success) {
       throw new Error(`StudioMCP returned an unexpected Studio list: ${text.text}`);
     }
