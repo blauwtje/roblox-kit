@@ -1,14 +1,18 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
  * `node scripts/analyze-luau.ts` type-checks `luau/` with `luau-lsp analyze` against Roblox's type definitions at plugin security, the level `execute_luau` runs at.
  * The definitions come from the luau-lsp tag that `rokit.toml` pins and are cached in the git-ignored
- * `.roblox-kit/cache/`; delete the cached file to download them again after bumping the pin.
+ * `.roblox-kit/cache/`; bumping the pin downloads the definitions for the new tag.
  */
-const luauLspVersion = "1.70.1";
+const rokitToml = readFileSync("rokit.toml", "utf8");
+const luauLspVersion = /^luau-lsp\s*=\s*"JohnnyMorganz\/luau-lsp@([^"]+)"/m.exec(rokitToml)?.[1];
+if (luauLspVersion === undefined) {
+  throw new Error("rokit.toml has no luau-lsp entry of the form JohnnyMorganz/luau-lsp@<version>.");
+}
 const definitionsUrl = `https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/${luauLspVersion}/scripts/globalTypes.PluginSecurity.d.luau`;
 const cacheDirectory = join(".roblox-kit", "cache");
 const definitionsPath = join(cacheDirectory, `globalTypes.PluginSecurity.${luauLspVersion}.d.luau`);

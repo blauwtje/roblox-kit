@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -524,6 +524,61 @@ async function fakeHeroSources(recorded: boolean): Promise<HeroPropSources> {
   return { assetsFile };
 }
 
+async function writeIfAbsent(file: URL, text: string): Promise<boolean> {
+  try {
+    await writeFile(file, text, { flag: "wx" });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+/**
+ * Runs `run` with a passed review and a GLB for the train car in the folder the old uploader read, Open Cloud
+ * credentials in the environment and `fetch` counted, then puts all of it back. Returns the number of fetch calls.
+ */
+async function countFetchesWithReviewedTrainCar(run: () => Promise<void>): Promise<number> {
+  const folder = new URL(
+    `../../${config.heroPropsFolder}/train-station-train-car-${trainCarHash}/`,
+    import.meta.url,
+  );
+  const created = await mkdir(folder, { recursive: true });
+  const reviewFile = new URL("review.json", folder);
+  const glbFile = new URL("model.glb", folder);
+  const wroteReview = await writeIfAbsent(
+    reviewFile,
+    JSON.stringify({ hash: trainCarHash, passed: true }),
+  );
+  const wroteGlb = await writeIfAbsent(glbFile, "glTF");
+  const savedEnv = process.env;
+  const withoutGroup = Object.entries(savedEnv).filter(
+    ([name]) => name !== config.openCloudCreatorGroupIdEnv,
+  );
+  process.env = {
+    ...Object.fromEntries(withoutGroup),
+    [config.openCloudApiKeyEnv]: "test-key",
+    [config.openCloudCreatorUserIdEnv]: "42",
+  };
+  const realFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = () => {
+    fetchCalls += 1;
+    return Promise.reject(new Error("no Open Cloud call is expected"));
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env = savedEnv;
+    // Only what this helper created is removed; a review already on disk is left alone.
+    if (created !== undefined) await rm(created, { recursive: true, force: true });
+    if (created === undefined && wroteReview) await rm(reviewFile, { force: true });
+    if (created === undefined && wroteGlb) await rm(glbFile, { force: true });
+  }
+  return fetchCalls;
+}
+
 const propsPhaseIndex = phaseNames.indexOf("props");
 
 await test("a recorded hero asset is sent to the props phase in the slot of the set piece it replaces", async () => {
@@ -570,6 +625,22 @@ await test("without a recorded hero asset the set piece stays and the result say
     heroWarnings[0] ?? "",
     /keeps its track-bed set piece instead of hero prop train-car/,
   );
+  assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
+});
+
+await test("a reviewed but unrecorded hero prop makes no Open Cloud call and returns the clone warning", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(false));
+  let result: Awaited<ReturnType<typeof tool.handler>> | undefined;
+  const fetchCalls = await countFetchesWithReviewedTrainCar(async () => {
+    result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  });
+  assert.equal(fetchCalls, 0, "no Open Cloud call is made");
+  const structured = buildMapTool.outputSchema.parse(result?.structuredContent);
+  const heroWarnings = structured.warnings.filter((warning) =>
+    warning.includes("hero prop train-car"),
+  );
+  assert.equal(heroWarnings.length, 1);
   assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
 });
 

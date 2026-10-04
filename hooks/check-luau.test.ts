@@ -59,6 +59,21 @@ await test("a Selene error exits 2 with its output on stderr", () => {
   assert.deepEqual(result, { exitCode: 2, stderr: "selene says no" });
 });
 
+await test("a StyLua failure exits 2 with its output on stderr", () => {
+  const { file } = makeProject(["stylua.toml", "selene.toml"]);
+  const calls: Call[] = [];
+  const runner: ToolRunner = (tool, _args, cwd) => {
+    calls.push({ tool, cwd });
+    return { status: 1, output: "stylua says no", missing: false };
+  };
+  const result = checkLuauFile(file, runner);
+  assert.deepEqual(result, { exitCode: 2, stderr: "stylua says no" });
+  assert.deepEqual(
+    calls.map((call) => call.tool),
+    ["stylua"],
+  );
+});
+
 await test("a tool missing from PATH is skipped", () => {
   const { file } = makeProject(["stylua.toml", "selene.toml"]);
   const result = checkLuauFile(file, recordingRunner([], 1, true));

@@ -43,7 +43,10 @@ export function checkLuauFile(filePath: string, run: ToolRunner = runTool): Hook
 
   const fileFolder = path.dirname(absolutePath);
   const styleFolder = findConfigFolder(fileFolder, stylerConfigNames);
-  if (styleFolder !== undefined) run("stylua", [absolutePath], styleFolder);
+  if (styleFolder !== undefined) {
+    const format = run("stylua", [absolutePath], styleFolder);
+    if (!format.missing && format.status !== 0) return { exitCode: 2, stderr: format.output };
+  }
 
   const lintFolder = findConfigFolder(fileFolder, linterConfigNames);
   if (lintFolder === undefined) return passed;

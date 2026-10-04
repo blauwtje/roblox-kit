@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
+import { config } from "../config.ts";
 import { recipeHash } from "../hero-props/recipe-hash.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
@@ -49,6 +50,58 @@ async function fakeSources(options: { recorded?: boolean }): Promise<HeroPropSou
   const assets = options.recorded ? { [hash]: { kind: "train-car", assetId: "123456" } } : {};
   await writeFile(assetsFile, JSON.stringify(assets));
   return { assetsFile };
+}
+
+async function writeIfAbsent(file: URL, text: string): Promise<boolean> {
+  try {
+    await writeFile(file, text, { flag: "wx" });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+/**
+ * Runs `run` with a passed review and a GLB for the train car in the folder the old uploader read, Open Cloud
+ * credentials in the environment and `fetch` counted, then puts all of it back. Returns the number of fetch calls.
+ */
+async function countFetchesWithReviewedTrainCar(run: () => Promise<void>): Promise<number> {
+  const folder = new URL(
+    `../../${config.heroPropsFolder}/train-station-train-car-${hash}/`,
+    import.meta.url,
+  );
+  const created = await mkdir(folder, { recursive: true });
+  const reviewFile = new URL("review.json", folder);
+  const glbFile = new URL("model.glb", folder);
+  const wroteReview = await writeIfAbsent(reviewFile, JSON.stringify({ hash: hash, passed: true }));
+  const wroteGlb = await writeIfAbsent(glbFile, "glTF");
+  const savedEnv = process.env;
+  const withoutGroup = Object.entries(savedEnv).filter(
+    ([name]) => name !== config.openCloudCreatorGroupIdEnv,
+  );
+  process.env = {
+    ...Object.fromEntries(withoutGroup),
+    [config.openCloudApiKeyEnv]: "test-key",
+    [config.openCloudCreatorUserIdEnv]: "42",
+  };
+  const realFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = () => {
+    fetchCalls += 1;
+    return Promise.reject(new Error("no Open Cloud call is expected"));
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env = savedEnv;
+    // Only what this helper created is removed; a review already on disk is left alone.
+    if (created !== undefined) await rm(created, { recursive: true, force: true });
+    if (created === undefined && wroteReview) await rm(reviewFile, { force: true });
+    if (created === undefined && wroteGlb) await rm(glbFile, { force: true });
+  }
+  return fetchCalls;
 }
 
 const platform = spec.rooms.find((room) => room.roomType === "platform");
@@ -138,13 +191,12 @@ await test("without a recorded asset the set piece stays and the warning says to
 
 await test("a passed review alone uploads nothing and records nothing", async () => {
   const sources = await fakeSources({});
-  assert.ok(sources.assetsFile !== undefined);
-  const directory = fileURLToPath(new URL(".", sources.assetsFile));
-  const folder = join(directory, "hero-props", `train-station-train-car-${hash}`);
-  await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, "review.json"), JSON.stringify({ hash, passed: true }));
-  const result = await heroPropsOf(spec, preset, placed.props, sources);
-  assert.deepEqual(result.props, placed.props);
+  let result: Awaited<ReturnType<typeof heroPropsOf>> | undefined;
+  const fetchCalls = await countFetchesWithReviewedTrainCar(async () => {
+    result = await heroPropsOf(spec, preset, placed.props, sources);
+  });
+  assert.equal(fetchCalls, 0, "no Open Cloud call is made");
+  assert.deepEqual(result?.props, placed.props);
   assert.equal(result.warnings.length, 1);
   assert.deepEqual(await readHeroAssets(sources.assetsFile), {});
 });
