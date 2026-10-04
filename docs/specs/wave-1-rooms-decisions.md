@@ -55,3 +55,9 @@ Task 22 0599cec: failed upload records nothing; polling stops after config.openC
 Task 21 (user, 2026-09-30): after three failed rounds (8/6/7/6) the rule is fixed at its source: the track bed widens to 10 studs (two 5-stud grid cells) through a preset `depth` on the `track-bed` prop rule (new Task 27), the car grows to about 7 studs deep, its body takes the `trim` role, and Task 21 gets three new rounds; the old rounds file is kept as rounds-before-task-27.json.
 Task 21 f710b85: dropped the `wall` role from the car so the taupe-grey wall/floor blur is gone.
 Task 21 f710b85: wheels radius 0.9 in `floor` role with amber hubs, not dark-green `trim` as before.
+Task 23 310c337: the hash comes from the preset as stored, the way generateHeroProp computes it, so the build finds the asset that was uploaded. The surface colors come from the resolved style, so overrides still repaint the meshes.
+Task 23 310c337: the props phase's partCount counts the hero props, and the hero surface materials are added to the materials the shell phase checks.
+Task 23 310c337: a MeshPart whose name matches no surface role fails the build, instead of leaving that part uncolored.
+Task 24 6dc9df4: board is dark-green frame/posts (trim), dark panel (floor), amber bars (accent) on both faces, pale cap (ceiling)
+Task 25 576e1a0: ticket counter faces +z with the clerk side at -z, as the brief leaves hero-prop orientation open
+Task 26 34b399f: I put the hero-prop loop in its own "## Hero props" section rather than as steps 9-12, because the Process list already has the eight steps edit-skills aims for. The README text goes under Development because the hero-props command is a repository script, not an MCP tool.
