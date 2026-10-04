@@ -55,6 +55,8 @@ export const config = Object.freeze({
   overlapToleranceStuds: 0.05,
   pathfindingAgentRadiusStuds: 2,
   pathfindingAgentHeightStuds: 5,
+  /** Straight-line distance beyond which a spawn and a target are reported as tooFar, not pathfound. */
+  maxPathStuds: 3000,
 
   /** Issues check_map returns inline; the rest is behind the report resource link. */
   maxInlineIssues: 20,

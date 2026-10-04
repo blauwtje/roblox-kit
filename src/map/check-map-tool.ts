@@ -23,9 +23,6 @@ import { zoneShot } from "./zone-cameras.ts";
 
 const presets = await loadPresets();
 
-/** Straight-line distance beyond which a spawn and a target are reported as tooFar, not pathfound. */
-const MAX_PATH_STUDS = 3000;
-
 /** The counts `check-map.luau` reports; `sizeRule` is computed here from the spec, `scale` and `rotation` from the props. */
 const luauCountsSchema = z.strictObject({
   overlapping: z.number().int(),
@@ -207,7 +204,7 @@ export function createCheckMapTool(
     name: "check_map",
     title: "Check map",
     description:
-      `Checks a map built by build_map for overlapping parts, floating parts (not connected to the ground or terrain) and zones and objective points that a walk from any SpawnLocation cannot reach (Studio pathfinding; a pair of spawn and target over ${String(MAX_PATH_STUDS)} studs apart is reported as an unreachable issue whose detail starts with tooFar). ` +
+      `Checks a map built by build_map for overlapping parts, floating parts (not connected to the ground or terrain) and zones and objective points that a walk from any SpawnLocation cannot reach (Studio pathfinding; a pair of spawn and target over ${String(config.maxPathStuds)} studs apart is reported as an unreachable issue whose detail starts with tooFar). ` +
       `Optional objectives [{ name, x, y, z }] add targets and an optional preset (a build_map style preset name) sets the agent size from its size rules. ` +
       `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. With a preset it also reads the map's props and reports scale issues (a prop's height outside the preset's heightRatio of the avatar height, naming the prop) and rotation issues (a prop whose yaw is not a multiple of 90 degrees or that is tilted, where the preset's rule does not allow free rotation). ` +
       `It also reports placement issues for each prop (at its declared size about its pivot) that has no floor part under its center and four footprint corners, overlaps a wall part, or stands inside a doorway's clearance box (the opening's width, the wall's thickness plus an agent radius on each face, and the agent's height; needs the spec, else only the floor and wall rules apply); the detail names the rule. ` +
@@ -245,7 +242,7 @@ export function createCheckMapTool(
           wallNameInfix: config.wallNameInfix,
           agentRadiusStuds: agent.radius,
           agentHeightStuds: agent.height,
-          maxPathStuds: MAX_PATH_STUDS,
+          maxPathStuds: config.maxPathStuds,
           objectives: input.objectives ?? input.spec?.objectives ?? [],
           // Doorway clearance needs the spec's layout; without a spec no doorway is known.
           doorways: input.spec === undefined ? [] : doorwayClearanceBoxes(input.spec, agent),
