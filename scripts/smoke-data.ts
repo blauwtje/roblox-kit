@@ -4,6 +4,13 @@ import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import { profileStorePath } from "./profilestore-cache.ts";
+import {
+  createInstance,
+  executeLuau,
+  insertScript,
+  removeMarked,
+  textOf,
+} from "./studio-insert.ts";
 
 /**
  * End-to-end check of the `data` skill templates in the open place: inserts ProfileStore and the templates
@@ -14,8 +21,7 @@ const templateFolder = new URL("../skills/data/templates/", import.meta.url);
 const markerAttribute = "RobloxKitDataSmoke";
 const packagesFolderName = "ServerPackages";
 const playtestTimeoutSeconds = 90;
-/** Characters of source per `execute_luau` call, well under any request limit. */
-const sourceChunkLength = 40_000;
+const serverScriptService = `game:GetService("ServerScriptService")`;
 
 interface Template {
   name: string;
@@ -32,44 +38,6 @@ const templates: Template[] = [
 
 const dataChecksBody = `require(game:GetService("ServerScriptService"):WaitForChild("DataChecks"))(check, expectedClients)`;
 
-function textOf(result: { content: { type: string; text?: string }[] }): string {
-  return result.content.map((block) => (block.type === "text" ? (block.text ?? "") : "")).join("");
-}
-
-async function executeLuau(
-  connection: StudioConnection,
-  studioId: string,
-  code: string,
-): Promise<string> {
-  const result = await connection.callTool({
-    name: "execute_luau",
-    studioId,
-    arguments: { code, datamodel_type: "Edit" },
-  });
-  if (result.isError === true) throw new Error(`execute_luau failed: ${textOf(result)}`);
-  return textOf(result);
-}
-
-/** A Luau long string that holds `text` verbatim: more `=` than any closing bracket inside it. */
-function longString(text: string): string {
-  let level = 0;
-  while (text.includes(`]${"=".repeat(level)}]`)) level += 1;
-  const equals = "=".repeat(level);
-  // The first newline after the opening bracket is dropped by Luau, so this one is not part of the text.
-  return `[${equals}[\n${text}]${equals}]`;
-}
-
-const cleanupLuau = `
-local ServerScriptService = game:GetService("ServerScriptService")
-local removed = 0
-for _, child in ServerScriptService:GetChildren() do
-	if child:GetAttribute("${markerAttribute}") == true then
-		child:Destroy()
-		removed += 1
-	end
-end
-return tostring(removed)`;
-
 /** Fails before inserting anything when the place already has an instance the smoke would shadow. */
 const preflightLuau = `
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -81,55 +49,24 @@ for _, name in {${[packagesFolderName, ...templates.map((template) => template.n
 end
 return table.concat(taken, ", ")`;
 
-function createLuau(parentPath: string, name: string, className: string): string {
-  return `
-local ServerScriptService = game:GetService("ServerScriptService")
-local parent = ${parentPath}
-local instance = Instance.new("${className}")
-instance.Name = "${name}"
-instance:SetAttribute("${markerAttribute}", true)
-instance.Parent = parent
-return "ok"`;
-}
-
-async function insertScript(
-  connection: StudioConnection,
-  studioId: string,
-  parentPath: string,
-  name: string,
-  className: string,
-  source: string,
-): Promise<void> {
-  await executeLuau(connection, studioId, createLuau(parentPath, name, className));
-  for (let start = 0; start < source.length; start += sourceChunkLength) {
-    const chunk = source.slice(start, start + sourceChunkLength);
-    await executeLuau(
-      connection,
-      studioId,
-      `
-local ServerScriptService = game:GetService("ServerScriptService")
-local target = ${parentPath}:FindFirstChild("${name}")
-assert(target, "${name} was not inserted")
-target.Source ..= ${longString(chunk)}
-return "ok"`,
-    );
-  }
-}
-
 async function runSmoke(connection: StudioConnection, studioId: string): Promise<string> {
   const taken = await executeLuau(connection, studioId, preflightLuau);
   if (taken !== "")
     throw new Error(`ServerScriptService already holds ${taken}; remove it and rerun`);
 
-  await executeLuau(
+  await createInstance(
     connection,
     studioId,
-    createLuau("ServerScriptService", packagesFolderName, "Folder"),
+    markerAttribute,
+    serverScriptService,
+    packagesFolderName,
+    "Folder",
   );
   await insertScript(
     connection,
     studioId,
-    `ServerScriptService:FindFirstChild("${packagesFolderName}")`,
+    markerAttribute,
+    `${serverScriptService}:FindFirstChild("${packagesFolderName}")`,
     "ProfileStore",
     "ModuleScript",
     await readFile(await profileStorePath(), "utf8"),
@@ -138,7 +75,8 @@ async function runSmoke(connection: StudioConnection, studioId: string): Promise
     await insertScript(
       connection,
       studioId,
-      "ServerScriptService",
+      markerAttribute,
+      serverScriptService,
       template.name,
       template.className,
       await readFile(new URL(template.file, templateFolder), "utf8"),
@@ -175,7 +113,12 @@ try {
   try {
     console.log(await runSmoke(connection, studioId));
   } finally {
-    const removed = await executeLuau(connection, studioId, cleanupLuau);
+    const removed = await removeMarked(
+      connection,
+      studioId,
+      "ServerScriptService",
+      markerAttribute,
+    );
     console.log(`removed ${removed} inserted instances`);
   }
 } catch (error) {
