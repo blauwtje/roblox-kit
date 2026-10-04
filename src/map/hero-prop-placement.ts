@@ -7,10 +7,14 @@ import type { PropRecord } from "./prop-placement.ts";
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 type SurfaceRole = keyof Preset["surfaces"];
 
+/** A placed prop as `build-map.luau` takes it: a set piece also turns by `yaw` and carries `attributes`. */
+type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, string> };
+
 /**
  * One hero prop for `build-map.luau`: the uploaded asset loaded in the slot of the set piece it replaces.
  * `pivot` is the center of its box, `size` the recipe's width, height and depth in studs (x, y, z), `yaw`
  * the replaced piece's turn about Y, and `surfaces` the color and material of each role a MeshPart is named after.
+ * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load.
  */
 export interface HeroPropRecord {
   kind: string;
@@ -19,6 +23,7 @@ export interface HeroPropRecord {
   yaw: number;
   size: Vector;
   surfaces: Record<string, { color: string; material: string }>;
+  fallback: PlacedProp;
 }
 
 /** The preset, the style resolved from it, and the preset's name, which names the generated folders. */
@@ -41,7 +46,7 @@ function heroRecord(
   kind: string,
   assetId: string,
   recipe: HeroPropRecipe,
-  piece: PropRecord & { yaw?: number },
+  piece: PlacedProp,
   style: Preset,
 ): HeroPropRecord {
   const { width, height, depth } = recipe.size;
@@ -58,6 +63,7 @@ function heroRecord(
     yaw: piece.yaw ?? 0,
     size: { x: width, y: height, z: depth },
     surfaces,
+    fallback: piece,
   };
 }
 
@@ -68,7 +74,7 @@ function heroRecord(
  * saying to generate and upload it from a clone of the roblox-kit repo. A room with no such set piece
  * gets a warning and no hero prop.
  */
-export async function heroPropsOf<Prop extends PropRecord & { yaw?: number }>(
+export async function heroPropsOf<Prop extends PlacedProp>(
   spec: MapSpec,
   preset: HeroPreset,
   props: Prop[],
