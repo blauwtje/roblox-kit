@@ -15,7 +15,7 @@ local REPORT_EVENT_WAIT_SECONDS = 30
 
 -- The spliced body sees `check(name, passed, detail)` to record a result and this client's `player`.
 -- selene: allow(unused_variable)
-local function runChecks(check: Recorder, player: Player)
+local function runChecks(check: Recorder, player: Player): ...any
 	-- roblox-kit:check-body
 end
 

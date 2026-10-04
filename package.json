@@ -10,6 +10,7 @@
   "scripts": {
     "typecheck": "tsc",
     "lint": "eslint .",
+    "typecheck:luau": "node scripts/analyze-luau.ts",
     "lint:luau": "selene .",
     "format:check": "prettier --check .",
     "format:luau:check": "stylua --check .",
@@ -19,7 +20,7 @@
     "smoke:studio": "node scripts/smoke-studio.ts",
     "eval:studio": "node scripts/eval-studio.ts",
     "validate:plugin": "claude plugin validate --strict .",
-    "check": "npm run typecheck && npm run lint && npm run lint:luau && npm run format:check && npm run format:luau:check && npm run test && npm run validate:plugin"
+    "check": "npm run typecheck && npm run typecheck:luau && npm run lint && npm run lint:luau && npm run format:check && npm run format:luau:check && npm run test && npm run validate:plugin"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.2.0",

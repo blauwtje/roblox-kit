@@ -122,7 +122,7 @@ end
 -- Names the materials that Enum.Material does not know, so nothing is built from a bad spec.
 local function assertMaterialsExist()
 	local unknown: { string } = {}
-	for _, materialName in arguments.materials or {} do
+	for _, materialName in arguments.materials or ({} :: { string }) do
 		if Enum.Material:FromName(materialName) == nil and not table.find(unknown, materialName) then
 			table.insert(unknown, materialName)
 		end
@@ -220,7 +220,7 @@ end
 -- One ModuleScript per prop kind in use, each holding the generator source of its kind.
 local function addGenerators(model: Model): { [string]: ModuleScript }
 	local modules: { [string]: ModuleScript } = {}
-	for kind, source in arguments.generators or {} do
+	for kind, source in arguments.generators or ({} :: { [string]: string }) do
 		local generator = Instance.new("ModuleScript")
 		generator.Name = `{kind}-generator`
 		generator.Source = source
@@ -248,7 +248,7 @@ local function addProp(
 	proceduralModel.Generator = generator
 	proceduralModel.Size = toVector3(record.size)
 	proceduralModel:SetAttribute("Seed", record.seed)
-	for name, value in record.attributes or {} do
+	for name, value in record.attributes or ({} :: { [string]: string }) do
 		proceduralModel:SetAttribute(name, if string.match(name, "Color$") then Color3.fromHex(value) else value)
 	end
 	local turn = CFrame.Angles(0, math.rad(record.yaw or 0), 0)
@@ -376,7 +376,7 @@ end
 
 local function addLights(model: Model)
 	local fixtureCount = 0
-	for _, record in arguments.lights or {} do
+	for _, record in arguments.lights or ({} :: { LightRecord }) do
 		if record.fixture then
 			fixtureCount += 1
 		end
@@ -388,7 +388,7 @@ local function addLights(model: Model)
 end
 
 local function addParts(model: Model)
-	for _, record in arguments.parts or {} do
+	for _, record in arguments.parts or ({} :: { PartRecord }) do
 		newPart(record).Parent = model
 	end
 end
@@ -423,7 +423,7 @@ local function addHeroProps(
 ): { HeroLoadFailure }
 	local failures: { HeroLoadFailure } = {}
 	local heroCountByKind: { [string]: number } = {}
-	for _, record in arguments.heroProps or {} do
+	for _, record in arguments.heroProps or ({} :: { HeroPropRecord }) do
 		local assetId = tonumber(record.assetId)
 		if not assetId then
 			error(`Hero prop {record.kind} has the asset id "{record.assetId}", which is not a number.`, 0)
@@ -470,7 +470,7 @@ local function addPropModels(model: Model): { HeroLoadFailure }
 	local generators = addGenerators(model)
 	local countByKind: { [string]: number } = {}
 	local proceduralModels: { ProceduralModel } = {}
-	for _, record in arguments.props or {} do
+	for _, record in arguments.props or ({} :: { PropRecord }) do
 		table.insert(proceduralModels, addProp(model, generators, record, countByKind))
 	end
 	local failures = addHeroProps(model, generators, countByKind, proceduralModels)
@@ -496,7 +496,7 @@ local function buildShell(): (boolean, number)
 		model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, lightingSnapshot)
 	end
 	addParts(model)
-	local terrainFills = arguments.terrainFills or {}
+	local terrainFills = arguments.terrainFills or ({} :: { TerrainFill })
 	for _, fill in terrainFills do
 		fillTerrain(fill, materialNamed(fill.material))
 	end

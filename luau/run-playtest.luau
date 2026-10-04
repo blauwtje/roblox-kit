@@ -37,12 +37,12 @@ local function starterPlayerScripts(): Instance
 	return scripts
 end
 
-local function removeHarness()
+local function removeHarness(): ...any
 	removeNamed(ServerScriptService, SERVER_HARNESS_NAME)
 	removeNamed(starterPlayerScripts(), CLIENT_HARNESS_NAME)
 end
 
-local function insertHarness()
+local function insertHarness(): ...any
 	local serverScript = Instance.new("Script")
 	serverScript.Name = SERVER_HARNESS_NAME
 	serverScript.Source = arguments.serverSource

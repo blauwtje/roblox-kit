@@ -260,7 +260,10 @@ local function findFloating(model: Model, boxes: { Box })
 	end
 	while #pending > 0 do
 		local support = table.remove(pending) :: BasePart
-		for _, resting in restingOn[support] or {} do
+		if restingOn[support] == nil then
+			continue
+		end
+		for _, resting in restingOn[support] do
 			if not grounded[resting] then
 				grounded[resting] = true
 				table.insert(pending, resting)
@@ -343,7 +346,7 @@ local function findPlacement(model: Model, boxes: { Box }, floors: { BasePart })
 	end
 	local floorParams = RaycastParams.new()
 	floorParams.FilterType = Enum.RaycastFilterType.Include
-	floorParams.FilterDescendantsInstances = floors
+	floorParams.FilterDescendantsInstances = floors :: any -- {BasePart} does not convert to {Instance}: Luau arrays are invariant.
 	for _, child in model:GetChildren() do
 		local pivot, size = placedBox(child)
 		if not pivot or not size then

@@ -1,2 +1,2 @@
 std = "roblox"
-exclude = ["docs/research-parts/*"]
+exclude = ["docs/research-parts/*", ".roblox-kit/*"]
