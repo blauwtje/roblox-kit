@@ -43,5 +43,6 @@ Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. S
 
 ## Conventions
 
+- No pull requests: commit on `main` and push straight to `origin/main`.
 - Distances are studs; north is -Z, south +Z, east +X, west -X.
 - `docs/`, `.exo/` and `.roblox-kit/` (credentials, hero-prop output) are gitignored and private; do not commit them.
