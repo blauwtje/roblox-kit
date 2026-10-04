@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { profileStorePath } from "./profilestore-cache.ts";
 
 /**
  * `node scripts/analyze-luau.ts` type-checks `luau/` with `luau-lsp analyze` against Roblox's type definitions at plugin security, the level `execute_luau` runs at.
+ * It then type-checks `skills/data/templates/` against the pinned ProfileStore through a generated sourcemap, so a wrong ProfileStore API name in a template fails.
  * The definitions come from the luau-lsp tag that `rokit.toml` pins and are cached in the git-ignored
  * `.roblox-kit/cache/`; bumping the pin downloads the definitions for the new tag.
  */
@@ -26,10 +28,60 @@ if (!existsSync(definitionsPath)) {
   await writeFile(definitionsPath, await response.text());
 }
 
-const result = spawnSync("luau-lsp", ["analyze", `--definitions=${definitionsPath}`, "luau"], {
-  stdio: "inherit",
-});
-if (result.error) {
-  throw result.error;
+function analyze(extraArguments: string[], target: string): number {
+  const result = spawnSync(
+    "luau-lsp",
+    ["analyze", `--definitions=${definitionsPath}`, ...extraArguments, target],
+    { stdio: "inherit" },
+  );
+  if (result.error) {
+    throw result.error;
+  }
+  return result.status ?? 1;
 }
-process.exit(result.status ?? 1);
+
+const luauStatus = analyze([], "luau");
+
+// The templates require ProfileStore at ServerScriptService.ServerPackages.ProfileStore and each other as siblings.
+// The sourcemap places the downloaded ProfileStore there, and the templates in a Data folder under ServerScriptService.
+const templatesDirectory = join("skills", "data", "templates");
+const templateModules = readdirSync(templatesDirectory)
+  .filter((fileName) => fileName.endsWith(".luau"))
+  .map((fileName) => ({
+    name: fileName.replace(/(\.server)?\.luau$/, ""),
+    className: fileName.endsWith(".server.luau") ? "Script" : "ModuleScript",
+    filePaths: [join(templatesDirectory, fileName)],
+  }));
+const sourcemap = {
+  name: "Game",
+  className: "DataModel",
+  children: [
+    {
+      name: "ServerScriptService",
+      className: "ServerScriptService",
+      children: [
+        {
+          name: "ServerPackages",
+          className: "Folder",
+          children: [
+            {
+              name: "ProfileStore",
+              className: "ModuleScript",
+              filePaths: [relative(process.cwd(), await profileStorePath())],
+            },
+          ],
+        },
+        { name: "Data", className: "Folder", children: templateModules },
+      ],
+    },
+  ],
+};
+const sourcemapPath = join(cacheDirectory, "data-templates-sourcemap.json");
+await writeFile(sourcemapPath, JSON.stringify(sourcemap, null, 2));
+
+// ProfileStore's own file is third-party code; only the templates' diagnostics count.
+const templatesStatus = analyze(
+  [`--sourcemap=${sourcemapPath}`, `--ignore=**/${cacheDirectory}/**`],
+  templatesDirectory,
+);
+process.exit(luauStatus === 0 ? templatesStatus : luauStatus);
