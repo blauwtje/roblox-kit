@@ -3,35 +3,16 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import { config } from "../config.ts";
 import { readHeroAssets, recordHeroAsset } from "./hero-asset-store.ts";
+import type { OpenCloudCredentials } from "./open-cloud-credentials.ts";
 
 const glbFileName = "model.glb";
 const reviewFileName = "review.json";
-
-export interface OpenCloudCredentials {
-  apiKey: string;
-  creatorUserId: string;
-}
 
 /** Where a call goes and how it waits; a test injects a fake `fetchFn` and a zero interval. */
 export interface OpenCloudTransport {
   fetchFn?: typeof fetch;
   pollIntervalMs?: number;
   maxPolls?: number;
-}
-
-/** The key and creator user id from the environment; throws naming the variable that is missing or malformed. */
-export function readOpenCloudCredentials(
-  env: Record<string, string | undefined> = process.env,
-): OpenCloudCredentials {
-  const apiKey = env[config.openCloudApiKeyEnv];
-  if (apiKey === undefined || apiKey === "") {
-    throw new Error(`${config.openCloudApiKeyEnv} is not set.`);
-  }
-  const creatorUserId = env[config.openCloudCreatorUserIdEnv];
-  if (creatorUserId === undefined || !/^\d+$/.test(creatorUserId)) {
-    throw new Error(`${config.openCloudCreatorUserIdEnv} is not set to a numeric Roblox user id.`);
-  }
-  return { apiKey, creatorUserId };
 }
 
 const operationSchema = z.object({
@@ -75,7 +56,7 @@ function finishedAssetId(operation: Operation): string | undefined {
 }
 
 /**
- * Uploads `glb` as a Model owned by the credentials' user, polls the operation until it is done and returns
+ * Uploads `glb` as a Model owned by the credentials' user or group, polls the operation until it is done and returns
  * the new asset id. Throws on an HTTP error, a rejected upload or `maxPolls` polls without a result.
  */
 export async function uploadGlb(
@@ -97,7 +78,7 @@ export async function uploadGlb(
       assetType: "Model",
       displayName,
       description: displayName,
-      creationContext: { creator: { userId: credentials.creatorUserId } },
+      creationContext: { creator: credentials.creator },
     }),
   );
   form.append("fileContent", new Blob([glb], { type: "model/gltf-binary" }), glbFileName);

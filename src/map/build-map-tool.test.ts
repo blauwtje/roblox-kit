@@ -8,7 +8,7 @@ import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { tools } from "../server/main.ts";
 import { buildMapTool, buildMapToolWith, propsOf } from "./build-map-tool.ts";
-import { heroRecipeHash, type HeroPropSources } from "./hero-prop-placement.ts";
+import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import { mapSpecSchema } from "./map-spec.ts";
 import { loadPresets } from "../style/load-preset.ts";
 
@@ -523,7 +523,11 @@ async function fakeHeroSources(recorded: boolean): Promise<HeroPropSources> {
   await writeFile(assetsFile, JSON.stringify(assets));
   await mkdir(join(directory, "hero-props"));
   const heroPropsDirectory = pathToFileURL(join(directory, "hero-props/"));
-  return { assetsFile, heroPropsDirectory, hasApiKey: false };
+  return {
+    assetsFile,
+    heroPropsDirectory,
+    credentials: () => Promise.reject(new Error("an unreviewed hero prop looks up no credentials")),
+  };
 }
 
 const propsPhaseIndex = phaseNames.indexOf("props");

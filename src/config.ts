@@ -117,9 +117,13 @@ export const config = Object.freeze({
   /** Open Cloud Assets API that a reviewed hero-prop GLB is uploaded to, and the operations it is polled at. */
   openCloudAssetsUrl: "https://apis.roblox.com/assets/v1/assets",
   openCloudOperationsUrl: "https://apis.roblox.com/assets/v1/operations/",
-  /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator's user id. */
+  /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator: a user id or a group id. */
   openCloudApiKeyEnv: "ROBLOX_OPEN_CLOUD_API_KEY",
   openCloudCreatorUserIdEnv: "ROBLOX_CREATOR_USER_ID",
+  openCloudCreatorGroupIdEnv: "ROBLOX_CREATOR_GROUP_ID",
+  /** Gitignored files, under the repository root, read when the variables are unset: the key (trimmed), and the creator as {"groupId":"<digits>"} or {"userId":"<digits>"}. */
+  openCloudKeyFile: ".roblox-kit/open-cloud-key",
+  openCloudCreatorFile: ".roblox-kit/open-cloud-creator.json",
   /** Wait between two polls of an upload operation, and how many polls before the upload counts as failed. */
   openCloudPollIntervalMs: 2000,
   openCloudMaxPolls: 60,

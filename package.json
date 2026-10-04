@@ -15,6 +15,7 @@
     "format:luau:check": "stylua --check .",
     "test": "node --test",
     "hero-props": "node scripts/hero-props.ts",
+    "hero-props:upload": "node scripts/upload-hero-props.ts",
     "smoke:studio": "node scripts/smoke-studio.ts",
     "eval:studio": "node scripts/eval-studio.ts",
     "validate:plugin": "claude plugin validate .",

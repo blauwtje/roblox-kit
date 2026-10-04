@@ -5,13 +5,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { readHeroAssets } from "./hero-asset-store.ts";
-import {
-  readOpenCloudCredentials,
-  uploadGlb,
-  uploadReviewedHeroProp,
-} from "./open-cloud-upload.ts";
+import { uploadGlb, uploadReviewedHeroProp } from "./open-cloud-upload.ts";
 
-const credentials = { apiKey: "test-key", creatorUserId: "42" };
+const credentials = { apiKey: "test-key", creator: { userId: "42" } };
 const glb = new Uint8Array([0x67, 0x6c, 0x54, 0x46]);
 
 interface FakeCall {
@@ -113,24 +109,14 @@ await test("uploadGlb gives up after maxPolls polls", async () => {
   assert.equal(calls.length, 3);
 });
 
-await test("readOpenCloudCredentials reads both variables and names a missing one", () => {
-  assert.deepEqual(
-    readOpenCloudCredentials({ ROBLOX_OPEN_CLOUD_API_KEY: "k", ROBLOX_CREATOR_USER_ID: "7" }),
-    { apiKey: "k", creatorUserId: "7" },
-  );
-  assert.throws(
-    () => readOpenCloudCredentials({ ROBLOX_CREATOR_USER_ID: "7" }),
-    /ROBLOX_OPEN_CLOUD_API_KEY/,
-  );
-  assert.throws(
-    () => readOpenCloudCredentials({ ROBLOX_OPEN_CLOUD_API_KEY: "", ROBLOX_CREATOR_USER_ID: "7" }),
-    /ROBLOX_OPEN_CLOUD_API_KEY/,
-  );
-  assert.throws(
-    () =>
-      readOpenCloudCredentials({ ROBLOX_OPEN_CLOUD_API_KEY: "k", ROBLOX_CREATOR_USER_ID: "me" }),
-    /ROBLOX_CREATOR_USER_ID/,
-  );
+await test("uploadGlb names a group creator in the request when the key is group-owned", async () => {
+  const { fetchFn, calls } = fakeFetch([json(finished)]);
+  const groupCredentials = { apiKey: "test-key", creator: { groupId: "718128661" } };
+  await uploadGlb(glb, "x", groupCredentials, { fetchFn, pollIntervalMs: 0 });
+  const form = calls[0]?.body;
+  assert.ok(form instanceof FormData);
+  const request = JSON.parse(form.get("request") as string) as Record<string, unknown>;
+  assert.deepEqual(request.creationContext, { creator: { groupId: "718128661" } });
 });
 
 async function generatedFolder(review: { hash: string; passed: boolean }): Promise<{

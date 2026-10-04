@@ -1,16 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { z } from "zod";
-import { config } from "../config.ts";
-import { heroAssetsFile, readHeroAssets, type HeroAsset } from "../hero-props/hero-asset-store.ts";
-import { recipeHash } from "../hero-props/recipe-hash.ts";
+import {
+  heroPropAsset,
+  type HeroPropAsset,
+  type HeroPropSources,
+} from "../hero-props/hero-prop-asset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import type { PropRecord } from "./prop-placement.ts";
-
-const heroGeneratorScript = new URL("../hero-props/generate-hero-prop.py", import.meta.url);
-const defaultHeroPropsDirectory = new URL(`../../${config.heroPropsFolder}/`, import.meta.url);
-const reviewFileName = "review.json";
 
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 type SurfaceRole = keyof Preset["surfaces"];
@@ -29,16 +25,6 @@ export interface HeroPropRecord {
   surfaces: Record<string, { color: string; material: string }>;
 }
 
-/** Where the build looks for a hero prop's upload and review, and whether an Open Cloud key is set. */
-export interface HeroPropSources {
-  /** The record of uploaded hero props by recipe hash; defaults to the committed `hero-assets.json`. */
-  assetsFile?: URL;
-  /** The folder of generated `<preset>-<kind>-<hash>` folders, each with its `review.json`. */
-  heroPropsDirectory?: URL;
-  /** Defaults to whether the Open Cloud API key's environment variable is set. */
-  hasApiKey?: boolean;
-}
-
 /** The preset, the style resolved from it, and the preset's name, which names the generated folders. */
 export interface HeroPreset {
   name: string;
@@ -48,49 +34,20 @@ export interface HeroPreset {
   style: Preset;
 }
 
-/**
- * The recipe hash of the preset's hero prop of `kind`, repeating the computation in `generateHeroProp`:
- * the recipe and each part role's surface color, hashed with the generator's source.
- */
-export async function heroRecipeHash(preset: Preset, kind: string): Promise<string> {
-  const recipe = preset.heroProps?.[kind];
-  if (recipe === undefined) throw new Error(`The preset has no hero prop "${kind}".`);
-  const roleColors: Record<string, string> = {};
-  for (const part of recipe.parts) {
-    roleColors[part.role] = preset.surfaces[part.role].color;
-  }
-  return recipeHash({ recipe, roleColors }, await readFile(heroGeneratorScript, "utf8"));
-}
-
-const reviewSchema = z.object({ hash: z.string(), passed: z.boolean() });
-
-/** Whether the generated folder of this recipe holds a passed review for its hash; a missing file is none. */
-async function hasPassedReview(directory: URL, folderName: string, hash: string): Promise<boolean> {
-  try {
-    const file = new URL(`${folderName}/${reviewFileName}`, directory);
-    const review = reviewSchema.parse(JSON.parse(await readFile(file, "utf8")));
-    return review.passed && review.hash === hash;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-/** Why a hero prop with no recorded upload is not built: no passed review, no key, or a failed upload. */
-async function missingAssetReason(
+/** Why a hero prop has no asset to build: no passed review, no credentials, or a failed upload. */
+function notBuiltReason(
   presetName: string,
   kind: string,
-  hash: string,
-  directory: URL,
-  hasApiKey: boolean,
-): Promise<string> {
-  if (!(await hasPassedReview(directory, `${presetName}-${kind}-${hash}`, hash))) {
-    return "it has no passed review (npm run hero-props generates, renders and reviews it)";
+  asset: Exclude<HeroPropAsset, { assetId: string }>,
+): string {
+  switch (asset.status) {
+    case "unreviewed":
+      return `it has no passed review (npm run hero-props -- ${presetName} ${kind} generates, renders and reviews it)`;
+    case "no-credentials":
+      return `its review passed, but it cannot be uploaded: ${asset.missing}`;
+    case "upload-failed":
+      return `its review passed, but the upload failed (the next build_map or npm run hero-props:upload -- ${presetName} retries it): ${asset.error}`;
   }
-  if (!hasApiKey) {
-    return `its review passed, but ${config.openCloudApiKeyEnv} is not set, so it was never uploaded`;
-  }
-  return `its review passed and ${config.openCloudApiKeyEnv} is set, but hero-assets.json records no upload; the upload failed or has not run (npm run hero-props)`;
 }
 
 function isInRoom(pivot: Vector, room: RoomSpec): boolean {
@@ -102,7 +59,7 @@ function isInRoom(pivot: Vector, room: RoomSpec): boolean {
 /** The record that stands the hero prop where the replaced piece stood: same x, z and yaw, on the same base. */
 function heroRecord(
   kind: string,
-  asset: HeroAsset,
+  assetId: string,
   recipe: HeroPropRecipe,
   piece: PropRecord & { yaw?: number },
   style: Preset,
@@ -116,7 +73,7 @@ function heroRecord(
   const base = piece.pivot.y - piece.size.y / 2;
   return {
     kind,
-    assetId: asset.assetId,
+    assetId,
     pivot: { x: piece.pivot.x, y: base + height / 2, z: piece.pivot.z },
     yaw: piece.yaw ?? 0,
     size: { x: width, y: height, z: depth },
@@ -126,9 +83,10 @@ function heroRecord(
 
 /**
  * The hero props of a styled map, each in the slot of the set piece its recipe `replaces` in a room whose
- * type lists it, and the props without the pieces they replace. A hero prop whose recipe hash has no
- * recorded upload leaves its set piece in place, with a warning saying why: no passed review, no API key,
- * or an upload that failed or has not run. A room with no such set piece gets a warning and no hero prop.
+ * type lists it, and the props without the pieces they replace. A reviewed hero prop whose recipe hash has
+ * no recorded upload is uploaded and recorded first. One with no asset leaves its set piece in place, with a
+ * warning saying why: no passed review, no key or creator, or a failed upload. A room with no such set piece
+ * gets a warning and no hero prop.
  */
 export async function heroPropsOf<Prop extends PropRecord & { yaw?: number }>(
   spec: MapSpec,
@@ -144,9 +102,6 @@ export async function heroPropsOf<Prop extends PropRecord & { yaw?: number }>(
   });
   if (rooms.length === 0) return { props, heroProps: [], warnings: [] };
 
-  const assets = await readHeroAssets(sources.assetsFile ?? heroAssetsFile);
-  const directory = sources.heroPropsDirectory ?? defaultHeroPropsDirectory;
-  const hasApiKey = sources.hasApiKey ?? Boolean(process.env[config.openCloudApiKeyEnv]);
   const replaced = new Set<Prop>();
   const heroProps: HeroPropRecord[] = [];
   const warnings: string[] = [];
@@ -168,17 +123,15 @@ export async function heroPropsOf<Prop extends PropRecord & { yaw?: number }>(
         );
         continue;
       }
-      const hash = await heroRecipeHash(preset.base, kind);
-      const asset = assets[hash];
-      if (asset?.kind !== kind) {
-        const reason = await missingAssetReason(preset.name, kind, hash, directory, hasApiKey);
+      const asset = await heroPropAsset(preset.name, preset.base, kind, sources);
+      if (!("assetId" in asset)) {
         warnings.push(
-          `Room "${room.name}" keeps its ${recipe.replaces} set piece instead of hero prop ${kind} (recipe ${hash}): ${reason}.`,
+          `Room "${room.name}" keeps its ${recipe.replaces} set piece instead of hero prop ${kind} (recipe ${asset.hash}): ${notBuiltReason(preset.name, kind, asset)}.`,
         );
         continue;
       }
       replaced.add(piece);
-      heroProps.push(heroRecord(kind, asset, recipe, piece, style));
+      heroProps.push(heroRecord(kind, asset.assetId, recipe, piece, style));
     }
   }
   return { props: props.filter((prop) => !replaced.has(prop)), heroProps, warnings };
