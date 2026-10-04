@@ -85,7 +85,11 @@ function Pickups.requestPickup(player: Player, data: { Item: Model })
 
 	local item = data.Item
 	local folder = pickupsFolder()
-	if folder == nil or not Validate.isInstanceWithin(item, folder) then
+	if folder == nil then
+		-- A server misconfiguration, not something the client did: fail loudly and keep it out of the counts.
+		error("workspace.Pickups is missing")
+	end
+	if not Validate.isInstanceWithin(item, folder) then
 		Rejections.record(player, "RequestPickup.outsideItems")
 		return
 	end
@@ -146,7 +150,7 @@ function Pickups.dropItem(player: Player, data: { Slot: number, Position: Vector
 	end
 	local folder = pickupsFolder()
 	if folder == nil then
-		return
+		error("workspace.Pickups is missing")
 	end
 
 	items[data.Slot] = nil

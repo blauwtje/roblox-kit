@@ -12,8 +12,13 @@
 --   * each reason the client provoked was counted by Rejections.
 -- Sends Blink itself rejects (wrong classes, out-of-range slots, raw malformed payloads) never reach game code, so
 -- they have no count; the untouched fixtures and the one-item inventory prove they changed nothing.
--- The client names the fixtures through fixtureNames below; keep the two files in step.
+-- Slot values outside 1..8 and a cut-short DropItem are rejected by Blink, so they leave no count. They are
+-- observed through the total: every DropItem call that reaches game code is rejected and counted, so the DropItem
+-- reasons must add up to the NaN, infinite and flood sends and not one more.
+-- The client learns the fixture names and the flood size from this module through a player attribute (see
+-- FIXTURE_ATTRIBUTE), so each is defined once.
 
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
 local Pickups = require(script.Parent.Pickups)
@@ -34,6 +39,8 @@ local END_MARKER_WAIT_SECONDS = 60
 local NEAR_OFFSET = Vector3.new(4, 0, 0)
 local FAR_OFFSET = Vector3.new(200, 0, 0)
 local PART_SIZE = 2
+local FLOOD_SIZE = 40 -- DropItem calls the client sends in one frame, past the rate limit
+local FIXTURE_ATTRIBUTE = "NetworkFixtures" -- read by NetworkClientChecks: JSON of fixtureNames and floodSize
 
 local function waitUntil(condition: () -> boolean, seconds: number): boolean
 	local deadline = os.clock() + seconds
@@ -148,6 +155,19 @@ local function checkPlayer(check: Check, player: Player, validName: string, unto
 	end
 	check(`{prefix}every other fixture is untouched`, #changed == 0, `changed: {table.concat(changed, ", ")}`)
 
+	local dropRejections = 0
+	for reason, count in Rejections.get(player) do
+		if string.sub(reason, 1, #"DropItem.") == "DropItem." then
+			dropRejections += count
+		end
+	end
+	local expectedDropRejections = FLOOD_SIZE + exactReasons["DropItem.notFinite"]
+	check(
+		`{prefix}every DropItem call that reached game code was rejected, and no out-of-range slot got through`,
+		dropRejections == expectedDropRejections,
+		`rejections: {dropRejections}, expected: {expectedDropRejections}`
+	)
+
 	for reason, expected in exactReasons do
 		local count = Rejections.count(player, reason)
 		check(`{prefix}{reason} counted {expected}`, count == expected, `count: {count}`)
@@ -158,7 +178,8 @@ local function checkPlayer(check: Check, player: Player, validName: string, unto
 	end
 end
 
--- The client finds these by name; the names carry the player's UserId so several clients never collide.
+-- The client finds these by the names sent in FIXTURE_ATTRIBUTE; the names carry the player's UserId so several
+-- clients never collide.
 local function fixtureNames(userId: number)
 	return {
 		valid = `Valid_{userId}`,
@@ -217,13 +238,16 @@ return function(check: Check, expectedClients: number)
 			untouched = untouched,
 			all = { valid, far, foreign, notModel, outside },
 		}
+		-- Set after the fixtures exist, so a client that sees the names can find the fixtures.
+		player:SetAttribute(FIXTURE_ATTRIBUTE, HttpService:JSONEncode({ names = names, floodSize = FLOOD_SIZE }))
 	end
 
 	for player, fixtures in fixturesByPlayer do
 		checkPlayer(check, player, fixtures.validName, fixtures.untouched, pickupsFolder)
 	end
 
-	for _, fixtures in fixturesByPlayer do
+	for player, fixtures in fixturesByPlayer do
+		player:SetAttribute(FIXTURE_ATTRIBUTE, nil)
 		for _, instance in fixtures.all do
 			instance:Destroy()
 		end

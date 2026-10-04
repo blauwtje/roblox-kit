@@ -25,8 +25,8 @@ A remote that works with the game's own client can still be abused by any exploi
 2. **Define every remote in `network/game.blink`.** Set `option ServerOutput = "generated/Server.luau"` and `option ClientOutput = "generated/Client.luau"`, and leave `RemoteScope` at its default. Never write a bare `RemoteEvent` for new game code. Start from `${CLAUDE_SKILL_DIR}/templates/network/game.blink` and replace its events.
 3. **Type every field as tightly as the game allows.** Blink rejects data outside its type before any game code runs, so the type is the first check.
    - Numbers: give every integer a range (`u8(1..8)`, not bare `u8`) and every `f32`/`f64` a range. NaN fails a range check only from 0.18.9 on, which is why step 1 pins it.
-   - Strings: give a length range (`string(1..32)`); an unbounded string is unbounded memory.
-   - Arrays and maps: give a size range (`Item[0..16]`) and bound a map's key and value types too. Never leave a collection open-ended.
+   - Strings: give a length range (`string(1..32)`); an unbounded string is unbounded memory. Blink 0.18.9 generates a `#Value.Name` length check from it.
+   - Arrays: give a size range on the element type (`Item[0..16]`, where `Item` is a named `struct Item { ... }`); Blink 0.18.9 generates a length check from it. Maps have no size range in 0.18.9 (`map[0..4]` does not parse), so bound a map's key and value types (`map {[string(1..8)]: u8(0..9)}`) and prefer an array when the count matters. Never leave an array open-ended.
    - Instances: name the class (`Instance(Model)`). That checks the class only, so a client can still name any Model in the place; step 6 covers the rest.
    - `vector` has no range, so a client can send NaN or infinity in a position; step 6 covers that too.
    - Prefer a struct of intent fields over one generic payload.

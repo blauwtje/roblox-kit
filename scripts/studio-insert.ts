@@ -1,3 +1,4 @@
+import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
 
 /**
@@ -109,4 +110,30 @@ target.Source ..= ${longString(chunk)}
 return "ok"`,
     );
   }
+}
+
+/**
+ * Runs one `play`-mode `run_playtest` and returns the result line. Throws unless the playtest passed with at
+ * least one check and no errors, so every smoke script shares one rule for what counts as a pass.
+ */
+export async function runSmokePlaytest(
+  connection: StudioConnection,
+  studioId: string,
+  label: string,
+  checks: { serverChecks: string; clientChecks?: string; timeoutSeconds: number },
+): Promise<string> {
+  const tool = createRunPlaytestTool();
+  const input = tool.inputSchema.parse({ mode: "play", ...checks, studioId });
+  const result = await tool.handler(input, { studio: connection });
+  if (result.isError === true) throw new Error(`run_playtest returned an error: ${textOf(result)}`);
+  const output = tool.outputSchema.parse(result.structuredContent);
+  const failed = output.peers.flatMap((peer) =>
+    peer.checks.filter((entry) => !entry.passed).map((entry) => `${entry.name}: ${entry.detail}`),
+  );
+  if (!output.passed || output.checks.total === 0 || output.errors.length > 0) {
+    throw new Error(
+      `${label} playtest failed (${String(output.checks.failed)} of ${String(output.checks.total)} checks): ${JSON.stringify({ failed, errors: output.errors })}`,
+    );
+  }
+  return `passed, ${String(output.checks.total)} checks in ${String(output.durationMs)} ms`;
 }

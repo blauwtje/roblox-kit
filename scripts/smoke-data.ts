@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { config } from "../src/config.ts";
-import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import { profileStorePath } from "./profilestore-cache.ts";
@@ -9,7 +8,7 @@ import {
   executeLuau,
   insertScript,
   removeMarked,
-  textOf,
+  runSmokePlaytest,
 } from "./studio-insert.ts";
 
 /**
@@ -83,25 +82,10 @@ async function runSmoke(connection: StudioConnection, studioId: string): Promise
     );
   }
 
-  const tool = createRunPlaytestTool();
-  const input = tool.inputSchema.parse({
-    mode: "play",
+  return await runSmokePlaytest(connection, studioId, "data", {
     serverChecks: dataChecksBody,
     timeoutSeconds: playtestTimeoutSeconds,
-    studioId,
   });
-  const result = await tool.handler(input, { studio: connection });
-  if (result.isError === true) throw new Error(`run_playtest returned an error: ${textOf(result)}`);
-  const output = tool.outputSchema.parse(result.structuredContent);
-  const failed = output.peers.flatMap((peer) =>
-    peer.checks.filter((entry) => !entry.passed).map((entry) => `${entry.name}: ${entry.detail}`),
-  );
-  if (!output.passed || output.checks.total === 0 || output.errors.length > 0) {
-    throw new Error(
-      `data playtest failed (${String(output.checks.failed)} of ${String(output.checks.total)} checks): ${JSON.stringify({ failed, errors: output.errors })}`,
-    );
-  }
-  return `passed, ${String(output.checks.total)} checks in ${String(output.durationMs)} ms`;
 }
 
 const connection = new StudioMcpClient({

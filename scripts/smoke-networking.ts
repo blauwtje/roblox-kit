@@ -1,9 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { config } from "../src/config.ts";
-import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
-import { executeLuau, insertScript, removeMarked, textOf } from "./studio-insert.ts";
+import { executeLuau, insertScript, removeMarked, runSmokePlaytest } from "./studio-insert.ts";
 
 /**
  * End-to-end check of the `networking` skill templates in the open place: inserts the generated Blink server
@@ -98,26 +97,11 @@ async function runSmoke(connection: StudioConnection, studioId: string): Promise
     );
   }
 
-  const tool = createRunPlaytestTool();
-  const input = tool.inputSchema.parse({
-    mode: "play",
+  return await runSmokePlaytest(connection, studioId, "networking", {
     serverChecks: serverChecksBody,
     clientChecks: clientChecksBody,
     timeoutSeconds: playtestTimeoutSeconds,
-    studioId,
   });
-  const result = await tool.handler(input, { studio: connection });
-  if (result.isError === true) throw new Error(`run_playtest returned an error: ${textOf(result)}`);
-  const output = tool.outputSchema.parse(result.structuredContent);
-  const failed = output.peers.flatMap((peer) =>
-    peer.checks.filter((entry) => !entry.passed).map((entry) => `${entry.name}: ${entry.detail}`),
-  );
-  if (!output.passed || output.checks.total === 0 || output.errors.length > 0) {
-    throw new Error(
-      `networking playtest failed (${String(output.checks.failed)} of ${String(output.checks.total)} checks): ${JSON.stringify({ failed, errors: output.errors })}`,
-    );
-  }
-  return `passed, ${String(output.checks.total)} checks in ${String(output.durationMs)} ms`;
 }
 
 const connection = new StudioMcpClient({
