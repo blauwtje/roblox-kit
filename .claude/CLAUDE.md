@@ -15,7 +15,7 @@ A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships 
 
 TypeScript runs directly on Node (>= 22.18, native type stripping); there is no build step and `tsc` only type-checks (`noEmit`, `erasableSyntaxOnly`, so no enums, namespaces or parameter properties). Imports use explicit `.ts` extensions.
 
-- `npm run check`: everything CI runs (typecheck, ESLint, selene, Prettier, StyLua, tests, `claude plugin validate .`).
+- `npm run check`: everything CI runs (typecheck, ESLint, selene, Prettier, StyLua, tests, `claude plugin validate --strict .`).
 - `npm test`: all unit tests (`node --test`).
 - `node --test src/map/map-layout.test.ts`: one test file. Add `--test-name-pattern "<name>"` for one test.
 - `npm run lint:luau` / `npm run format:luau:check`: selene and StyLua for `luau/`; both are pinned in `rokit.toml`.
