@@ -18,6 +18,7 @@
     "hero-props": "node scripts/hero-props.ts",
     "hero-props:upload": "node scripts/upload-hero-props.ts",
     "smoke:studio": "node scripts/smoke-studio.ts",
+    "smoke:data": "node scripts/smoke-data.ts",
     "eval:studio": "node scripts/eval-studio.ts",
     "validate:plugin": "claude plugin validate --strict .",
     "check": "npm run typecheck && npm run typecheck:luau && npm run lint && npm run lint:luau && npm run format:check && npm run format:luau:check && npm run test && npm run validate:plugin"
