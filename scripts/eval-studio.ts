@@ -198,7 +198,7 @@ async function evaluate(file: string, connection: StudioConnection) {
       sceneStats: checked.output.sceneStats,
       budget,
     }),
-    passed: checked.output.passed,
+    checkPassed: checked.output.passed,
     counts: checked.output.counts,
     sceneStats: checked.output.sceneStats,
     budget,
@@ -227,7 +227,7 @@ try {
     const line = await evaluate(file, connection);
     await appendFile(resultsUrl, `${JSON.stringify(line)}\n`);
     console.log(
-      `${line.benchmark}: codeScore ${String(line.codeScore)}, passed ${String(line.passed)}, ${String(line.captures.length)} images, place check ${line.placeCheckPassed ? "passed" : "FAILED"}`,
+      `${line.benchmark}: codeScore ${String(line.codeScore)}, checkPassed ${String(line.checkPassed)}, ${String(line.captures.length)} images, place check ${line.placeCheckPassed ? "passed" : "FAILED"}`,
     );
     for (const check of line.placeCheck) {
       const named =
