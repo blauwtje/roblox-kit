@@ -100,7 +100,7 @@ local function checkReceipts(check: Check, player: Player?, profile: PlayerData.
 end
 
 local function checkVersionZero(check: Check)
-	local profile = PlayerData.store:StartSessionAsync(VERSION_ZERO_KEY)
+	local profile = PlayerData.startSession(VERSION_ZERO_KEY)
 	if profile == nil then
 		check(
 			"a version-0 table migrates to the current DataVersion before Reconcile",
@@ -133,7 +133,7 @@ end
 
 local function checkNewerVersion(check: Check)
 	local name = "a newer DataVersion ends the session and a reload shows it unchanged"
-	local seed = PlayerData.store:StartSessionAsync(NEWER_VERSION_KEY)
+	local seed = PlayerData.startSession(NEWER_VERSION_KEY)
 	if seed == nil then
 		check(name, false, "the seed profile did not load")
 		return
@@ -147,7 +147,7 @@ local function checkNewerVersion(check: Check)
 		return
 	end
 
-	local profile = PlayerData.store:StartSessionAsync(NEWER_VERSION_KEY)
+	local profile = PlayerData.startSession(NEWER_VERSION_KEY)
 	if profile == nil then
 		check(name, false, "the newer-version profile did not load")
 		return
@@ -161,7 +161,7 @@ local function checkNewerVersion(check: Check)
 	-- prepare ended the session; wait for its final save before loading the key again.
 	task.wait(1)
 
-	local reloaded = PlayerData.store:StartSessionAsync(NEWER_VERSION_KEY)
+	local reloaded = PlayerData.startSession(NEWER_VERSION_KEY)
 	if reloaded == nil then
 		check(name, false, "the reload did not load")
 		return

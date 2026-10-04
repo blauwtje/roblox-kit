@@ -45,6 +45,17 @@ local function isPurchaseSaved(profile: PlayerData.Profile, purchaseId: string):
 	return table.find(savedCache, purchaseId) ~= nil
 end
 
+-- Yields until the profile's next save finishes. ProfileStore's Profile type gives its signals only Connect.
+local function waitForSave(profile: PlayerData.Profile)
+	local thread = coroutine.running()
+	local connection
+	connection = profile.OnAfterSave:Connect(function()
+		connection:Disconnect()
+		task.spawn(thread)
+	end)
+	coroutine.yield()
+end
+
 -- Grants the product unless its PurchaseId is already recorded, then waits until the id is saved or the
 -- session ends. Yields for as long as saving takes, which ProcessReceipt allows.
 local function grantAndWaitForSave(
@@ -57,7 +68,8 @@ local function grantAndWaitForSave(
 	local purchaseId = receiptInfo.PurchaseId
 
 	if table.find(purchaseIdCache, purchaseId) == nil then
-		local success, result = pcall(handler, receiptInfo, player, profile)
+		-- The handler returns nothing, so pcall's type omits the error value; annotating declares it.
+		local success: boolean, result: unknown = pcall(handler, receiptInfo, player, profile)
 		if not success then
 			warn(`Failed to process receipt {purchaseId} for {profile.Key}: {result}`)
 			return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -77,7 +89,7 @@ local function grantAndWaitForSave(
 		profile:Save()
 		-- Save can finish before it returns; only wait when nothing was saved yet.
 		if profile.LastSavedData == lastSavedData then
-			profile.OnAfterSave:Wait()
+			waitForSave(profile)
 		end
 		if isPurchaseSaved(profile, purchaseId) then
 			return Enum.ProductPurchaseDecision.PurchaseGranted

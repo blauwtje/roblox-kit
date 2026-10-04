@@ -29,9 +29,10 @@ local migrations: { Migration } = {
 local CURRENT_VERSION = #migrations
 
 -- Profile.Data starts as a copy of this. Reconcile fills keys missing from older profiles; it is not migration.
-local template = {
+-- Typed as Data so the store's profiles carry Data rather than the template's inferred table type.
+local template: Data = {
 	DataVersion = CURRENT_VERSION,
-	PurchaseIdCache = {} :: { string },
+	PurchaseIdCache = {},
 }
 
 local baseStore = ProfileStore.New(STORE_NAME, template)
@@ -46,6 +47,14 @@ PlayerData.store = store
 
 function PlayerData.get(player: Player): Profile?
 	return profiles[player]
+end
+
+-- Starts a session on the store; start every session through this. ProfileStore types Profile.Data as
+-- `T & JSONAcceptable`, and the type checker never matches two separately built Profile<Data> types, so
+-- the store's result is cast once here, through any, to the exported Profile.
+function PlayerData.startSession(profileKey: string, cancel: (() -> boolean)?): Profile?
+	local profile = store:StartSessionAsync(profileKey, { Cancel = cancel })
+	return profile :: any
 end
 
 local function readVersion(data: { [string]: any }): number
@@ -87,7 +96,8 @@ function PlayerData.prepare(profile: Profile): boolean
 
 	-- Migrate a copy so a migration that throws cannot leave profile.Data half migrated and then saved.
 	local migrated = deepCopy(data)
-	local ok, message = pcall(PlayerData.migrate, migrated)
+	-- migrate returns nothing, so pcall's type omits the error value; annotating declares it.
+	local ok: boolean, message: unknown = pcall(PlayerData.migrate, migrated)
 	if not ok then
 		warn(`Migration failed for profile {profile.Key}: {message}`)
 		profile:EndSession()
@@ -109,11 +119,9 @@ local function onPlayerAdded(player: Player)
 		return
 	end
 
-	local profile = store:StartSessionAsync(tostring(player.UserId), {
-		Cancel = function()
-			return player.Parent ~= Players
-		end,
-	})
+	local profile = PlayerData.startSession(tostring(player.UserId), function()
+		return player.Parent ~= Players
+	end)
 	if profile == nil then
 		player:Kick(KICK_LOAD_FAILED)
 		return
