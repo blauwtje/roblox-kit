@@ -1,1 +1,14 @@
-{}
+{
+  "cf36b20f0bad": {
+    "kind": "train-car",
+    "assetId": "135100542533499"
+  },
+  "91cb5f910e77": {
+    "kind": "departure-board",
+    "assetId": "85894282202175"
+  },
+  "a8726d792b7c": {
+    "kind": "ticket-counter",
+    "assetId": "110739437108812"
+  }
+}
