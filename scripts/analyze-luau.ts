@@ -8,6 +8,8 @@ import { profileStorePath } from "./profilestore-cache.ts";
 /**
  * `node scripts/analyze-luau.ts` type-checks `luau/` with `luau-lsp analyze` against Roblox's type definitions at plugin security, the level `execute_luau` runs at.
  * It then type-checks `skills/data/templates/` against the pinned ProfileStore through a generated sourcemap, so a wrong ProfileStore API name in a template fails.
+ * Last, it type-checks `skills/networking/templates/` through a sourcemap placing the generated Blink files at
+ * `ServerScriptService.Network` and `ReplicatedStorage.Network`, where the game's Rojo project maps them.
  * The definitions come from the luau-lsp tag that `rokit.toml` pins and are cached in the git-ignored
  * `.roblox-kit/cache/`; bumping the pin downloads the definitions for the new tag.
  */
@@ -85,4 +87,51 @@ const templatesStatus = analyze(
   [`--sourcemap=${sourcemapPath}`, `--ignore=**/${cacheDirectory}/**`],
   templatesDirectory,
 );
-process.exit(luauStatus === 0 ? templatesStatus : luauStatus);
+
+// The networking templates sit next to each other in a Network templates folder under ServerScriptService. The
+// committed Blink output is generated code, so its diagnostics are ignored; it is still loaded for requires.
+const networkingDirectory = join("skills", "networking", "templates");
+const networkingModules = readdirSync(networkingDirectory)
+  .filter((fileName) => fileName.endsWith(".luau"))
+  .map((fileName) => ({
+    name: fileName.replace(/(\.server)?\.luau$/, ""),
+    className: fileName.endsWith(".server.luau") ? "Script" : "ModuleScript",
+    filePaths: [join(networkingDirectory, fileName)],
+  }));
+const generatedDirectory = join(networkingDirectory, "network", "generated");
+const networkingSourcemap = {
+  name: "Game",
+  className: "DataModel",
+  children: [
+    {
+      name: "ServerScriptService",
+      className: "ServerScriptService",
+      children: [
+        {
+          name: "Network",
+          className: "ModuleScript",
+          filePaths: [join(generatedDirectory, "Server.luau")],
+        },
+        { name: "NetworkTemplates", className: "Folder", children: networkingModules },
+      ],
+    },
+    {
+      name: "ReplicatedStorage",
+      className: "ReplicatedStorage",
+      children: [
+        {
+          name: "Network",
+          className: "ModuleScript",
+          filePaths: [join(generatedDirectory, "Client.luau")],
+        },
+      ],
+    },
+  ],
+};
+const networkingSourcemapPath = join(cacheDirectory, "networking-templates-sourcemap.json");
+await writeFile(networkingSourcemapPath, JSON.stringify(networkingSourcemap, null, 2));
+const networkingStatus = analyze(
+  [`--sourcemap=${networkingSourcemapPath}`, "--ignore=**/network/generated/**"],
+  networkingDirectory,
+);
+process.exit(luauStatus || templatesStatus || networkingStatus);
