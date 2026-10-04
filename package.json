@@ -20,6 +20,7 @@
     "smoke:studio": "node scripts/smoke-studio.ts",
     "check:blink": "node scripts/check-blink-output.ts",
     "smoke:data": "node scripts/smoke-data.ts",
+    "smoke:networking": "node scripts/smoke-networking.ts",
     "eval:studio": "node scripts/eval-studio.ts",
     "validate:plugin": "claude plugin validate --strict .",
     "check": "npm run typecheck && npm run typecheck:luau && npm run lint && npm run lint:luau && npm run format:check && npm run format:luau:check && npm run test && npm run check:blink && npm run validate:plugin"
