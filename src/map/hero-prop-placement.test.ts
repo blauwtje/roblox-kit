@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { config } from "../config.ts";
 import { recipeHash } from "../hero-props/recipe-hash.ts";
 import { loadPresets } from "../style/load-preset.ts";
+import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { propsOf } from "./build-map-tool.ts";
 import { heroPropsOf, heroRecipeHash, type HeroPropSources } from "./hero-prop-placement.ts";
@@ -16,7 +17,22 @@ import { resolveRelations } from "./relation-solver.ts";
 const presets = await loadPresets();
 const base = presets.get("train-station");
 assert.ok(base !== undefined);
-const preset = { name: "train-station", base, style: base };
+
+/** The style with every room type's hero props cut to the train car, so other hero props the preset gains stay out of these tests. */
+function trainCarOnly(style: Preset): Preset {
+  if (style.roomTypes === undefined) return style;
+  const roomTypes = Object.fromEntries(
+    Object.entries(style.roomTypes).map(([name, roomType]) => [
+      name,
+      roomType.heroProps === undefined
+        ? roomType
+        : { ...roomType, heroProps: roomType.heroProps.filter((kind) => kind === "train-car") },
+    ]),
+  );
+  return { ...style, roomTypes };
+}
+
+const preset = { name: "train-station", base, style: trainCarOnly(base) };
 const benchmark = new URL("../../eval/benchmarks/train-station.json", import.meta.url);
 const spec = resolveRelations(
   relationMapSpecSchema.parse(JSON.parse(await readFile(benchmark, "utf8"))),
@@ -97,7 +113,12 @@ await test("the surfaces come from the resolved style while the hash stays the b
     overrides: { surfaces: { floor: { color: "#123456" } } },
   });
   const sources = await fakeSources({ recorded: true });
-  const result = await heroPropsOf(spec, { ...preset, style }, placed.props, sources);
+  const result = await heroPropsOf(
+    spec,
+    { ...preset, style: trainCarOnly(style) },
+    placed.props,
+    sources,
+  );
   assert.equal(result.heroProps[0]?.surfaces["floor"]?.color, "#123456");
 });
 

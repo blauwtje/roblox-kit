@@ -534,8 +534,9 @@ await test("a recorded hero asset is sent to the props phase in the slot of the 
   const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
   const propsPhase = requestArguments(studio, propsPhaseIndex);
   const heroProps = propsPhase["heroProps"] as { kind: string; assetId: string; size: object }[];
-  assert.equal(heroProps.length, 1);
-  const [hero] = heroProps;
+  const trainCars = heroProps.filter((hero) => hero.kind === "train-car");
+  assert.equal(trainCars.length, 1);
+  const [hero] = trainCars;
   assert.ok(hero !== undefined);
   assert.equal(hero.kind, "train-car");
   assert.equal(hero.assetId, "987654");
@@ -544,8 +545,8 @@ await test("a recorded hero asset is sent to the props phase in the slot of the 
   assert.ok(!props.some((prop) => prop.kind === "track-bed"), "the track bed gives up its slot");
   assert.ok(!("track-bed" in (propsPhase["generators"] as object)));
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
-  assert.ok(!structured.warnings.some((warning) => warning.includes("hero prop")));
-  assert.equal(structured.phases[propsPhaseIndex]?.partCount, props.length + 1);
+  assert.ok(!structured.warnings.some((warning) => warning.includes("hero prop train-car")));
+  assert.equal(structured.phases[propsPhaseIndex]?.partCount, props.length + heroProps.length);
 });
 
 await test("without a recorded hero asset the set piece stays and the result says why", async () => {
@@ -553,11 +554,14 @@ await test("without a recorded hero asset the set piece stays and the result say
   const tool = buildMapToolWith(await fakeHeroSources(false));
   const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
   const propsPhase = requestArguments(studio, propsPhaseIndex);
-  assert.deepEqual(propsPhase["heroProps"], []);
+  const heroProps = propsPhase["heroProps"] as { kind: string }[];
+  assert.ok(!heroProps.some((hero) => hero.kind === "train-car"));
   const props = propsPhase["props"] as { kind: string }[];
   assert.ok(props.some((prop) => prop.kind === "track-bed"));
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
-  const heroWarnings = structured.warnings.filter((warning) => warning.includes("hero prop"));
+  const heroWarnings = structured.warnings.filter((warning) =>
+    warning.includes("hero prop train-car"),
+  );
   assert.equal(heroWarnings.length, 1);
   assert.match(
     heroWarnings[0] ?? "",

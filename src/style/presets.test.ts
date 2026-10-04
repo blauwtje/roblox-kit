@@ -115,6 +115,18 @@ await test("the platform's train car replaces its track bed and fits the track b
   assert.ok(trainCar.size.depth <= trackBed.size.z, "the car stands within the track bed's depth");
 });
 
+await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {
+  const { preset, setPieces } = await placeBenchmarkSetPieces();
+  const board = preset.heroProps?.["departure-board"];
+  assert.ok(board !== undefined);
+  assert.equal(board.replaces, "departure-board");
+  assert.deepEqual(preset.roomTypes?.["concourse"]?.heroProps, ["departure-board"]);
+  const setPiece = setPieces.find((piece) => piece.kind === "departure-board");
+  assert.ok(setPiece !== undefined);
+  assert.ok(board.size.width <= setPiece.size.x, `board ${String(board.size.width)} studs wide`);
+  assert.ok(board.size.height <= setPiece.size.y, `board ${String(board.size.height)} studs high`);
+});
+
 /** Half the extent of a cylinder along each axis: half its length on its axis, its radius on the other two. */
 function cylinderHalfExtent(cylinder: { radius: number; length: number; axis: "x" | "y" | "z" }) {
   const along = cylinder.length / 2;
@@ -125,21 +137,29 @@ function cylinderHalfExtent(cylinder: { radius: number; length: number; axis: "x
   };
 }
 
-await test("every part of the train car lies inside the car's size", async () => {
-  const trainCar = (await loadPresets()).get("train-station")?.heroProps?.["train-car"];
-  assert.ok(trainCar !== undefined);
-  const { width, height, depth } = trainCar.size;
-  for (const part of trainCar.parts) {
-    const half =
-      part.shape === "box"
-        ? { x: part.size.width / 2, y: part.size.height / 2, z: part.size.depth / 2 }
-        : part.shape === "cylinder"
-          ? cylinderHalfExtent(part)
-          : undefined;
-    assert.ok(half !== undefined, `${part.shape} part is not checked`);
-    assert.ok(Math.abs(part.center.x) + half.x <= width / 2 + 1e-9, "part exceeds the width");
-    assert.ok(part.center.y - half.y >= -1e-9, "part sinks below the floor");
-    assert.ok(part.center.y + half.y <= height + 1e-9, "part exceeds the height");
-    assert.ok(Math.abs(part.center.z) + half.z <= depth / 2 + 1e-9, "part exceeds the depth");
+await test("every part of each hero prop lies inside the prop's size", async () => {
+  const heroProps = (await loadPresets()).get("train-station")?.heroProps;
+  assert.ok(heroProps !== undefined);
+  for (const [kind, heroProp] of Object.entries(heroProps)) {
+    const { width, height, depth } = heroProp.size;
+    for (const part of heroProp.parts) {
+      const half =
+        part.shape === "box"
+          ? { x: part.size.width / 2, y: part.size.height / 2, z: part.size.depth / 2 }
+          : part.shape === "cylinder"
+            ? cylinderHalfExtent(part)
+            : undefined;
+      assert.ok(half !== undefined, `${part.shape} part is not checked`);
+      assert.ok(
+        Math.abs(part.center.x) + half.x <= width / 2 + 1e-9,
+        `${kind}: part exceeds the width`,
+      );
+      assert.ok(part.center.y - half.y >= -1e-9, `${kind}: part sinks below the floor`);
+      assert.ok(part.center.y + half.y <= height + 1e-9, `${kind}: part exceeds the height`);
+      assert.ok(
+        Math.abs(part.center.z) + half.z <= depth / 2 + 1e-9,
+        `${kind}: part exceeds the depth`,
+      );
+    }
   }
 });
