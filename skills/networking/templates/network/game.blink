@@ -1,0 +1,33 @@
+option ServerOutput = "generated/Server.luau"
+option ClientOutput = "generated/Client.luau"
+
+event RequestPickup {
+	From: Client,
+	Type: Reliable,
+	Call: SingleAsync,
+	Data: struct {
+		Item: Instance(Model),
+	},
+}
+
+event DropItem {
+	From: Client,
+	Type: Reliable,
+	Call: SingleAsync,
+	Data: struct {
+		Slot: u8(1..8),
+		Position: vector,
+	},
+}
+
+function GetInventory {
+	Yield: Coroutine,
+	Return: u8(0..8)?,
+}
+
+event PickupEffect {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleAsync,
+	Data: vector,
+}
