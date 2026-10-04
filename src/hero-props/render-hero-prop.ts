@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { config } from "../config.ts";
+import { blenderPath } from "./blender-path.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,7 +16,7 @@ export const renderFileNames = ["front.png", "side.png", "three-quarter.png"] as
 export async function renderHeroProp(glb: URL): Promise<URL[]> {
   const directory = new URL("./", glb);
   await execFileAsync(
-    config.blenderPath,
+    blenderPath(process.env),
     [
       "-b",
       "--factory-startup",

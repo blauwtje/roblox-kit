@@ -6,6 +6,7 @@ import { config } from "../config.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
+import { blenderPath } from "./blender-path.ts";
 import { recipeHash } from "./recipe-hash.ts";
 
 const execFileAsync = promisify(execFile);
@@ -81,7 +82,7 @@ export async function generateHeroProp(
   await writeFile(recipeFile, JSON.stringify({ parts: recipe.parts, roles: roleColors }, null, 2));
 
   await execFileAsync(
-    config.blenderPath,
+    blenderPath(process.env),
     [
       "-b",
       "--factory-startup",

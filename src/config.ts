@@ -108,8 +108,10 @@ export const config = Object.freeze({
 
   /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
   heroPropsFolder: ".roblox-kit/hero-props",
-  /** The Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
-  blenderPath: "/opt/homebrew/bin/blender",
+  /** The environment variable naming the Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
+  blenderPathEnv: "BLENDER_PATH",
+  /** Tried in order when that variable is unset: a name looked up on PATH, then an absolute install path. */
+  blenderFallbackPaths: ["blender", "/Applications/Blender.app/Contents/MacOS/Blender"],
   blenderTimeoutMs: 120_000,
   /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
   heroPropSizeToleranceStuds: 0.1,
