@@ -33,7 +33,7 @@ Roblox's docs mark many old APIs deprecated, and the model still writes them fro
 
 3. **Use the `task` library for anything that waits,** and remember that `StudioTestService` `ExecutePlayModeAsync`, `ExecuteRunModeAsync` and `ExecuteMultiplayerTestAsync` yield, so the caller must be able to wait.
 4. **Choose the DataModel on purpose.** `execute_luau` needs `datamodel_type` `Edit`, `Client` or `Server`; `StudioTestService:EndTest` works only from the server of a running test.
-5. **Treat Studio behavior the docs do not state as unknown.** Whether `execute_luau` reaches Plugin-security APIs, and whether Terrain fills work from Edit mode, are unconfirmed: run a one-line probe and read the error before building on either.
+5. **Treat Studio behavior the docs do not state as unknown,** but rely on what is confirmed: `execute_luau` can set `Script.Source` and call `Terrain:FillBlock` from Edit mode, as `luau/build-map.luau` and `luau/run-playtest.luau` do. Whether it reaches other Plugin-security APIs is unconfirmed: run a one-line probe and read the error before building on one.
 6. **Pass resolution 4** wherever a Terrain voxel method takes a resolution; the docs say it must be 4.
 
 ## Judgment
