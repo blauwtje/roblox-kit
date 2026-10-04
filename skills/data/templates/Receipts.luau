@@ -28,8 +28,10 @@ export type ReceiptInfo = {
 	CurrencyType: Enum.CurrencyType,
 	PlaceIdWherePurchased: number,
 }
--- Grants the reward by changing profile.Data (and the game world). Throw to refuse: the purchase stays
--- unprocessed and is retried. Do not call profile:Save() here; the receipt code saves and waits.
+-- Grants the reward by changing profile.Data (and the game world). The PurchaseId is recorded before this runs.
+-- Do not yield here, so a second receipt call never sees the id before the grant is done. Throw to refuse, and
+-- only before changing anything: the id is then unrecorded and the retry grants again, so a partial grant repeats.
+-- Do not call profile:Save() here; the receipt code saves and waits.
 export type ProductHandler = (receiptInfo: ReceiptInfo, player: Player, profile: PlayerData.Profile) -> ()
 
 local Receipts = {}
@@ -68,16 +70,21 @@ local function grantAndWaitForSave(
 	local purchaseId = receiptInfo.PurchaseId
 
 	if table.find(purchaseIdCache, purchaseId) == nil then
-		-- The handler returns nothing, so pcall's type omits the error value; annotating declares it.
-		local success: boolean, result: unknown = pcall(handler, receiptInfo, player, profile)
-		if not success then
-			warn(`Failed to process receipt {purchaseId} for {profile.Key}: {result}`)
-			return Enum.ProductPurchaseDecision.NotProcessedYet
-		end
+		-- Record the id first, with no yield before the handler, so a second call for it grants nothing.
 		while #purchaseIdCache >= PURCHASE_ID_CACHE_SIZE do
 			table.remove(purchaseIdCache, 1)
 		end
 		table.insert(purchaseIdCache, purchaseId)
+		-- The handler returns nothing, so pcall's type omits the error value; annotating declares it.
+		local success: boolean, result: unknown = pcall(handler, receiptInfo, player, profile)
+		if not success then
+			warn(`Failed to process receipt {purchaseId} for {profile.Key}: {result}`)
+			local recordedIndex = table.find(purchaseIdCache, purchaseId)
+			if recordedIndex ~= nil then
+				table.remove(purchaseIdCache, recordedIndex)
+			end
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
 	end
 
 	if isPurchaseSaved(profile, purchaseId) then

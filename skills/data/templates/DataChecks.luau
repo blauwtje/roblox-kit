@@ -32,19 +32,26 @@ local function waitForPlayerProfile(): (Player?, PlayerData.Profile?)
 	return nil, nil
 end
 
--- Ends the session and waits for the final save, which releases the key for a new session.
-local function endSessionAndWait(profile: PlayerData.Profile): boolean
+-- Runs endAction, which must end the profile's session, and waits for the final save that releases the key for
+-- a new session. The save signal is connected before endAction runs, so a fast save is never missed.
+local function waitForFinalSave(profile: PlayerData.Profile, endAction: () -> ()): boolean
 	local saved = false
 	local connection = profile.OnAfterSave:Connect(function()
 		saved = true
 	end)
-	profile:EndSession()
+	endAction()
 	local deadline = os.clock() + RELEASE_WAIT_SECONDS
 	while not saved and os.clock() < deadline do
 		task.wait()
 	end
 	connection:Disconnect()
 	return saved
+end
+
+local function endSessionAndWait(profile: PlayerData.Profile): boolean
+	return waitForFinalSave(profile, function()
+		profile:EndSession()
+	end)
 end
 
 local function receiptFor(player: Player?, purchaseId: string): Receipts.ReceiptInfo
@@ -152,14 +159,20 @@ local function checkNewerVersion(check: Check)
 		check(name, false, "the newer-version profile did not load")
 		return
 	end
-	local usable = PlayerData.prepare(profile)
+	-- prepare ends the session; wait for its final save before loading the key again.
+	local usable = true
+	local saved = waitForFinalSave(profile, function()
+		usable = PlayerData.prepare(profile)
+	end)
 	check(
 		"the newer-version profile is refused and its session ends",
 		not usable and not profile:IsActive(),
 		`usable: {usable}, active: {profile:IsActive()}`
 	)
-	-- prepare ended the session; wait for its final save before loading the key again.
-	task.wait(1)
+	if not saved then
+		check(name, false, "the refused profile did not save")
+		return
+	end
 
 	local reloaded = PlayerData.startSession(NEWER_VERSION_KEY)
 	if reloaded == nil then

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { config } from "../src/config.ts";
 import { profileStorePath } from "./profilestore-cache.ts";
 
 /**
@@ -16,7 +17,7 @@ if (luauLspVersion === undefined) {
   throw new Error("rokit.toml has no luau-lsp entry of the form JohnnyMorganz/luau-lsp@<version>.");
 }
 const definitionsUrl = `https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/${luauLspVersion}/scripts/globalTypes.PluginSecurity.d.luau`;
-const cacheDirectory = join(".roblox-kit", "cache");
+const cacheDirectory = config.profileStoreCacheFolder;
 const definitionsPath = join(cacheDirectory, `globalTypes.PluginSecurity.${luauLspVersion}.d.luau`);
 
 if (!existsSync(definitionsPath)) {

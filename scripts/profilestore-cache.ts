@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { config } from "../src/config.ts";
 
@@ -15,7 +16,7 @@ export async function profileStorePath(): Promise<string> {
     `${config.profileStoreCacheFolder}/profilestore-${config.profileStoreVersion}/`,
     repositoryRoot,
   );
-  const sourcePath = new URL("ProfileStore.luau", folder).pathname;
+  const sourcePath = fileURLToPath(new URL("ProfileStore.luau", folder));
   const exists = await access(sourcePath).then(
     () => true,
     () => false,
@@ -33,9 +34,9 @@ export async function profileStorePath(): Promise<string> {
   const partial = new URL(`${folder.href.slice(0, -1)}.partial/`);
   await rm(partial, { recursive: true, force: true });
   await mkdir(partial, { recursive: true });
-  const zipPath = new URL("package.zip", partial).pathname;
+  const zipPath = fileURLToPath(new URL("package.zip", partial));
   await writeFile(zipPath, Buffer.from(await response.arrayBuffer()));
-  await runFile("unzip", ["-q", zipPath, "-d", partial.pathname]);
+  await runFile("unzip", ["-q", zipPath, "-d", fileURLToPath(partial)]);
   await rm(zipPath);
   await rm(folder, { recursive: true, force: true });
   await rename(partial, folder);

@@ -19,8 +19,9 @@ export type Data = {
 export type Profile = ProfileStore.Profile<Data>
 type Migration = (data: { [string]: any }) -> ()
 
--- Entry n upgrades version n - 1 to n and may be run on a fresh profile (version 0), so it must
--- tolerate missing fields. Never edit or reorder a shipped entry: append a new one instead.
+-- Entry n upgrades version n - 1 to n. A fresh profile starts as a copy of the template at CURRENT_VERSION, so
+-- migrations run only on profiles saved by older code; version 0 is data saved before DataVersion existed, so
+-- an entry must tolerate missing fields. Never edit or reorder a shipped entry: append a new one instead.
 local migrations: { Migration } = {
 	function(_data)
 		-- Version 0 is data saved before DataVersion existed. Nothing to change yet.

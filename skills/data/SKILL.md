@@ -22,7 +22,7 @@ A save that works for one player in Studio can still lose or duplicate data at h
    - `${CLAUDE_SKILL_DIR}/templates/Receipts.luau`: developer products. Add one handler per product to `Receipts.productHandlers`, keyed by `ProductId`.
    - `${CLAUDE_SKILL_DIR}/templates/GamePasses.luau`: game pass ownership.
    - `${CLAUDE_SKILL_DIR}/templates/Main.server.luau`: calls each `start()` once, from this one script.
-   - `${CLAUDE_SKILL_DIR}/templates/DataChecks.luau`: a playtest check module, used in step 9.
+   - `${CLAUDE_SKILL_DIR}/templates/DataChecks.luau`: a playtest check module, used in step 12.
 3. **Follow the join flow.** `StartSessionAsync(tostring(player.UserId), { Cancel = function() return player.Parent ~= Players end })`; kick on `nil` with "Profile load fail - Please rejoin"; call `profile:AddUserId(player.UserId)` so erasure requests find the profile; let `OnSessionEnd` clear the entry and kick; after the session starts, end it if `player.Parent ~= Players`.
 4. **End sessions on leave, and nowhere else.** Call `EndSession` on `PlayerRemoving` (and on an early leave during load). Never write an own `BindToClose` loop: ProfileStore's own `BindToClose` ends and saves every active profile.
 5. **Respect shutdown.**
