@@ -95,6 +95,14 @@ await test("a recorded asset takes the replaced set piece's slot, standing on it
         { color: base.surfaces[role].color, material: base.surfaces[role].material },
       ]),
     ),
+    fallback: {
+      kind: "track-bed",
+      pivot: trackBed.pivot,
+      size: trackBed.size,
+      seed: trackBed.seed,
+      yaw: trackBed.yaw,
+      attributes: {},
+    },
   });
 });
 
