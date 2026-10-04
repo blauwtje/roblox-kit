@@ -87,12 +87,13 @@ return function(check: Check, player: Player)
 		return instance :: any
 	end
 
-	-- Wrong Instance classes: Blink's read function rejects them before game code runs.
+	-- Wrong Instance classes: Blink's read function rejects them before game code runs. Workspace would pass,
+	-- because it inherits from Model, so the second case is the Pickups Folder.
 	sendInOwnFrame(check, "a Part as the item", function()
 		Network.RequestPickup.Fire({ Item = anyModel(notModel) })
 	end)
-	sendInOwnFrame(check, "the Workspace as the item", function()
-		Network.RequestPickup.Fire({ Item = anyModel(workspace) })
+	sendInOwnFrame(check, "a Folder as the item", function()
+		Network.RequestPickup.Fire({ Item = anyModel(pickups) })
 	end)
 
 	-- Out-of-range slots: Blink bounds Slot to 1..8.
