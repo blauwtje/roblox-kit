@@ -1,6 +1,6 @@
 # roblox-kit
 
-A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds six skills for Luau, map building, playtests, visual review, animation and player data.
+A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds seven skills for Luau, map building, playtests, visual review, animation, player data and networking.
 
 ## Quick start
 
@@ -133,10 +133,11 @@ Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the serve
 | `visual-judge` | Judging a built map by its screenshots with the plugin agents `visual-judge`, `place-check` and `quality-reviewer`, fixing it and repeating. |
 | `animation`    | Making a character animation from keyframes in Blender and exporting an FBX for R15.                                                         |
 | `data`         | Saving player data with ProfileStore and handling developer products and game passes in a Rojo + Wally game.                                 |
+| `networking`   | Writing client-server communication with Blink 0.18.9 in a Rojo + Rokit game, rejecting bad data and proving it with a playtest.             |
 
 ## Development
 
-Run `npm run check` for the type check, lint, format check, tests and plugin validation. Run `npm run smoke:studio` against a running Studio to build, check, capture and solo-playtest a three-room map; add `-- --multiplayer` to also playtest with 2 players. Run `npm run smoke:data` against a running Studio to insert the `data` skill templates and ProfileStore into the open place, run their checks in a solo playtest and remove them again.
+Run `npm run check` for the type check, lint, format check, tests and plugin validation. Run `npm run smoke:studio` against a running Studio to build, check, capture and solo-playtest a three-room map; add `-- --multiplayer` to also playtest with 2 players. Run `npm run smoke:data` against a running Studio to insert the `data` skill templates and ProfileStore into the open place, run their checks in a solo playtest and remove them again. Run `npm run smoke:networking` against a running Studio to insert the `networking` skill's generated Blink modules and templates into the open place, run their bad-data checks in a solo playtest and remove them again; rerun it before bumping Blink, because its raw-buffer checks depend on the 0.18.9 wire format. `npm run check:blink` (part of `npm run check`) regenerates the template's Blink output with the `blink` pinned in `rokit.toml` and fails when it differs from the committed files.
 
 The first `npm run typecheck:luau` (part of `npm run check`) or `npm run smoke:data` downloads the pinned ProfileStore from Wally into `.roblox-kit/cache/`, which is git-ignored; it type-checks the `data` templates and `smoke:data` inserts it. ProfileStore is never committed.
 

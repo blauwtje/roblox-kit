@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and six skills (`skills/`):
+A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and seven skills (`skills/`):
 
 - `roblox-kit` (`src/server/main.ts`): this repo's own server with four tools, `build_map`, `check_map`, `capture_zones` and `run_playtest`.
 - `studio` (`src/studio/launch-studio-mcp.ts`): a thin launcher that execs Roblox's built-in Studio MCP server with inherited stdio.
@@ -21,6 +21,8 @@ TypeScript runs directly on Node (>= 22.18, native type stripping); there is no 
 - `npm run lint:luau` / `npm run format:luau:check`: selene and StyLua for `luau/`; both are pinned in `rokit.toml`.
 - `npm run smoke:studio [-- --multiplayer]`: end-to-end build, check, capture and playtest against a running Studio.
 - `npm run smoke:data`: inserts the `data` skill templates and ProfileStore into the open place, runs their checks in a solo playtest and removes them. The pinned ProfileStore is downloaded from Wally once into `.roblox-kit/cache/` (git-ignored, by `scripts/profilestore-cache.ts`), also when `npm run typecheck:luau` type-checks `skills/data/templates/`.
+- `npm run smoke:networking`: inserts the `networking` skill's generated Blink modules and templates into the open place, runs the bad-data checks in a solo playtest and removes them. Rerun it before bumping Blink: the raw-buffer checks depend on the 0.18.9 wire format.
+- `npm run check:blink`: regenerates the `networking` template's Blink output with the `blink` pinned in `rokit.toml` and fails when it differs from the committed files (`blink <file> --yes`, since Blink waits on a prompt without a TTY).
 - `npm run eval:studio`: builds each benchmark in `eval/benchmarks/`, runs visual review and appends to `eval/results.jsonl`. Needs `node scripts/fetch-references.ts` first; `node scripts/calibrate-review.ts` checks the reviewer against `eval/anchors/bad/`.
 - `npm run hero-props -- <preset> <kind>` and `npm run hero-props:upload -- <preset>`: generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see the README's Development section.
 
