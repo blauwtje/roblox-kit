@@ -22,7 +22,7 @@ local arguments: Arguments = ...
 local HttpService = game:GetService("HttpService")
 local Stats = game:GetService("Stats")
 
-local camera = workspace.CurrentCamera
+local camera: Camera? = workspace.CurrentCamera
 if camera == nil then
 	error(
 		"Workspace has no CurrentCamera, so no zone camera can be placed. Open a Studio viewport on the place, then retry.",

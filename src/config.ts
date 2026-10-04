@@ -55,11 +55,15 @@ export const config = Object.freeze({
   overlapToleranceStuds: 0.05,
   pathfindingAgentRadiusStuds: 2,
   pathfindingAgentHeightStuds: 5,
+  /** Straight-line distance beyond which a spawn and a target are reported as tooFar, not pathfound. */
+  maxPathStuds: 3000,
 
   /** Issues check_map returns inline; the rest is behind the report resource link. */
   maxInlineIssues: 20,
   /** Issues check_map keeps per kind in the full report; counts stay exact. */
   maxIssuesPerKind: 100,
+  /** Full check reports kept in memory; the oldest is dropped past this. */
+  maxCheckReports: 50,
 
   /** Scene limits per zone camera of a spec that sets no performance budget. */
   maxDrawCalls: 1000,
@@ -104,8 +108,10 @@ export const config = Object.freeze({
 
   /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
   heroPropsFolder: ".roblox-kit/hero-props",
-  /** The Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
-  blenderPath: "/opt/homebrew/bin/blender",
+  /** The environment variable naming the Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
+  blenderPathEnv: "BLENDER_PATH",
+  /** Tried in order when that variable is unset: a name looked up on PATH, then an absolute install path. */
+  blenderFallbackPaths: ["blender", "/Applications/Blender.app/Contents/MacOS/Blender"],
   blenderTimeoutMs: 120_000,
   /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
   heroPropSizeToleranceStuds: 0.1,

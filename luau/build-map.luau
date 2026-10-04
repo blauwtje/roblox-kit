@@ -9,7 +9,8 @@
 -- Ceilings are tagged and decorative, as are the detail parts and fixtures. Each prop becomes a ProceduralModel running the ModuleScript of its kind
 -- under the Model, generated before the props phase returns. Each hero prop is its uploaded asset loaded with
 -- InsertService into a Model named "<kind>-hero-<n>", scaled to its size, centered on its pivot and turned by its
--- yaw, its MeshParts colored from the surface each is named after, anchored and decorative. Reports the number of parts in the Model
+-- yaw, its MeshParts colored from the surface each is named after, anchored and decorative; an asset that fails to load
+-- builds the set piece it replaced and is reported in `heroLoadFailures`. Reports the number of parts in the Model
 -- after the phase (the BaseParts that are children of the Model); the shell phase also reports
 -- whether it replaced a map.
 type Vector = { x: number, y: number, z: number }
@@ -45,7 +46,11 @@ type HeroPropRecord = {
 	size: Vector,
 	-- Hex color and material name of each surface role a MeshPart may be named after.
 	surfaces: { [string]: { color: string, material: string } },
+	-- The set piece built instead when the asset fails to load.
+	fallback: PropRecord,
 }
+
+type HeroLoadFailure = { kind: string, assetId: string, error: string }
 
 type Variant = {
 	baseMaterial: string,
@@ -117,7 +122,7 @@ end
 -- Names the materials that Enum.Material does not know, so nothing is built from a bad spec.
 local function assertMaterialsExist()
 	local unknown: { string } = {}
-	for _, materialName in arguments.materials or {} do
+	for _, materialName in arguments.materials or ({} :: { string }) do
 		if Enum.Material:FromName(materialName) == nil and not table.find(unknown, materialName) then
 			table.insert(unknown, materialName)
 		end
@@ -215,7 +220,7 @@ end
 -- One ModuleScript per prop kind in use, each holding the generator source of its kind.
 local function addGenerators(model: Model): { [string]: ModuleScript }
 	local modules: { [string]: ModuleScript } = {}
-	for kind, source in arguments.generators or {} do
+	for kind, source in arguments.generators or ({} :: { [string]: string }) do
 		local generator = Instance.new("ModuleScript")
 		generator.Name = `{kind}-generator`
 		generator.Source = source
@@ -225,31 +230,31 @@ local function addGenerators(model: Model): { [string]: ModuleScript }
 	return modules
 end
 
--- The ProceduralModels of the props, named "<kind>-<n>" in placement order, sharing their kind's generator.
-local function addProps(model: Model, generators: { [string]: ModuleScript }): { ProceduralModel }
-	local proceduralModels: { ProceduralModel } = {}
-	local countByKind: { [string]: number } = {}
-	for _, record in arguments.props or {} do
-		local generator = generators[record.kind]
-		if not generator then
-			error(`Prop kind "{record.kind}" has no generator source.`, 0)
-		end
-		local count = (countByKind[record.kind] or 0) + 1
-		countByKind[record.kind] = count
-		local proceduralModel = Instance.new("ProceduralModel")
-		proceduralModel.Name = `{record.kind}-{count}`
-		proceduralModel.Generator = generator
-		proceduralModel.Size = toVector3(record.size)
-		proceduralModel:SetAttribute("Seed", record.seed)
-		for name, value in record.attributes or {} do
-			proceduralModel:SetAttribute(name, if string.match(name, "Color$") then Color3.fromHex(value) else value)
-		end
-		local turn = CFrame.Angles(0, math.rad(record.yaw or 0), 0)
-		proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)) * turn)
-		proceduralModel.Parent = model
-		table.insert(proceduralModels, proceduralModel)
+-- One ProceduralModel named "<kind>-<n>" sharing the generator of its kind; `countByKind` numbers them in placement order.
+local function addProp(
+	model: Model,
+	generators: { [string]: ModuleScript },
+	record: PropRecord,
+	countByKind: { [string]: number }
+): ProceduralModel
+	local generator = generators[record.kind]
+	if not generator then
+		error(`Prop kind "{record.kind}" has no generator source.`, 0)
 	end
-	return proceduralModels
+	local count = (countByKind[record.kind] or 0) + 1
+	countByKind[record.kind] = count
+	local proceduralModel = Instance.new("ProceduralModel")
+	proceduralModel.Name = `{record.kind}-{count}`
+	proceduralModel.Generator = generator
+	proceduralModel.Size = toVector3(record.size)
+	proceduralModel:SetAttribute("Seed", record.seed)
+	for name, value in record.attributes or ({} :: { [string]: string }) do
+		proceduralModel:SetAttribute(name, if string.match(name, "Color$") then Color3.fromHex(value) else value)
+	end
+	local turn = CFrame.Angles(0, math.rad(record.yaw or 0), 0)
+	proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)) * turn)
+	proceduralModel.Parent = model
+	return proceduralModel
 end
 
 -- Generation runs once the model is in the place; a generator error fails the build.
@@ -371,7 +376,7 @@ end
 
 local function addLights(model: Model)
 	local fixtureCount = 0
-	for _, record in arguments.lights or {} do
+	for _, record in arguments.lights or ({} :: { LightRecord }) do
 		if record.fixture then
 			fixtureCount += 1
 		end
@@ -383,7 +388,7 @@ local function addLights(model: Model)
 end
 
 local function addParts(model: Model)
-	for _, record in arguments.parts or {} do
+	for _, record in arguments.parts or ({} :: { PartRecord }) do
 		newPart(record).Parent = model
 	end
 end
@@ -409,14 +414,29 @@ end
 
 -- The hero props, each its asset loaded into a Model named "<kind>-hero-<n>", scaled so its width is `size.x`,
 -- centered on its pivot and turned by its yaw; every part is anchored and neither collides, touches nor is queried.
-local function addHeroProps(model: Model)
-	local countByKind: { [string]: number } = {}
-	for _, record in arguments.heroProps or {} do
+-- An asset that fails to load builds its fallback set piece instead, added to `proceduralModels`; returns those failures.
+local function addHeroProps(
+	model: Model,
+	generators: { [string]: ModuleScript },
+	countByKind: { [string]: number },
+	proceduralModels: { ProceduralModel }
+): { HeroLoadFailure }
+	local failures: { HeroLoadFailure } = {}
+	local heroCountByKind: { [string]: number } = {}
+	for _, record in arguments.heroProps or ({} :: { HeroPropRecord }) do
 		local assetId = tonumber(record.assetId)
 		if not assetId then
 			error(`Hero prop {record.kind} has the asset id "{record.assetId}", which is not a number.`, 0)
 		end
-		local hero = InsertService:LoadAsset(assetId)
+		local loaded, heroOrError = pcall(function()
+			return InsertService:LoadAsset(assetId)
+		end)
+		if not loaded then
+			table.insert(failures, { kind = record.kind, assetId = record.assetId, error = tostring(heroOrError) })
+			table.insert(proceduralModels, addProp(model, generators, record.fallback, countByKind))
+			continue
+		end
+		local hero = heroOrError :: Model
 		local _, extents = hero:GetBoundingBox()
 		if extents.X <= 0 then
 			error(`Hero prop {record.kind} (asset {record.assetId}) has no width to scale.`, 0)
@@ -436,18 +456,26 @@ local function addHeroProps(model: Model)
 		local center = hero:GetBoundingBox()
 		hero.WorldPivot = CFrame.new(center.Position)
 		hero:PivotTo(CFrame.new(toVector3(record.pivot)) * CFrame.Angles(0, math.rad(record.yaw), 0))
-		local count = (countByKind[record.kind] or 0) + 1
-		countByKind[record.kind] = count
+		local count = (heroCountByKind[record.kind] or 0) + 1
+		heroCountByKind[record.kind] = count
 		hero.Name = `{record.kind}-hero-{count}`
 		hero:SetAttribute(HERO_KIND_ATTRIBUTE_NAME, record.kind)
 		hero.Parent = model
 	end
+	return failures
 end
 
-local function addPropModels(model: Model)
-	local proceduralModels = addProps(model, addGenerators(model))
-	addHeroProps(model)
+-- Adds the set pieces, then the hero props; returns the hero assets that failed to load.
+local function addPropModels(model: Model): { HeroLoadFailure }
+	local generators = addGenerators(model)
+	local countByKind: { [string]: number } = {}
+	local proceduralModels: { ProceduralModel } = {}
+	for _, record in arguments.props or ({} :: { PropRecord }) do
+		table.insert(proceduralModels, addProp(model, generators, record, countByKind))
+	end
+	local failures = addHeroProps(model, generators, countByKind, proceduralModels)
 	waitForGeneration(proceduralModels)
+	return failures
 end
 
 -- Replaces the map of this id with a new Model holding the walls and the terrain; returns whether it replaced one.
@@ -468,7 +496,7 @@ local function buildShell(): (boolean, number)
 		model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, lightingSnapshot)
 	end
 	addParts(model)
-	local terrainFills = arguments.terrainFills or {}
+	local terrainFills = arguments.terrainFills or ({} :: { TerrainFill })
 	for _, fill in terrainFills do
 		fillTerrain(fill, materialNamed(fill.material))
 	end
@@ -477,23 +505,25 @@ local function buildShell(): (boolean, number)
 	return oldModel ~= nil, countPartChildren(model)
 end
 
--- Runs the phase named in the arguments; returns whether the shell replaced a map (nil for later phases) and the Model's part count.
-local function runPhase(): (boolean?, number)
+-- Runs the phase named in the arguments; returns whether the shell replaced a map (nil for later phases), the Model's part
+-- count and the hero assets the props phase failed to load.
+local function runPhase(): (boolean?, number, { HeroLoadFailure }?)
 	local phase = arguments.phase
 	if phase == "shell" then
 		return buildShell()
 	end
+	local failures: { HeroLoadFailure }? = nil
 	local model = findModel()
 	if phase == "floors and ceilings" or phase == "openings" or phase == "surfaces" then
 		addParts(model)
 	elseif phase == "props" then
-		addPropModels(model)
+		failures = addPropModels(model)
 	elseif phase == "lighting" then
 		addLights(model)
 	else
 		error(`Unknown build phase "{phase}".`, 0)
 	end
-	return nil, countPartChildren(model)
+	return nil, countPartChildren(model), failures
 end
 
 assertMaterialsExist()
@@ -508,7 +538,7 @@ local recordingStarted, recordingId = pcall(function()
 end)
 local recording: string? = if recordingStarted and typeof(recordingId) == "string" then recordingId else nil
 
-local built, replacedOrError, partCount = pcall(runPhase)
+local built, replacedOrError, partCount, heroLoadFailures = pcall(runPhase)
 if recording then
 	local operation = if built then Enum.FinishRecordingOperation.Commit else Enum.FinishRecordingOperation.Cancel
 	ChangeHistoryService:FinishRecording(recording, operation)
@@ -523,4 +553,8 @@ if not built then
 	)
 end
 
-return HttpService:JSONEncode({ partCount = partCount, replaced = replacedOrError })
+return HttpService:JSONEncode({
+	partCount = partCount,
+	replaced = replacedOrError,
+	heroLoadFailures = heroLoadFailures,
+})

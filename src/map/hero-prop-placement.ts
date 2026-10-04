@@ -1,8 +1,4 @@
-import {
-  heroPropAsset,
-  type HeroPropAsset,
-  type HeroPropSources,
-} from "../hero-props/hero-prop-asset.ts";
+import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
@@ -11,10 +7,14 @@ import type { PropRecord } from "./prop-placement.ts";
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 type SurfaceRole = keyof Preset["surfaces"];
 
+/** A placed prop as `build-map.luau` takes it: a set piece also turns by `yaw` and carries `attributes`. */
+type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, string> };
+
 /**
  * One hero prop for `build-map.luau`: the uploaded asset loaded in the slot of the set piece it replaces.
  * `pivot` is the center of its box, `size` the recipe's width, height and depth in studs (x, y, z), `yaw`
  * the replaced piece's turn about Y, and `surfaces` the color and material of each role a MeshPart is named after.
+ * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load.
  */
 export interface HeroPropRecord {
   kind: string;
@@ -23,6 +23,7 @@ export interface HeroPropRecord {
   yaw: number;
   size: Vector;
   surfaces: Record<string, { color: string; material: string }>;
+  fallback: PlacedProp;
 }
 
 /** The preset, the style resolved from it, and the preset's name, which names the generated folders. */
@@ -32,22 +33,6 @@ export interface HeroPreset {
   base: Preset;
   /** The resolved style: its surfaces color the meshes. */
   style: Preset;
-}
-
-/** Why a hero prop has no asset to build: no passed review, no credentials, or a failed upload. */
-function notBuiltReason(
-  presetName: string,
-  kind: string,
-  asset: Exclude<HeroPropAsset, { assetId: string }>,
-): string {
-  switch (asset.status) {
-    case "unreviewed":
-      return `it has no passed review (npm run hero-props -- ${presetName} ${kind} generates, renders and reviews it)`;
-    case "no-credentials":
-      return `its review passed, but it cannot be uploaded: ${asset.missing}`;
-    case "upload-failed":
-      return `its review passed, but the upload failed (the next build_map or npm run hero-props:upload -- ${presetName} retries it): ${asset.error}`;
-  }
 }
 
 function isInRoom(pivot: Vector, room: RoomSpec): boolean {
@@ -61,7 +46,7 @@ function heroRecord(
   kind: string,
   assetId: string,
   recipe: HeroPropRecipe,
-  piece: PropRecord & { yaw?: number },
+  piece: PlacedProp,
   style: Preset,
 ): HeroPropRecord {
   const { width, height, depth } = recipe.size;
@@ -78,17 +63,18 @@ function heroRecord(
     yaw: piece.yaw ?? 0,
     size: { x: width, y: height, z: depth },
     surfaces,
+    fallback: piece,
   };
 }
 
 /**
  * The hero props of a styled map, each in the slot of the set piece its recipe `replaces` in a room whose
- * type lists it, and the props without the pieces they replace. A reviewed hero prop whose recipe hash has
- * no recorded upload is uploaded and recorded first. One with no asset leaves its set piece in place, with a
- * warning saying why: no passed review, no key or creator, or a failed upload. A room with no such set piece
+ * type lists it, and the props without the pieces they replace. Only recorded uploads are read; nothing is
+ * uploaded. A hero prop whose recipe hash has no recorded asset leaves its set piece in place, with a warning
+ * saying to generate and upload it from a clone of the roblox-kit repo. A room with no such set piece
  * gets a warning and no hero prop.
  */
-export async function heroPropsOf<Prop extends PropRecord & { yaw?: number }>(
+export async function heroPropsOf<Prop extends PlacedProp>(
   spec: MapSpec,
   preset: HeroPreset,
   props: Prop[],
@@ -123,15 +109,15 @@ export async function heroPropsOf<Prop extends PropRecord & { yaw?: number }>(
         );
         continue;
       }
-      const asset = await heroPropAsset(preset.name, preset.base, kind, sources);
-      if (!("assetId" in asset)) {
+      const { hash, assetId } = await recordedHeroAsset(preset.base, kind, sources);
+      if (assetId === undefined) {
         warnings.push(
-          `Room "${room.name}" keeps its ${recipe.replaces} set piece instead of hero prop ${kind} (recipe ${asset.hash}): ${notBuiltReason(preset.name, kind, asset)}.`,
+          `Room "${room.name}" keeps its ${recipe.replaces} set piece instead of hero prop ${kind} (recipe ${hash}): it has no recorded asset; generate and upload it from a clone of the roblox-kit repo.`,
         );
         continue;
       }
       replaced.add(piece);
-      heroProps.push(heroRecord(kind, asset.assetId, recipe, piece, style));
+      heroProps.push(heroRecord(kind, assetId, recipe, piece, style));
     }
   }
   return { props: props.filter((prop) => !replaced.has(prop)), heroProps, warnings };

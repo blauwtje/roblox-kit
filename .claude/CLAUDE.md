@@ -15,13 +15,13 @@ A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships 
 
 TypeScript runs directly on Node (>= 22.18, native type stripping); there is no build step and `tsc` only type-checks (`noEmit`, `erasableSyntaxOnly`, so no enums, namespaces or parameter properties). Imports use explicit `.ts` extensions.
 
-- `npm run check`: everything CI runs (typecheck, ESLint, selene, Prettier, StyLua, tests, `claude plugin validate .`).
+- `npm run check`: everything CI runs (typecheck, ESLint, selene, Prettier, StyLua, tests, `claude plugin validate --strict .`).
 - `npm test`: all unit tests (`node --test`).
 - `node --test src/map/map-layout.test.ts`: one test file. Add `--test-name-pattern "<name>"` for one test.
 - `npm run lint:luau` / `npm run format:luau:check`: selene and StyLua for `luau/`; both are pinned in `rokit.toml`.
 - `npm run smoke:studio [-- --multiplayer]`: end-to-end build, check, capture and playtest against a running Studio.
 - `npm run eval:studio`: builds each benchmark in `eval/benchmarks/`, runs visual review and appends to `eval/results.jsonl`. Needs `node scripts/fetch-references.ts` first; `node scripts/calibrate-review.ts` checks the reviewer against `eval/anchors/bad/`.
-- `npm run hero-props -- <preset> <kind>` and `npm run hero-props:upload -- <preset>`: generate (headless Blender at `config.blenderPath`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see the README's Development section.
+- `npm run hero-props -- <preset> <kind>` and `npm run hero-props:upload -- <preset>`: generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see the README's Development section.
 
 Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. Studio-dependent checks live only in `scripts/`.
 

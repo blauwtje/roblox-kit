@@ -58,7 +58,7 @@ A terrain fill is either `{ shape: "block", center, size, material }` or `{ shap
 
 A room placed by `relation` gets a hallway room named `<to>-<room>-hallway`, which is one more zone. The solver adds doors to both rooms and to both ends of the hallway. A room gives either `x` and `z` or a `relation`, never both.
 
-Returns `{ mapId, partCount, phases, bounds, zones, warnings }`. `phases` lists the six phases in the order they ran, each with `name` and `partCount`. `bounds` is `{ min, max }` for the whole map, and each entry of `zones` has `name`, `partCount` and its own `bounds`. `warnings` has one line per set piece that was skipped because its room has no space for it.
+Returns `{ mapId, partCount, phases, bounds, zones, warnings }`. `phases` lists the six phases in the order they ran, each with `name` and `partCount`. `bounds` is `{ min, max }` for the whole map, and each entry of `zones` has `name`, `partCount` and its own `bounds`. `warnings` has one line per set piece skipped because its room has no space for it, per hero prop not built and why, and per hero asset that failed to load.
 
 ### check_map
 
@@ -78,7 +78,7 @@ Returns `{ reportId, reportUri, mapId, passed, partCount, zoneCount, reachabilit
 - `warnings` has one line per zone over a budget limit and one per model outside the map that stands on the straight line of a failed walk, such as another map built in the same place.
 - `reachabilityChecked` is false when the map has no `SpawnLocation`, because no path can start.
 - `issues` lists the first 20 issues with part paths and stud positions. `issuesOmitted` counts the rest.
-- The full report holds up to 100 issues per kind. It is served at `roblox-kit://check-reports/{reportId}` and stays available only while the server process runs.
+- The full report holds up to 100 issues per kind. It is served at `roblox-kit://check-reports/{reportId}` and stays available only while the server process runs. The server keeps the latest 50 reports (`config.maxCheckReports`) and drops the oldest; for a dropped report, call `check_map` again.
 
 ### capture_zones
 
@@ -86,14 +86,16 @@ Read-only apart from the Studio camera, which moves for each capture. Each call 
 
 Ceilings (parts tagged `RobloxKitCeiling`) are hidden during the captures and restored afterwards, also when a capture fails. A call that finds ceilings that a crashed call left hidden restores them first.
 
-| Input   | Type                       | Meaning                                                                                               |
-| ------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `mapId` | string, required           | The `mapId` that `build_map` returned.                                                                |
-| `zones` | array of strings, optional | Zone names to capture. Default is every zone. Each image costs context, so pass a few for large maps. |
+| Input     | Type                                           | Meaning                                                                                                                                       |
+| --------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mapId`   | string, required                               | The `mapId` that `build_map` returned.                                                                                                        |
+| `zones`   | array of strings, optional                     | Zone names to capture. Default is every zone. Each image costs context, so pass a few for large maps.                                         |
+| `cutaway` | boolean, default true                          | False in a follow-up call for `remainingZones`, which already has the cutaway from the first call.                                            |
+| `views`   | array of `a`, `b`, `eye`, default `["a", "b"]` | The views of each zone. `eye` stands at player eye height inside the zone, looks at its center and is shot with ceilings and all walls shown. |
 
-A call returns at most 11 images, the cutaway included. A zone is captured with both views or not at all.
+A call returns at most 8 images (`config.maxImagesPerCall`), the cutaway included. A zone is captured with all its asked views or not at all.
 
-Returns `{ mapId, shots, remainingZones, warnings }`. Each shot has `zone`, `view` (`a`, `b` or `top`), `cameraPosition`, `lookAt`, `width` and `height` (pixels). `remainingZones` names the zones that the image cap left out. Pass them as `zones` in a follow-up call. `warnings` has one entry for each image whose long edge is outside 1000 to 1568 pixels. One image content block follows for each shot, in the same order.
+Returns `{ mapId, shots, remainingZones, warnings }`. Each shot has `zone`, `view` (`a`, `b`, `eye` or `top`), `cameraPosition`, `lookAt`, `width` and `height` (pixels). `remainingZones` names the zones that the image cap left out. Pass them as `zones` in a follow-up call. `warnings` has one entry for each image whose long edge is outside 1000 to 1568 pixels. One image content block follows for each shot, in the same order.
 
 ### run_playtest
 
@@ -118,28 +120,30 @@ Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the serve
 - `execute_luau` (a built-in Studio tool) returns at most 100,000 characters of output and ends a longer result with `... (truncated)`. `build_map`, `check_map` and `capture_zones` report a cut result as an error.
 - `build_map` is not one undo step.
 - `run_playtest` waits at most 300 seconds.
-- `check_map` reports are kept in memory and are gone when the server restarts.
+- `check_map` reports are kept in memory, at most 50, and are gone when the server restarts.
 - Studio's MCP server exists only on macOS and Windows.
 
 ## Skills
 
-| Skill          | Use it for                                                                             |
-| -------------- | -------------------------------------------------------------------------------------- |
-| `luau`         | Writing and reviewing Luau, including code sent through `execute_luau`.                |
-| `map-building` | Building, checking and screenshotting maps with the tools above.                       |
-| `playtest`     | Proving server and client behavior with `run_playtest`.                                |
-| `visual-judge` | Judging a built map by its screenshots with a fresh subagent, fixing it and repeating. |
-| `animation`    | Making a character animation from keyframes in Blender and exporting an FBX for R15.   |
+| Skill          | Use it for                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `luau`         | Writing and reviewing Luau, including code sent through `execute_luau`.                                                                      |
+| `map-building` | Building, checking and screenshotting maps with the tools above.                                                                             |
+| `playtest`     | Proving server and client behavior with `run_playtest`.                                                                                      |
+| `visual-judge` | Judging a built map by its screenshots with the plugin agents `visual-judge`, `place-check` and `quality-reviewer`, fixing it and repeating. |
+| `animation`    | Making a character animation from keyframes in Blender and exporting an FBX for R15.                                                         |
 
 ## Development
 
 Run `npm run check` for the type check, lint, format check, tests and plugin validation. Run `npm run smoke:studio` against a running Studio to build, check, capture and solo-playtest a three-room map; add `-- --multiplayer` to also playtest with 2 players.
 
-Run `npm run eval:studio` against a running Studio to build, check and capture each benchmark in `eval/benchmarks/`. It runs the blind place check on each typed room and scores each room of the current wave (`config.evalWaveRoomTypes`) on the six image axes against the reference set. It appends one line per benchmark to `eval/results.jsonl` with the `check_map` issues, the axis medians and the reviewers' evidence notes, and fails when a place check fails or a scored room's `passed` is false, listing both. Run `node scripts/fetch-references.ts` first to download the reference images, and `node scripts/calibrate-review.ts` to check that the reviewer still separates the references from the known-bad anchors in `eval/anchors/bad/`.
+Run `npm run eval:studio` against a running Studio to build, check and capture each benchmark in `eval/benchmarks/`. It runs the blind place check on each typed room and scores each room of the current wave (`config.evalWaveRoomTypes`) on the six image axes against the reference set. It appends one line per benchmark to `eval/results.jsonl` with the `check_map` issues, the axis medians and the reviewers' evidence notes, and fails when a place check fails or a scored room's `passed` is false, listing both. The top-level `checkPassed` of a line is the `check_map` result. Run `node scripts/fetch-references.ts` first to download the reference images, and `node scripts/calibrate-review.ts` to check that the reviewer still separates the references from the known-bad anchors in `eval/anchors/bad/`.
 
-Run `npm run hero-props -- <preset> <kind>` to make one hero prop from its recipe in the preset's `heroProps`. Headless Blender (`config.blenderPath`) generates `.roblox-kit/hero-props/<preset>-<kind>-<hash>/model.glb` and checks its triangles, roles and size, then renders it from the front, side and three-quarter, and a fresh reviewer scores the renders against the recipe into `review.json`. The command exits 1 when the GLB fails its recipe or the review does not pass. A kind gets at most three rounds (distinct recipe hashes); a fourth is refused.
+Hero props are made and uploaded from a clone of this repository only; the installed plugin only reads the assets recorded in `src/hero-props/hero-assets.json`. Run `npm run hero-props -- <preset> <kind>` to make one hero prop from its recipe in the preset's `heroProps`. Headless Blender (found through `BLENDER_PATH`, else `blender` on PATH, else `/Applications/Blender.app/Contents/MacOS/Blender`) generates `.roblox-kit/hero-props/<preset>-<kind>-<hash>/model.glb` and checks its triangles, roles and size, then renders it from the front, side and three-quarter, and a fresh reviewer scores the renders against the recipe into `review.json`. The command exits 1 when the GLB fails its recipe or the review does not pass. A kind gets at most three rounds (distinct recipe hashes); a fourth is refused.
 
-A passed hero prop is uploaded through Open Cloud with an API key that has Assets Read and Write permission. The key comes from `ROBLOX_OPEN_CLOUD_API_KEY` (the plugin's `roblox_open_cloud_api_key` option fills it), else from the gitignored file `.roblox-kit/open-cloud-key` in the repository, trimmed. The asset's creator is the user or group that owns the key: `ROBLOX_CREATOR_GROUP_ID` or `ROBLOX_CREATOR_USER_ID` (the `roblox_creator_group_id` and `roblox_creator_user_id` options), set one, else the gitignored file `.roblox-kit/open-cloud-creator.json` holding `{"groupId":"<digits>"}` or `{"userId":"<digits>"}`. Run `npm run hero-props:upload -- <preset>` to upload every reviewed hero prop of the preset that has no recorded asset; it prints `kind -> asset id` per hero prop. The asset id is recorded by recipe hash in `src/hero-props/hero-assets.json`, so an unchanged recipe never uploads again. `build_map` uploads a reviewed hero prop with no recorded asset the same way, then builds each hero prop as a non-colliding Model in place of the set piece its recipe replaces. Without an asset it keeps the set piece and returns a warning saying why: no passed review, no key or creator (naming the variable and file), or a failed upload.
+A passed hero prop is uploaded through Open Cloud with an API key that has Assets Read and Write permission. The key comes from `ROBLOX_OPEN_CLOUD_API_KEY`, else from the gitignored file `.roblox-kit/open-cloud-key` in the clone, trimmed. The asset's creator is the user or group that owns the key: `ROBLOX_CREATOR_GROUP_ID` or `ROBLOX_CREATOR_USER_ID`, set one, else the gitignored file `.roblox-kit/open-cloud-creator.json` holding `{"groupId":"<digits>"}` or `{"userId":"<digits>"}`. Run `npm run hero-props:upload -- <preset>` to upload every reviewed hero prop of the preset that has no recorded asset; it prints `kind -> asset id` per hero prop. The asset id is recorded by recipe hash in `src/hero-props/hero-assets.json`, so an unchanged recipe never uploads again; commit the file to ship the asset.
+
+`build_map` never uploads. It builds each hero prop with a recorded asset as a non-colliding Model in place of the set piece its recipe replaces. Without a recorded asset it keeps the set piece and returns a warning to generate and upload it from a clone of the roblox-kit repo. An asset that `InsertService:LoadAsset` fails to load also builds the set piece, with a warning naming the asset id and the error.
 
 ## License
 

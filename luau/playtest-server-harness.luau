@@ -20,7 +20,7 @@ local POLL_SECONDS = 0.1
 
 -- The spliced body sees `check(name, passed, detail)` to record a result and `expectedClients`.
 -- selene: allow(unused_variable)
-local function runChecks(check: Recorder, expectedClients: number)
+local function runChecks(check: Recorder, expectedClients: number): ...any
 	-- roblox-kit:check-body
 end
 

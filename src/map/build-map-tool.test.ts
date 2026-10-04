@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -515,19 +515,68 @@ const trainStation = (await loadPresets()).get("train-station");
 assert.ok(trainStation !== undefined);
 const trainCarHash = await heroRecipeHash(trainStation, "train-car");
 
-/** A temporary hero-assets.json, recording the train car when `recorded`, and a hero-props folder with no reviews. */
+/** A temporary hero-assets.json, recording the train car when `recorded`. */
 async function fakeHeroSources(recorded: boolean): Promise<HeroPropSources> {
   const directory = await mkdtemp(join(tmpdir(), "build-map-heroes-"));
   const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
   const assets = recorded ? { [trainCarHash]: { kind: "train-car", assetId: "987654" } } : {};
   await writeFile(assetsFile, JSON.stringify(assets));
-  await mkdir(join(directory, "hero-props"));
-  const heroPropsDirectory = pathToFileURL(join(directory, "hero-props/"));
-  return {
-    assetsFile,
-    heroPropsDirectory,
-    credentials: () => Promise.reject(new Error("an unreviewed hero prop looks up no credentials")),
+  return { assetsFile };
+}
+
+async function writeIfAbsent(file: URL, text: string): Promise<boolean> {
+  try {
+    await writeFile(file, text, { flag: "wx" });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+/**
+ * Runs `run` with a passed review and a GLB for the train car in the folder the old uploader read, Open Cloud
+ * credentials in the environment and `fetch` counted, then puts all of it back. Returns the number of fetch calls.
+ */
+async function countFetchesWithReviewedTrainCar(run: () => Promise<void>): Promise<number> {
+  const folder = new URL(
+    `../../${config.heroPropsFolder}/train-station-train-car-${trainCarHash}/`,
+    import.meta.url,
+  );
+  const created = await mkdir(folder, { recursive: true });
+  const reviewFile = new URL("review.json", folder);
+  const glbFile = new URL("model.glb", folder);
+  const wroteReview = await writeIfAbsent(
+    reviewFile,
+    JSON.stringify({ hash: trainCarHash, passed: true }),
+  );
+  const wroteGlb = await writeIfAbsent(glbFile, "glTF");
+  const savedEnv = process.env;
+  const withoutGroup = Object.entries(savedEnv).filter(
+    ([name]) => name !== config.openCloudCreatorGroupIdEnv,
+  );
+  process.env = {
+    ...Object.fromEntries(withoutGroup),
+    [config.openCloudApiKeyEnv]: "test-key",
+    [config.openCloudCreatorUserIdEnv]: "42",
   };
+  const realFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = () => {
+    fetchCalls += 1;
+    return Promise.reject(new Error("no Open Cloud call is expected"));
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env = savedEnv;
+    // Only what this helper created is removed; a review already on disk is left alone.
+    if (created !== undefined) await rm(created, { recursive: true, force: true });
+    if (created === undefined && wroteReview) await rm(reviewFile, { force: true });
+    if (created === undefined && wroteGlb) await rm(glbFile, { force: true });
+  }
+  return fetchCalls;
 }
 
 const propsPhaseIndex = phaseNames.indexOf("props");
@@ -547,7 +596,12 @@ await test("a recorded hero asset is sent to the props phase in the slot of the 
   assert.deepEqual(hero.size, { x: 40, y: 7.8, z: 7 });
   const props = propsPhase["props"] as { kind: string }[];
   assert.ok(!props.some((prop) => prop.kind === "track-bed"), "the track bed gives up its slot");
-  assert.ok(!("track-bed" in (propsPhase["generators"] as object)));
+  const record = hero as { fallback?: { kind: string } };
+  assert.equal(record.fallback?.kind, "track-bed", "the hero carries the set piece it replaced");
+  assert.ok(
+    "track-bed" in (propsPhase["generators"] as object),
+    "the fallback kind has a generator",
+  );
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
   assert.ok(!structured.warnings.some((warning) => warning.includes("hero prop train-car")));
   assert.equal(structured.phases[propsPhaseIndex]?.partCount, props.length + heroProps.length);
@@ -571,7 +625,53 @@ await test("without a recorded hero asset the set piece stays and the result say
     heroWarnings[0] ?? "",
     /keeps its track-bed set piece instead of hero prop train-car/,
   );
-  assert.match(heroWarnings[0] ?? "", /no passed review/);
+  assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
+});
+
+await test("a reviewed but unrecorded hero prop makes no Open Cloud call and returns the clone warning", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(false));
+  let result: Awaited<ReturnType<typeof tool.handler>> | undefined;
+  const fetchCalls = await countFetchesWithReviewedTrainCar(async () => {
+    result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  });
+  assert.equal(fetchCalls, 0, "no Open Cloud call is made");
+  const structured = buildMapTool.outputSchema.parse(result?.structuredContent);
+  const heroWarnings = structured.warnings.filter((warning) =>
+    warning.includes("hero prop train-car"),
+  );
+  assert.equal(heroWarnings.length, 1);
+  assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
+});
+
+await test("a hero asset that fails to load becomes a warning naming its asset id and error", async () => {
+  const studio = new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      const props = code.includes('"phase":"props"');
+      const text = props
+        ? '{"partCount":14,"heroLoadFailures":[{"kind":"train-car","assetId":"987654","error":"HTTP 403"}]}'
+        : code.includes('"phase":"')
+          ? '{"partCount":14}'
+          : '{"snapshotTaken":false}';
+      return { content: [{ type: "text", text }] };
+    },
+  });
+  const tool = buildMapToolWith(await fakeHeroSources(true));
+  const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  const failure = structured.warnings.filter((warning) => warning.includes("failed to load"));
+  assert.equal(failure.length, 1);
+  assert.match(failure[0] ?? "", /train-car \(asset 987654\) failed to load: HTTP 403/);
+  assert.match(failure[0] ?? "", /track-bed set piece is built instead/);
+});
+
+await test("build-map.luau loads each hero asset in pcall and builds the fallback set piece on failure", async () => {
+  const source = await readFile(new URL("../../luau/build-map.luau", import.meta.url), "utf8");
+  const loading = source.slice(source.indexOf("local loaded, heroOrError = pcall"));
+  assert.match(loading, /pcall\(function\(\)\s+return InsertService:LoadAsset\(assetId\)/);
+  assert.ok(loading.includes("addProp(model, generators, record.fallback, countByKind)"));
+  assert.ok(source.includes("heroLoadFailures = heroLoadFailures"));
 });
 
 await test("build-map.luau loads each hero asset, scales it to its size and colors its MeshParts without collision", async () => {

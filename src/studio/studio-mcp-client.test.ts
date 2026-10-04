@@ -14,9 +14,10 @@ const emptyStudioList = { studios: [] };
 
 /**
  * A stand-in StudioMCP: an SDK server behind a linked in-memory transport, one per connection.
- * Its `list_roblox_studios` answers `listAnswers` in turn, then repeats the last one.
+ * Its `list_roblox_studios` answers `listAnswers` in turn, then repeats the last one; a string
+ * answer is sent as is, other answers as JSON.
  */
-function fakeStudioMcpServers(listAnswers: object[] = [studioList]) {
+function fakeStudioMcpServers(listAnswers: (object | string)[] = [studioList]) {
   const servers: StdioServerHandle[] = [];
   let listCalls = 0;
   const receivedStudioIds: string[] = [];
@@ -29,7 +30,8 @@ function fakeStudioMcpServers(listAnswers: object[] = [studioList]) {
           server.registerTool("list_roblox_studios", {}, () => {
             const answer = listAnswers[Math.min(listCalls, listAnswers.length - 1)];
             listCalls += 1;
-            return { content: [{ type: "text", text: JSON.stringify(answer) }] };
+            const text = typeof answer === "string" ? answer : JSON.stringify(answer);
+            return { content: [{ type: "text", text }] };
           });
           server.registerTool(
             "execute_luau",
@@ -131,6 +133,21 @@ await test("returns the empty list once the discovery timeout has passed", async
   assert.deepEqual(await client.listStudios(), []);
   assert.ok(fake.listCallCount() > 1);
   assert.equal(fake.servers.length, 1);
+  await client.close();
+});
+
+await test("reports a Studio list that is not JSON as an unexpected list", async () => {
+  const fake = fakeStudioMcpServers(["Studio is starting up"]);
+  const client = new StudioMcpClient({
+    clientInfo,
+    timeoutMs: 5000,
+    createTransport: fake.createTransport,
+  });
+
+  await assert.rejects(
+    client.listStudios(),
+    /StudioMCP returned an unexpected Studio list: Studio is starting up/,
+  );
   await client.close();
 });
 
