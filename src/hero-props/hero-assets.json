@@ -226,5 +226,33 @@
   "324865a892fe": {
     "kind": "departure-board",
     "assetId": "72409183400744"
+  },
+  "bd16784931a0": {
+    "kind": "train-car",
+    "assetId": "90082255315115"
+  },
+  "8b6d5cb52b14": {
+    "kind": "departure-board",
+    "assetId": "108444094574368"
+  },
+  "eee30fffdce2": {
+    "kind": "prop-bench",
+    "assetId": "109537430579498"
+  },
+  "e2d81fcedd8c": {
+    "kind": "prop-lamp",
+    "assetId": "140605352217939"
+  },
+  "1e26811b3943": {
+    "kind": "prop-pillar",
+    "assetId": "84284958670402"
+  },
+  "0526cd968935": {
+    "kind": "prop-stairs",
+    "assetId": "110958873268058"
+  },
+  "15f02eca56dd": {
+    "kind": "prop-rail",
+    "assetId": "109948980061302"
   }
 }

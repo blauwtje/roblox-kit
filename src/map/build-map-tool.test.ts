@@ -333,7 +333,7 @@ await test("a style sends ceilings, details, props and one generator source per 
   const result = await run(connection, {
     mapId: "two-rooms",
     seed: 3,
-    style: { preset: "train-station" },
+    style: { preset: "cozy-town" },
     rooms: [
       { name: "start", x: 0, z: 0, width: 40, depth: 40, spawn: true, doors: [{ side: "east" }] },
       { name: "hall", x: 40, z: 0, width: 40, depth: 40, doors: [{ side: "west" }] },
