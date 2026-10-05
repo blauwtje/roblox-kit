@@ -13,6 +13,7 @@ import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
 import type { PropRecord } from "../src/map/prop-placement.ts";
 import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
+import { heroPropsOf } from "../src/map/hero-prop-placement.ts";
 import { buildRoomDetails } from "../src/map/room-details.ts";
 import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
@@ -120,7 +121,8 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
  * A fixed 3-room map far from the place's Baseplate (x and z near 2000), so everything the smoke
  * builds, fills and removes lies outside what the place owns. The vault and the yard are placed by
  * relation, so the map also has two hallway zones. The hall, vault and yard take the train-station room
- * types concourse, ticket-hall and platform, so the map also has set pieces.
+ * types concourse, ticket-hall and platform, so the map also has set pieces. The yard is big enough for
+ * the 40-stud train car hero prop to replace its track bed clear of the walls and the doorway.
  */
 /** No bundled preset sets a MaterialVariant, so the smoke asks for one to probe that build_map applies it. */
 const smokeWallVariant = { baseMaterial: "Brick", studsPerTile: 8 };
@@ -147,8 +149,8 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
     {
       name: "yard",
       roomType: "platform",
-      width: 20,
-      depth: 20,
+      width: 48,
+      depth: 30,
       relation: { to: "vault", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
     },
   ],
@@ -166,7 +168,7 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
 const smokeMapSpec = resolveRelations(smokeRelationSpec);
 
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
-const smokeRegion = { min: [1960, -30, 1960], max: [2100, 30, 2100] };
+const smokeRegion = { min: [1960, -30, 1960], max: [2130, 30, 2100] };
 
 /** Name of the Model the blocker probe puts beside the smoke map; the cleanup removes it by name. */
 const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
@@ -348,16 +350,23 @@ async function callRealTool<Input extends z.ZodObject, Output extends z.ZodObjec
   return { output, content: result.content };
 }
 
-/** What build_map sends for the styled smoke map: layout with ceilings, trim details and preset props. */
-function styledSmokeMap() {
+/**
+ * What build_map sends for the styled smoke map: layout with ceilings, trim details, preset props and the
+ * hero props that replace some of them.
+ */
+async function styledSmokeMap() {
   const preset = presets.get("train-station");
   if (preset === undefined) {
     throw new Error("The train-station preset is missing.");
   }
   const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
   const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
-  const { props } = propsOf(smokeMapSpec, preset);
-  return { layout, details, props };
+  const { props, heroProps } = await heroPropsOf(
+    smokeMapSpec,
+    { name: "train-station", base: preset, style: preset },
+    propsOf(smokeMapSpec, preset).props,
+  );
+  return { layout, details, props, heroProps };
 }
 
 /** Name ending of the fixture part build_map hangs at each ceiling light. */
@@ -390,7 +399,7 @@ function fixtureLightPlacements() {
 }
 
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
-  const { layout, details } = styledSmokeMap();
+  const { layout, details } = await styledSmokeMap();
   const zonedPartCount = layout.parts.length + details.length;
   const expectedPartCount =
     zonedPartCount + ceilingLightPlacements().length + fixtureLightPlacements().length;
@@ -497,7 +506,7 @@ function expectSetPiecesTurnedAndLabeled(
 
 /** Proves ceilings carry the tag, one generator per prop kind exists and every prop generated parts without error. */
 async function probeMapDecor(connection: StudioConnection): Promise<string> {
-  const { layout, props } = styledSmokeMap();
+  const { layout, props, heroProps } = await styledSmokeMap();
   const decor = await readMapDecor(connection);
   const fixtures = decor.ceilings.filter((tagged) => tagged.name.endsWith(fixtureNameSuffix));
   const ceilings = decor.ceilings.filter((tagged) => !tagged.name.endsWith(fixtureNameSuffix));
@@ -535,7 +544,14 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
   expectEqual(
     "generator ModuleScripts",
     decor.generators,
-    [...new Set(props.map((prop) => `${prop.kind}-generator`))].sort(),
+    // A hero prop's replaced set piece keeps its generator, for when the asset fails to load.
+    [
+      ...new Set(
+        [...props, ...heroProps.map((hero) => hero.fallback)].map(
+          (prop) => `${prop.kind}-generator`,
+        ),
+      ),
+    ].sort(),
   );
   const countByKind = new Map<string, number>();
   const expectedNames = props.map((prop) => {
@@ -559,6 +575,29 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
   }
   expectSetPiecesTurnedAndLabeled(props, expectedNames, decor.proceduralModels);
   return `${String(ceilings.length)} ceilings and ${String(fixtures.length)} fixtures tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
+}
+
+/** The kind of each hero Model under the built map, sorted. */
+const heroKindsLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local kinds = {}
+for _, child in model:GetChildren() do
+  local kind = child:GetAttribute("RobloxKitHeroKind")
+  if child:IsA("Model") and typeof(kind) == "string" then table.insert(kinds, kind) end
+end
+table.sort(kinds)
+return game:GetService("HttpService"):JSONEncode(kinds)`;
+
+/** Proves the smoke map places at least one hero prop and Studio loaded each one build_map placed. */
+async function probeHeroProps(connection: StudioConnection): Promise<string> {
+  const { heroProps } = await styledSmokeMap();
+  expectEqual("the smoke map places a hero prop", heroProps.length > 0, true);
+  const studioId = await selectStudio(connection, undefined);
+  const built = z
+    .array(z.string())
+    .parse(JSON.parse(await executeLuau(connection, studioId, heroKindsLuau)));
+  expectEqual("hero Models in Studio", built, heroProps.map((hero) => hero.kind).sort());
+  return `${String(built.length)} hero props loaded: ${built.join(", ")}`;
 }
 
 /** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */
@@ -1013,6 +1052,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       [buildStepName, () => probeBuildMap(connection)],
       ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
       ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
+      ["build_map hero props", () => probeHeroProps(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],
