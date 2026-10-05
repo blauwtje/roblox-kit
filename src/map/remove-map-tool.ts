@@ -5,9 +5,10 @@ import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
+import { presetSchema } from "../style/preset-schema.ts";
 
-/** The surface roles whose MaterialVariants `build_map` names `<mapId>-<role>`; the same five as the preset schema. */
-const surfaceRoles = ["floor", "wall", "trim", "ceiling", "accent"];
+/** The surface roles whose MaterialVariants `build_map` names `<mapId>-<role>`: the keys of the preset schema's `surfaces`. */
+const surfaceRoles = Object.keys(presetSchema.shape.surfaces.shape);
 
 const removeMapInput = z.strictObject({
   /** The mapId that `build_map` returned. */

@@ -935,6 +935,7 @@ async function probePlaytest(
 async function probeRemoveMapLighting(
   connection: StudioConnection,
   lightingBefore: z.output<typeof lightingStateSchema>,
+  stateBefore: z.output<typeof placeStateSchema>,
 ): Promise<string> {
   const studioId = await selectStudio(connection, undefined);
   const readLighting = async () =>
@@ -965,7 +966,18 @@ async function probeRemoveMapLighting(
   expectEqual("remove_map B restored", removedSecond.lighting.restored, "original");
   expectEqual("remove_map B remaining styled maps", removedSecond.lighting.remainingStyledMaps, []);
   expectEqual("Lighting after removing B", await readLighting(), lightingBefore);
-  return "lighting held while B remained and returned to the original after B";
+  // Read before the cleanup in the caller's `finally`, which would remove these itself.
+  const stateAfter = placeStateSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, placeStateLuau)),
+  );
+  expectEqual(
+    "Workspace children after removing both maps",
+    stateAfter.workspace,
+    stateBefore.workspace,
+  );
+  expectEqual("terrain voxels after removing both maps", stateAfter.solidTerrainVoxels, 0);
+  expectEqual("smoke MaterialVariants after removing both maps", stateAfter.smokeVariants, 0);
+  return "lighting held while B remained and returned to the original after B; folder, terrain and variants gone";
 }
 
 /** Name of the step that builds the smoke map every later step uses; `--only` always keeps it. */
@@ -1040,7 +1052,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
     // Last: it removes the smoke map, which the steps above use.
     steps.push([
       "remove_map keeps lighting until the last styled map goes",
-      () => probeRemoveMapLighting(connection, lightingBefore),
+      () => probeRemoveMapLighting(connection, lightingBefore, stateBefore),
     ]);
     for (const [capability, attempt] of selectSteps(steps)) {
       findings.push(await probeTool(capability, attempt));

@@ -1,12 +1,26 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import {
+  judgeFindingSchema,
   judgeRound,
   type JudgeFinding,
   type JudgeRoundInput,
   type LoggedRound,
 } from "./judge-round.ts";
+
+await test("the finding types are the ones skills/visual-judge/finding.schema.json lists", () => {
+  const text = readFileSync(
+    new URL("../../skills/visual-judge/finding.schema.json", import.meta.url),
+    "utf8",
+  );
+  const agentSchema = JSON.parse(text) as { properties: { type: { enum: string[] } } };
+  assert.deepEqual(
+    [...judgeFindingSchema.shape.type.options].sort(),
+    [...agentSchema.properties.type.enum].sort(),
+  );
+});
 
 const date = "2026-01-01T00:00:00.000Z";
 

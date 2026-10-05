@@ -6,6 +6,7 @@ import { relationMapSpecSchema } from "../map/map-spec.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { loadPresets } from "../style/load-preset.ts";
+import { resolveStyle, type StyleSelection } from "../style/resolve-style.ts";
 import {
   judgeFindingSchema,
   judgeRound,
@@ -72,6 +73,8 @@ const judgeRoundOutput = z.strictObject({
   /** The judge's findings that showed nothing (no `evidence.visible`); they are not in `findings`. */
   rejected: z.array(z.looseObject({})),
   stopReason: z.enum(["pass", "round-limit", "repeat"]).nullable(),
+  /** Log lines that could not be read as rounds and so did not count toward repeat detection. */
+  warnings: z.array(z.string()),
   logFile: z.string(),
 });
 
@@ -118,23 +121,29 @@ async function readIfPresent(path: string): Promise<string | null> {
   }
 }
 
-/** The log's lines that read as rounds; a line that does not (hand-edited, cut) cannot take part in repeat detection and is skipped. */
-function parseLog(text: string | null): LoggedRound[] {
+/** The log's lines that read as rounds; a line that does not (hand-edited, cut) cannot take part in repeat detection, so it is skipped and counted. */
+function parseLog(text: string | null): { rounds: LoggedRound[]; skipped: number } {
   const rounds: LoggedRound[] = [];
+  let skipped = 0;
   for (const line of (text ?? "").split("\n")) {
     if (line.trim() === "") {
       continue;
     }
+    let value: unknown;
     try {
-      const parsed = loggedRoundSchema.safeParse(JSON.parse(line));
-      if (parsed.success) {
-        rounds.push(parsed.data);
-      }
+      value = JSON.parse(line);
     } catch {
+      skipped += 1;
       continue;
     }
+    const parsed = loggedRoundSchema.safeParse(value);
+    if (parsed.success) {
+      rounds.push(parsed.data);
+    } else {
+      skipped += 1;
+    }
   }
-  return rounds;
+  return { rounds, skipped };
 }
 
 async function ensureGitignored(projectDir: string): Promise<void> {
@@ -148,12 +157,14 @@ async function ensureGitignored(projectDir: string): Promise<void> {
   await writeFile(path, `${text ?? ""}${separator}${ignoredEntry}\n`);
 }
 
-/** The names each room type of the spec's preset accepts besides its own; none when the spec has no known preset. */
-async function acceptedNamesOf(preset: string | undefined): Promise<Record<string, string[]>> {
-  if (preset === undefined) {
+/** The names each room type of the spec's style accepts besides its own, overrides included as `build_map` resolves them; none when the spec has no style. */
+async function acceptedNamesOf(
+  style: StyleSelection | undefined,
+): Promise<Record<string, string[]>> {
+  if (style === undefined) {
     return {};
   }
-  const roomTypes = (await loadPresets()).get(preset)?.roomTypes ?? {};
+  const roomTypes = resolveStyle(await loadPresets(), style).roomTypes ?? {};
   return Object.fromEntries(
     Object.entries(roomTypes).map(([name, roomType]) => [name, roomType.roomNames ?? []]),
   );
@@ -169,7 +180,7 @@ export function createJudgeRoundTool(
     description:
       `Decides one round of the visual-judge loop from what its agents returned: drops judge findings without evidence.visible (returned as rejected), ` +
       `turns place-check mismatches and empty answers into spec-miss blocker findings, turns each quality axis median below ${String(config.visualPassScore)} into a major finding, ` +
-      `marks repeats of earlier rounds, sets stopReason (pass, round-limit at round ${String(config.maxJudgeRounds)}, repeat or null) and appends one line to ${config.judgeLogFile} in the project folder. ` +
+      `marks repeats of earlier rounds (warning of log lines it could not read), sets stopReason (pass, round-limit at round ${String(config.maxJudgeRounds)}, repeat or null) and appends one line to ${config.judgeLogFile} in the project folder. ` +
       `Dispatching the agents stays with the caller.`,
     inputSchema: judgeRoundInput,
     outputSchema: judgeRoundOutput,
@@ -182,16 +193,22 @@ export function createJudgeRoundTool(
     async handler(input) {
       const folder = checkedProjectDir(projectDir);
       const logFile = join(folder, config.judgeLogFile);
-      const logged = parseLog(await readIfPresent(logFile));
+      const { rounds: logged, skipped } = parseLog(await readIfPresent(logFile));
+      const warnings =
+        skipped === 0
+          ? []
+          : [
+              `${String(skipped)} line(s) of ${config.judgeLogFile} could not be read as rounds and were skipped, so repeats of those rounds are not detected.`,
+            ];
       const roundInput: JudgeRoundInput = {
         ...input,
-        acceptedNames: await acceptedNamesOf(input.spec.style?.preset),
+        acceptedNames: await acceptedNamesOf(input.spec.style),
       };
       const { result, rejected } = judgeRound(roundInput, logged, new Date().toISOString());
       await mkdir(dirname(logFile), { recursive: true });
       await appendFile(logFile, `${JSON.stringify(result)}\n`);
       await ensureGitignored(folder);
-      return toolResult({ ...result, rejected, logFile });
+      return toolResult({ ...result, rejected, warnings, logFile });
     },
   };
 }
