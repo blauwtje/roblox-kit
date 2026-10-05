@@ -3,7 +3,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import { config } from "../config.ts";
 import { checkGlbParts, readGlbParts, type GlbChecks } from "./glb-structure.ts";
-import { readHeroAssets, recordHeroAsset } from "./hero-asset-store.ts";
+import { materialMapNames } from "../style/preset-schema.ts";
+import {
+  materialMapKind,
+  readHeroAssets,
+  recordHeroAsset,
+  type MaterialMapName,
+} from "./hero-asset-store.ts";
 import type { OpenCloudCredentials } from "./open-cloud-credentials.ts";
 
 const glbFileName = "model.glb";
@@ -60,15 +66,23 @@ function finishedAssetId(operation: Operation): string | undefined {
   return operation.response.assetId;
 }
 
+/** One file to upload as an asset of `assetType`, with the MIME type and file name of its multipart part. */
+interface AssetFile {
+  assetType: "Model" | "Image";
+  bytes: Uint8Array<ArrayBuffer>;
+  contentType: string;
+  fileName: string;
+}
+
 /**
- * Uploads `glb` as a Model owned by the credentials' user or group, polls the operation until it is done and returns
+ * Uploads `file` owned by the credentials' user or group, polls the operation until it is done and returns
  * the new asset id. Throws on an HTTP error, a rejected upload or `maxPolls` polls without a result.
  */
-export async function uploadGlb(
-  glb: Uint8Array<ArrayBuffer>,
+async function uploadAsset(
+  file: AssetFile,
   displayName: string,
   credentials: OpenCloudCredentials,
-  transport: OpenCloudTransport = {},
+  transport: OpenCloudTransport,
 ): Promise<string> {
   const {
     fetchFn = fetch,
@@ -80,13 +94,13 @@ export async function uploadGlb(
   form.append(
     "request",
     JSON.stringify({
-      assetType: "Model",
+      assetType: file.assetType,
       displayName,
       description: displayName,
       creationContext: { creator: credentials.creator },
     }),
   );
-  form.append("fileContent", new Blob([glb], { type: "model/gltf-binary" }), glbFileName);
+  form.append("fileContent", new Blob([file.bytes], { type: file.contentType }), file.fileName);
   const created = await readOperation(
     await fetchFn(config.openCloudAssetsUrl, { method: "POST", headers, body: form }),
     "upload",
@@ -109,6 +123,38 @@ export async function uploadGlb(
     );
   }
   return assetId;
+}
+
+/** Uploads `glb` as a Model through `uploadAsset` and returns the new asset id. */
+export async function uploadGlb(
+  glb: Uint8Array<ArrayBuffer>,
+  displayName: string,
+  credentials: OpenCloudCredentials,
+  transport: OpenCloudTransport = {},
+): Promise<string> {
+  const file = {
+    assetType: "Model",
+    bytes: glb,
+    contentType: "model/gltf-binary",
+    fileName: glbFileName,
+  } as const;
+  return uploadAsset(file, displayName, credentials, transport);
+}
+
+/** Uploads `png` as an Image through `uploadAsset` and returns the new asset id. */
+export async function uploadImage(
+  png: Uint8Array<ArrayBuffer>,
+  displayName: string,
+  credentials: OpenCloudCredentials,
+  transport: OpenCloudTransport = {},
+): Promise<string> {
+  const file = {
+    assetType: "Image",
+    bytes: png,
+    contentType: "image/png",
+    fileName: `${displayName}.png`,
+  } as const;
+  return uploadAsset(file, displayName, credentials, transport);
 }
 
 const checksSchema = z.object({ hash: z.string(), passed: z.boolean() });
@@ -155,4 +201,39 @@ export async function uploadReviewedHeroProp(
   const assetId = await uploadGlb(glb, `${kind}-${hash}`, credentials, transport);
   await recordHeroAsset(hash, { kind, assetId }, assetsFile);
   return assetId;
+}
+
+const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/**
+ * The Image asset id of each map whose hash is in `hashes`. A map already recorded under its hash keeps its
+ * id without a call; every other map's `<map>.png` in `directory` must be a PNG, is uploaded as an Image named
+ * `<label>-<map>-<hash>` and recorded under its hash with the kind `materialMapKind(map)`.
+ */
+export async function uploadMaterialMaps(
+  label: string,
+  hashes: Record<MaterialMapName, string>,
+  directory: URL,
+  credentials: OpenCloudCredentials,
+  transport: OpenCloudTransport = {},
+  assetsFile?: URL,
+): Promise<Record<MaterialMapName, string>> {
+  const assetIds: Partial<Record<MaterialMapName, string>> = {};
+  for (const map of materialMapNames) {
+    const hash = hashes[map];
+    const kind = materialMapKind(map);
+    const recorded = (await readHeroAssets(assetsFile))[hash];
+    if (recorded?.kind === kind) {
+      assetIds[map] = recorded.assetId;
+      continue;
+    }
+    const png = new Uint8Array(await readFile(new URL(`${map}.png`, directory)));
+    if (!pngSignature.every((byte, index) => png[index] === byte)) {
+      throw new Error(`Refusing to upload ${label} ${map}: ${map}.png is not a PNG.`);
+    }
+    const assetId = await uploadImage(png, `${label}-${map}-${hash}`, credentials, transport);
+    await recordHeroAsset(hash, { kind, assetId }, assetsFile);
+    assetIds[map] = assetId;
+  }
+  return assetIds as Record<MaterialMapName, string>;
 }

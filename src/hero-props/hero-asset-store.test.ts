@@ -4,7 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { heroAssetsFile, readHeroAssets, recordHeroAsset } from "./hero-asset-store.ts";
+import { loadPresets } from "../style/load-preset.ts";
+import { materialMapNames } from "../style/preset-schema.ts";
+import {
+  heroAssetsFile,
+  materialMapHashes,
+  readHeroAssets,
+  recordHeroAsset,
+  recordedMaterialMaps,
+} from "./hero-asset-store.ts";
 
 async function tempFile(): Promise<URL> {
   const directory = await mkdtemp(join(tmpdir(), "hero-assets-"));
@@ -45,4 +53,42 @@ await test("a malformed record is an error, not an empty record", async () => {
   const file = await tempFile();
   await writeFile(file, '{"aaa":{"kind":"train-car"}}');
   await assert.rejects(readHeroAssets(file));
+});
+
+const brick = { pattern: "brick", seed: 1, roughness: 0.8, metalness: 0, studsPerTile: 8 } as const;
+
+await test("materialMapHashes gives four distinct hex hashes that studsPerTile does not change", async () => {
+  const hashes = await materialMapHashes(brick);
+  assert.deepEqual(Object.keys(hashes), [...materialMapNames]);
+  for (const hash of Object.values(hashes)) assert.match(hash, /^[0-9a-f]+$/);
+  assert.equal(new Set(Object.values(hashes)).size, 4);
+  assert.deepEqual(await materialMapHashes({ ...brick, studsPerTile: 4 }), hashes);
+  assert.notDeepEqual(await materialMapHashes({ ...brick, seed: 2 }), hashes);
+});
+
+await test("recordedMaterialMaps finds a map only under its hash and its own kind", async () => {
+  const file = await tempFile();
+  const hashes = await materialMapHashes(brick);
+  await recordHeroAsset(hashes.color, { kind: "material-color", assetId: "11" }, file);
+  await recordHeroAsset(hashes.normal, { kind: "train-car", assetId: "12" }, file);
+  const { recorded } = await recordedMaterialMaps(brick, file);
+  assert.deepEqual(recorded, { color: "11" });
+});
+
+await test("every committed preset's variant maps are the recorded uploads of its material recipe", async () => {
+  for (const [name, preset] of await loadPresets()) {
+    for (const [role, surface] of Object.entries(preset.surfaces)) {
+      const maps = surface.variant?.maps;
+      if (maps === undefined) continue;
+      assert.ok(surface.texture, `${name} ${role} has maps but no material recipe`);
+      const { recorded } = await recordedMaterialMaps(surface.texture);
+      for (const map of materialMapNames) {
+        assert.equal(
+          maps[map],
+          `rbxassetid://${String(recorded[map])}`,
+          `${name} ${role} ${map} is not the recorded upload of its recipe; run npm run materials -- ${name}`,
+        );
+      }
+    }
+  }
 });

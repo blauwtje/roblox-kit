@@ -10,5 +10,213 @@
   "a8726d792b7c": {
     "kind": "ticket-counter",
     "assetId": "110739437108812"
+  },
+  "32163033b7b3": {
+    "kind": "material-color",
+    "assetId": "102149203877179"
+  },
+  "883d31de38c0": {
+    "kind": "material-normal",
+    "assetId": "126317755803578"
+  },
+  "b4da9ca4e479": {
+    "kind": "material-roughness",
+    "assetId": "100075573886009"
+  },
+  "b62b86ae7d29": {
+    "kind": "material-metalness",
+    "assetId": "73390576686204"
+  },
+  "98cbdba78fa7": {
+    "kind": "material-color",
+    "assetId": "74462132868070"
+  },
+  "a659c2590ca1": {
+    "kind": "material-normal",
+    "assetId": "90605309067714"
+  },
+  "9ce6f33ff3c0": {
+    "kind": "material-roughness",
+    "assetId": "138580983633166"
+  },
+  "269240886fb3": {
+    "kind": "material-metalness",
+    "assetId": "105694477598657"
+  },
+  "df7cc089d774": {
+    "kind": "material-color",
+    "assetId": "105422431373089"
+  },
+  "63551350cfc1": {
+    "kind": "material-normal",
+    "assetId": "116678725508917"
+  },
+  "bc6f65704031": {
+    "kind": "material-roughness",
+    "assetId": "76424665179897"
+  },
+  "ffda12b1ccd4": {
+    "kind": "material-metalness",
+    "assetId": "82230345391788"
+  },
+  "b2581f59b412": {
+    "kind": "material-color",
+    "assetId": "101886775954498"
+  },
+  "5eb0cbbf9c57": {
+    "kind": "material-normal",
+    "assetId": "121280838191595"
+  },
+  "d35e34246aaa": {
+    "kind": "material-roughness",
+    "assetId": "98775013700409"
+  },
+  "9f0c11d7b8e5": {
+    "kind": "material-metalness",
+    "assetId": "110339947748991"
+  },
+  "eeb33ab152a6": {
+    "kind": "material-color",
+    "assetId": "93087728592285"
+  },
+  "c42d969b50b1": {
+    "kind": "material-normal",
+    "assetId": "128155784307845"
+  },
+  "2dd6a8115c1a": {
+    "kind": "material-roughness",
+    "assetId": "125129307940463"
+  },
+  "f73b4037ced9": {
+    "kind": "material-metalness",
+    "assetId": "102519662669125"
+  },
+  "366027c68d72": {
+    "kind": "material-color",
+    "assetId": "130065057630819"
+  },
+  "7d29d26da5c9": {
+    "kind": "material-normal",
+    "assetId": "112792974910106"
+  },
+  "58bbead72aaa": {
+    "kind": "material-roughness",
+    "assetId": "98379326153877"
+  },
+  "351eed268abb": {
+    "kind": "material-metalness",
+    "assetId": "113029769652675"
+  },
+  "e0cfd5da16cb": {
+    "kind": "material-color",
+    "assetId": "76104096918380"
+  },
+  "377ba0993f61": {
+    "kind": "material-normal",
+    "assetId": "97686264626805"
+  },
+  "a9a0a92b0fbd": {
+    "kind": "material-roughness",
+    "assetId": "113151695704150"
+  },
+  "1cada1f4b7e0": {
+    "kind": "material-metalness",
+    "assetId": "109963456104962"
+  },
+  "34d9dc9c575a": {
+    "kind": "material-color",
+    "assetId": "77907082513793"
+  },
+  "45380b93c27c": {
+    "kind": "material-normal",
+    "assetId": "83985631849811"
+  },
+  "71ffd47d6d34": {
+    "kind": "material-roughness",
+    "assetId": "73842214410584"
+  },
+  "0f397b4eef58": {
+    "kind": "material-metalness",
+    "assetId": "84817191365652"
+  },
+  "ce0a7a06dc97": {
+    "kind": "material-color",
+    "assetId": "133304636609178"
+  },
+  "e4a3c5d7421d": {
+    "kind": "material-normal",
+    "assetId": "78280306109777"
+  },
+  "307fc368fb87": {
+    "kind": "material-roughness",
+    "assetId": "77943209745766"
+  },
+  "5091936e2b36": {
+    "kind": "material-metalness",
+    "assetId": "127439091799359"
+  },
+  "43e88b60e3b0": {
+    "kind": "material-color",
+    "assetId": "94057716701691"
+  },
+  "f4141241ae43": {
+    "kind": "material-normal",
+    "assetId": "133134289971393"
+  },
+  "6e505cf05bf1": {
+    "kind": "material-roughness",
+    "assetId": "103718879387971"
+  },
+  "b52f605cbd9f": {
+    "kind": "material-metalness",
+    "assetId": "88967798543140"
+  },
+  "90796e99a82e": {
+    "kind": "material-color",
+    "assetId": "94577196174331"
+  },
+  "26a118e27e14": {
+    "kind": "material-normal",
+    "assetId": "110065199098099"
+  },
+  "519b7b329dd6": {
+    "kind": "material-roughness",
+    "assetId": "89365982000015"
+  },
+  "4e84a1c97962": {
+    "kind": "material-metalness",
+    "assetId": "94148668970457"
+  },
+  "cd1ee7b02037": {
+    "kind": "material-color",
+    "assetId": "83411752871916"
+  },
+  "649b7ef8b440": {
+    "kind": "material-normal",
+    "assetId": "109095510650278"
+  },
+  "23ac7ad4b88a": {
+    "kind": "material-roughness",
+    "assetId": "79730868481943"
+  },
+  "2863c72a5b5d": {
+    "kind": "material-metalness",
+    "assetId": "98254670163248"
+  },
+  "d65b58316011": {
+    "kind": "material-color",
+    "assetId": "83080171855685"
+  },
+  "f77563992525": {
+    "kind": "material-normal",
+    "assetId": "135126207529716"
+  },
+  "274607211f74": {
+    "kind": "material-roughness",
+    "assetId": "102780648403756"
+  },
+  "e3efdcc47804": {
+    "kind": "material-metalness",
+    "assetId": "132551521488165"
   }
 }

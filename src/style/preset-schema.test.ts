@@ -396,3 +396,55 @@ await test("presetSchema works without hero props and presetOverridesSchema acce
   const overrides = { heroProps: { "train-car": heroCar } };
   assert.equal(presetOverridesSchema.safeParse(overrides).success, true);
 });
+
+const brickRecipe = {
+  pattern: "brick",
+  seed: 3,
+  roughness: 0.8,
+  metalness: 0,
+  studsPerTile: 8,
+};
+const brickMaps = {
+  color: "rbxassetid://101",
+  normal: "rbxassetid://102",
+  roughness: "rbxassetid://103",
+  metalness: "rbxassetid://104",
+};
+
+function withWall(wall: Record<string, unknown>) {
+  const preset = validPreset();
+  return { ...preset, surfaces: { ...preset.surfaces, wall: { ...surface, ...wall } } };
+}
+
+await test("presetSchema takes a material recipe on a role, and a variant with or without its four maps", () => {
+  const variant = { baseMaterial: "Concrete", studsPerTile: 8 };
+  for (const wall of [
+    { texture: brickRecipe },
+    { texture: brickRecipe, variant },
+    { texture: brickRecipe, variant: { ...variant, maps: brickMaps } },
+  ]) {
+    assert.equal(presetSchema.safeParse(withWall(wall)).success, true, JSON.stringify(wall));
+  }
+});
+
+await test("presetSchema rejects a bad material recipe or map", () => {
+  const variant = { baseMaterial: "Concrete", studsPerTile: 8 };
+  const threeMaps = {
+    color: brickMaps.color,
+    roughness: brickMaps.roughness,
+    metalness: brickMaps.metalness,
+  };
+  for (const wall of [
+    { texture: { ...brickRecipe, pattern: "marble" } },
+    { texture: { ...brickRecipe, seed: 1.5 } },
+    { texture: { ...brickRecipe, roughness: 1.2 } },
+    { texture: { ...brickRecipe, metalness: -0.1 } },
+    { texture: { ...brickRecipe, studsPerTile: 0 } },
+    { texture: { ...brickRecipe, extra: 1 } },
+    { variant: { ...variant, maps: threeMaps } },
+    { variant: { ...variant, maps: { ...brickMaps, color: "rbxassetid://abc" } } },
+    { variant: { ...variant, maps: { ...brickMaps, color: "101" } } },
+  ]) {
+    assert.equal(presetSchema.safeParse(withWall(wall)).success, false, JSON.stringify(wall));
+  }
+});

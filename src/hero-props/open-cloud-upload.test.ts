@@ -5,7 +5,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { readHeroAssets } from "./hero-asset-store.ts";
-import { checksFileName, uploadGlb, uploadReviewedHeroProp } from "./open-cloud-upload.ts";
+import {
+  checksFileName,
+  uploadGlb,
+  uploadImage,
+  uploadMaterialMaps,
+  uploadReviewedHeroProp,
+} from "./open-cloud-upload.ts";
 
 const credentials = { apiKey: "test-key", creator: { userId: "42" } };
 const glb = new Uint8Array([0x67, 0x6c, 0x54, 0x46]);
@@ -190,5 +196,94 @@ await test("uploadReviewedHeroProp records nothing when the upload fails", async
     uploadReviewedHeroProp("train-car", "abc123", directory, credentials, { fetchFn }, assetsFile),
     /500/,
   );
+  assert.deepEqual(await readHeroAssets(assetsFile), {});
+});
+
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+await test("uploadImage posts a multipart Image request with a PNG part and returns the asset id", async () => {
+  const { fetchFn, calls } = fakeFetch([json(pending), json(finished)]);
+  const assetId = await uploadImage(png, "brick-color-abc", credentials, {
+    fetchFn,
+    pollIntervalMs: 0,
+  });
+  assert.equal(assetId, "9001");
+  assert.equal(calls.length, 2);
+  const form = calls[0]?.body;
+  assert.ok(form instanceof FormData);
+  const request = JSON.parse(form.get("request") as string) as Record<string, unknown>;
+  assert.equal(request.assetType, "Image");
+  assert.equal(request.displayName, "brick-color-abc");
+  assert.deepEqual(request.creationContext, { creator: { userId: "42" } });
+  const file = form.get("fileContent");
+  assert.ok(file instanceof File);
+  assert.equal(file.type, "image/png");
+  assert.equal(file.name, "brick-color-abc.png");
+  assert.deepEqual(new Uint8Array(await file.arrayBuffer()), png);
+});
+
+const mapHashes = { color: "c0", normal: "a1", roughness: "b2", metalness: "d3" };
+
+async function bakedFolder(contents: Uint8Array = png): Promise<URL> {
+  const directory = await mkdtemp(join(tmpdir(), "material-maps-"));
+  for (const map of Object.keys(mapHashes)) {
+    await writeFile(join(directory, `${map}.png`), contents);
+  }
+  return pathToFileURL(`${directory}/`);
+}
+
+await test("uploadMaterialMaps uploads only the unrecorded maps and records each under its hash", async () => {
+  const directory = await bakedFolder();
+  const assetsFile = new URL("hero-assets.json", directory);
+  await writeFile(assetsFile, JSON.stringify({ c0: { kind: "material-color", assetId: "500" } }));
+  const responses = ["601", "602", "603"].map((assetId) =>
+    json({ ...finished, response: { assetId } }),
+  );
+  const { fetchFn, calls } = fakeFetch(responses);
+  const assetIds = await uploadMaterialMaps(
+    "brick",
+    mapHashes,
+    directory,
+    credentials,
+    { fetchFn, pollIntervalMs: 0 },
+    assetsFile,
+  );
+  assert.deepEqual(assetIds, { color: "500", normal: "601", roughness: "602", metalness: "603" });
+  assert.equal(calls.length, 3);
+  assert.deepEqual(await readHeroAssets(assetsFile), {
+    c0: { kind: "material-color", assetId: "500" },
+    a1: { kind: "material-normal", assetId: "601" },
+    b2: { kind: "material-roughness", assetId: "602" },
+    d3: { kind: "material-metalness", assetId: "603" },
+  });
+  const again = fakeFetch([]);
+  const cached = await uploadMaterialMaps(
+    "brick",
+    mapHashes,
+    directory,
+    credentials,
+    { fetchFn: again.fetchFn, pollIntervalMs: 0 },
+    assetsFile,
+  );
+  assert.deepEqual(cached, assetIds);
+  assert.equal(again.calls.length, 0);
+});
+
+await test("uploadMaterialMaps refuses a map that is not a PNG and records nothing", async () => {
+  const directory = await bakedFolder(glb);
+  const assetsFile = new URL("hero-assets.json", directory);
+  const { fetchFn, calls } = fakeFetch([]);
+  await assert.rejects(
+    uploadMaterialMaps(
+      "brick",
+      mapHashes,
+      directory,
+      credentials,
+      { fetchFn, pollIntervalMs: 0 },
+      assetsFile,
+    ),
+    /color\.png is not a PNG/,
+  );
+  assert.equal(calls.length, 0);
   assert.deepEqual(await readHeroAssets(assetsFile), {});
 });

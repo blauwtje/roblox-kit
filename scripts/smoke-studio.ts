@@ -124,8 +124,14 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
  * types concourse, ticket-hall and platform, so the map also has set pieces. The yard is big enough for
  * the 40-stud train car hero prop to replace its track bed clear of the walls and the doorway.
  */
-/** No bundled preset sets a MaterialVariant, so the smoke asks for one to probe that build_map applies it. */
-const smokeWallVariant = { baseMaterial: "Brick", studsPerTile: 8 };
+/**
+ * The train-station wall's baked MaterialVariant once `npm run materials -- train-station` has written it, else a
+ * flat one, so the smoke probes that build_map applies the variant and its four maps.
+ */
+const smokeWallVariant = presets.get("train-station")?.surfaces.wall.variant ?? {
+  baseMaterial: "Brick",
+  studsPerTile: 8,
+};
 
 const smokeRelationSpec = relationMapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
@@ -604,7 +610,7 @@ async function probeHeroProps(connection: StudioConnection): Promise<string> {
 const paintedMapLuau = `
 local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
 local variant = game:GetService("MaterialService"):FindFirstChild("${smokeMapSpec.mapId}-wall")
-local painted = { floors = {}, walls = {}, wallVariants = {}, variantBase = "", variantStuds = 0 }
+local painted = { floors = {}, walls = {}, wallVariants = {}, variantBase = "", variantStuds = 0, variantMaps = {} }
 for _, part in model:GetChildren() do
   local list = if string.find(part.Name, "floor", 1, true) then painted.floors elseif string.find(part.Name, "wall", 1, true) then painted.walls else nil
   if list then table.insert(list, part.Color:ToHex()) end
@@ -613,6 +619,7 @@ end
 if variant and variant:IsA("MaterialVariant") then
   painted.variantBase = variant.BaseMaterial.Name
   painted.variantStuds = variant.StudsPerTile
+  painted.variantMaps = { color = variant.ColorMap, normal = variant.NormalMap, roughness = variant.RoughnessMap, metalness = variant.MetalnessMap }
 end
 return game:GetService("HttpService"):JSONEncode(painted)`;
 
@@ -622,6 +629,12 @@ const paintedMapSchema = z.object({
   wallVariants: z.array(z.string()),
   variantBase: z.string(),
   variantStuds: z.number(),
+  variantMaps: z.object({
+    color: z.string(),
+    normal: z.string(),
+    roughness: z.string(),
+    metalness: z.string(),
+  }),
 });
 
 async function probePaintedMap(connection: StudioConnection): Promise<string> {
@@ -644,6 +657,8 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
   );
   expectEqual("MaterialVariant base", painted.variantBase, smokeWallVariant.baseMaterial);
   expectEqual("MaterialVariant studsPerTile", painted.variantStuds, smokeWallVariant.studsPerTile);
+  const noMaps = { color: "", normal: "", roughness: "", metalness: "" };
+  expectEqual("MaterialVariant maps", painted.variantMaps, smokeWallVariant.maps ?? noMaps);
   return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
 }
 

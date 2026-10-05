@@ -6,23 +6,108 @@
   "surfaces": {
     "floor": {
       "material": "Marble",
-      "color": "#6b665e"
+      "color": "#6b665e",
+      "texture": {
+        "pattern": "tile",
+        "seed": 11,
+        "roughness": 0.35,
+        "metalness": 0,
+        "studsPerTile": 8
+      },
+      "variant": {
+        "baseMaterial": "Marble",
+        "studsPerTile": 8,
+        "maps": {
+          "color": "rbxassetid://102149203877179",
+          "normal": "rbxassetid://126317755803578",
+          "roughness": "rbxassetid://100075573886009",
+          "metalness": "rbxassetid://73390576686204"
+        }
+      }
     },
     "wall": {
       "material": "Brick",
-      "color": "#8a7f70"
+      "color": "#8a7f70",
+      "texture": {
+        "pattern": "brick",
+        "seed": 12,
+        "roughness": 0.85,
+        "metalness": 0,
+        "studsPerTile": 8
+      },
+      "variant": {
+        "baseMaterial": "Brick",
+        "studsPerTile": 8,
+        "maps": {
+          "color": "rbxassetid://74462132868070",
+          "normal": "rbxassetid://90605309067714",
+          "roughness": "rbxassetid://138580983633166",
+          "metalness": "rbxassetid://105694477598657"
+        }
+      }
     },
     "trim": {
       "material": "Metal",
-      "color": "#2a4a3c"
+      "color": "#2a4a3c",
+      "texture": {
+        "pattern": "metal",
+        "seed": 13,
+        "roughness": 0.45,
+        "metalness": 0.8,
+        "studsPerTile": 4
+      },
+      "variant": {
+        "baseMaterial": "Metal",
+        "studsPerTile": 4,
+        "maps": {
+          "color": "rbxassetid://105422431373089",
+          "normal": "rbxassetid://116678725508917",
+          "roughness": "rbxassetid://76424665179897",
+          "metalness": "rbxassetid://82230345391788"
+        }
+      }
     },
     "ceiling": {
       "material": "Concrete",
-      "color": "#c9c2b4"
+      "color": "#c9c2b4",
+      "texture": {
+        "pattern": "concrete",
+        "seed": 14,
+        "roughness": 0.9,
+        "metalness": 0,
+        "studsPerTile": 12
+      },
+      "variant": {
+        "baseMaterial": "Concrete",
+        "studsPerTile": 12,
+        "maps": {
+          "color": "rbxassetid://101886775954498",
+          "normal": "rbxassetid://121280838191595",
+          "roughness": "rbxassetid://98775013700409",
+          "metalness": "rbxassetid://110339947748991"
+        }
+      }
     },
     "accent": {
       "material": "Metal",
-      "color": "#d9a441"
+      "color": "#d9a441",
+      "texture": {
+        "pattern": "metal",
+        "seed": 15,
+        "roughness": 0.3,
+        "metalness": 0.9,
+        "studsPerTile": 4
+      },
+      "variant": {
+        "baseMaterial": "Metal",
+        "studsPerTile": 4,
+        "maps": {
+          "color": "rbxassetid://93087728592285",
+          "normal": "rbxassetid://128155784307845",
+          "roughness": "rbxassetid://125129307940463",
+          "metalness": "rbxassetid://102519662669125"
+        }
+      }
     }
   },
   "lighting": {

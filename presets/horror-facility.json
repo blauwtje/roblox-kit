@@ -6,19 +6,87 @@
   "surfaces": {
     "floor": {
       "material": "DiamondPlate",
-      "color": "#1c1f1d"
+      "color": "#1c1f1d",
+      "texture": {
+        "pattern": "plate",
+        "seed": 21,
+        "roughness": 0.55,
+        "metalness": 0.8,
+        "studsPerTile": 6
+      },
+      "variant": {
+        "baseMaterial": "DiamondPlate",
+        "studsPerTile": 6,
+        "maps": {
+          "color": "rbxassetid://130065057630819",
+          "normal": "rbxassetid://112792974910106",
+          "roughness": "rbxassetid://98379326153877",
+          "metalness": "rbxassetid://113029769652675"
+        }
+      }
     },
     "wall": {
       "material": "Concrete",
-      "color": "#3a4340"
+      "color": "#3a4340",
+      "texture": {
+        "pattern": "concrete",
+        "seed": 22,
+        "roughness": 0.9,
+        "metalness": 0,
+        "studsPerTile": 10
+      },
+      "variant": {
+        "baseMaterial": "Concrete",
+        "studsPerTile": 10,
+        "maps": {
+          "color": "rbxassetid://76104096918380",
+          "normal": "rbxassetid://97686264626805",
+          "roughness": "rbxassetid://113151695704150",
+          "metalness": "rbxassetid://109963456104962"
+        }
+      }
     },
     "trim": {
       "material": "Metal",
-      "color": "#5b6660"
+      "color": "#5b6660",
+      "texture": {
+        "pattern": "metal",
+        "seed": 23,
+        "roughness": 0.6,
+        "metalness": 0.7,
+        "studsPerTile": 4
+      },
+      "variant": {
+        "baseMaterial": "Metal",
+        "studsPerTile": 4,
+        "maps": {
+          "color": "rbxassetid://77907082513793",
+          "normal": "rbxassetid://83985631849811",
+          "roughness": "rbxassetid://73842214410584",
+          "metalness": "rbxassetid://84817191365652"
+        }
+      }
     },
     "ceiling": {
       "material": "Concrete",
-      "color": "#2b1d1d"
+      "color": "#2b1d1d",
+      "texture": {
+        "pattern": "concrete",
+        "seed": 24,
+        "roughness": 0.95,
+        "metalness": 0,
+        "studsPerTile": 12
+      },
+      "variant": {
+        "baseMaterial": "Concrete",
+        "studsPerTile": 12,
+        "maps": {
+          "color": "rbxassetid://133304636609178",
+          "normal": "rbxassetid://78280306109777",
+          "roughness": "rbxassetid://77943209745766",
+          "metalness": "rbxassetid://127439091799359"
+        }
+      }
     },
     "accent": {
       "material": "Neon",

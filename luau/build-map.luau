@@ -52,9 +52,18 @@ type HeroPropRecord = {
 
 type HeroLoadFailure = { kind: string, assetId: string, error: string }
 
+-- The ContentIds of a variant's baked maps (rbxassetid://<id>), uploaded by `npm run materials`.
+type VariantMaps = {
+	color: string,
+	normal: string,
+	roughness: string,
+	metalness: string,
+}
+
 type Variant = {
 	baseMaterial: string,
 	studsPerTile: number,
+	maps: VariantMaps?,
 }
 
 type LightRecord = {
@@ -181,6 +190,14 @@ local function variantFor(role: string, variant: Variant): MaterialVariant
 	materialVariant.Name = variantName
 	materialVariant.BaseMaterial = materialNamed(variant.baseMaterial)
 	materialVariant.StudsPerTile = variant.studsPerTile
+	-- Without maps the variant renders flat color; a rebuild without them clears earlier maps.
+	local maps = variant.maps
+	materialVariant.ColorMap = if maps then maps.color else ""
+	materialVariant.NormalMap = if maps then maps.normal else ""
+	materialVariant.RoughnessMap = if maps then maps.roughness else ""
+	materialVariant.MetalnessMap = if maps then maps.metalness else ""
+	-- Organic breaks the visible repeat of a tiled texture on long walls and floors.
+	materialVariant.MaterialPattern = if maps then Enum.MaterialPattern.Organic else Enum.MaterialPattern.Regular
 	materialVariant.Parent = MaterialService
 	return materialVariant
 end

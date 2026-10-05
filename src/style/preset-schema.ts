@@ -9,13 +9,51 @@ const materialName = z.string().min(1);
 /** The five surface roles a preset colors; a prop part takes one role's material and color. */
 const surfaceRoleName = z.enum(["floor", "wall", "trim", "ceiling", "accent"]);
 
+/** The procedural patterns `src/style/material-recipe.py` bakes. */
+export const materialPatterns = ["brick", "tile", "concrete", "metal", "plate", "panel"] as const;
+
+/** The four maps a material recipe bakes, in the order of MaterialVariant's map properties. */
+export const materialMapNames = ["color", "normal", "roughness", "metalness"] as const;
+
+const unit = z.number().min(0).max(1);
+
+/**
+ * A role's procedural PBR material: baked by `npm run materials -- <preset>` to four tileable maps that are
+ * uploaded as Images and written into the role's `variant.maps`. Only `pattern`, `seed`, `roughness` and
+ * `metalness` shape the maps; `studsPerTile` is the size of one tile in the world.
+ */
+export const materialRecipeSchema = z.strictObject({
+  pattern: z.enum(materialPatterns),
+  seed: z.number().int().nonnegative(),
+  roughness: unit,
+  metalness: unit,
+  studsPerTile: z.number().positive(),
+});
+
+export type MaterialRecipe = z.output<typeof materialRecipeSchema>;
+
+const assetContentId = z.string().regex(/^rbxassetid:\/\/\d+$/, "expected rbxassetid://<digits>");
+
+const materialMaps = z.strictObject({
+  color: assetContentId,
+  normal: assetContentId,
+  roughness: assetContentId,
+  metalness: assetContentId,
+});
+
 const surfaceRole = z.strictObject({
   /** Built-in Material name. */
   material: materialName,
   color: hexColor,
-  /** A MaterialVariant renders flat color only, so it is a stylized finish, not a texture. */
+  /** The role's procedural material; its baked and uploaded maps land in `variant.maps`. */
+  texture: materialRecipeSchema.optional(),
+  /** A MaterialVariant without `maps` renders flat color only; with them it shows the baked texture. */
   variant: z
-    .strictObject({ baseMaterial: materialName, studsPerTile: z.number().positive() })
+    .strictObject({
+      baseMaterial: materialName,
+      studsPerTile: z.number().positive(),
+      maps: materialMaps.optional(),
+    })
     .optional(),
 });
 

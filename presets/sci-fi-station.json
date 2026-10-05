@@ -6,19 +6,87 @@
   "surfaces": {
     "floor": {
       "material": "SmoothPlastic",
-      "color": "#3a4656"
+      "color": "#3a4656",
+      "texture": {
+        "pattern": "panel",
+        "seed": 31,
+        "roughness": 0.4,
+        "metalness": 0.2,
+        "studsPerTile": 8
+      },
+      "variant": {
+        "baseMaterial": "SmoothPlastic",
+        "studsPerTile": 8,
+        "maps": {
+          "color": "rbxassetid://94057716701691",
+          "normal": "rbxassetid://133134289971393",
+          "roughness": "rbxassetid://103718879387971",
+          "metalness": "rbxassetid://88967798543140"
+        }
+      }
     },
     "wall": {
       "material": "SmoothPlastic",
-      "color": "#e6ebf0"
+      "color": "#e6ebf0",
+      "texture": {
+        "pattern": "panel",
+        "seed": 32,
+        "roughness": 0.35,
+        "metalness": 0.1,
+        "studsPerTile": 12
+      },
+      "variant": {
+        "baseMaterial": "SmoothPlastic",
+        "studsPerTile": 12,
+        "maps": {
+          "color": "rbxassetid://94577196174331",
+          "normal": "rbxassetid://110065199098099",
+          "roughness": "rbxassetid://89365982000015",
+          "metalness": "rbxassetid://94148668970457"
+        }
+      }
     },
     "trim": {
       "material": "Metal",
-      "color": "#9aa7b4"
+      "color": "#9aa7b4",
+      "texture": {
+        "pattern": "metal",
+        "seed": 33,
+        "roughness": 0.35,
+        "metalness": 0.85,
+        "studsPerTile": 4
+      },
+      "variant": {
+        "baseMaterial": "Metal",
+        "studsPerTile": 4,
+        "maps": {
+          "color": "rbxassetid://83411752871916",
+          "normal": "rbxassetid://109095510650278",
+          "roughness": "rbxassetid://79730868481943",
+          "metalness": "rbxassetid://98254670163248"
+        }
+      }
     },
     "ceiling": {
       "material": "Metal",
-      "color": "#141b26"
+      "color": "#141b26",
+      "texture": {
+        "pattern": "metal",
+        "seed": 34,
+        "roughness": 0.5,
+        "metalness": 0.7,
+        "studsPerTile": 8
+      },
+      "variant": {
+        "baseMaterial": "Metal",
+        "studsPerTile": 8,
+        "maps": {
+          "color": "rbxassetid://83080171855685",
+          "normal": "rbxassetid://135126207529716",
+          "roughness": "rbxassetid://102780648403756",
+          "metalness": "rbxassetid://132551521488165"
+        }
+      }
     },
     "accent": {
       "material": "Neon",

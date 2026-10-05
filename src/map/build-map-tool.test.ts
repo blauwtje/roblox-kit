@@ -201,7 +201,7 @@ await test("a style sends its palette colors and role variants; without a style,
   const styledCode = String(styledConnection.requests[0]?.arguments["code"]);
   assert.ok(String(styledConnection.requests[0]?.arguments["code"]).includes('"phase":"shell"'));
   assert.ok(styledCode.includes('"color":"#8a7f70"'));
-  assert.ok(styledCode.includes('"variants":{"wall":{"baseMaterial":"Brick","studsPerTile":8}}'));
+  assert.ok(styledCode.includes('"wall":{"baseMaterial":"Brick","studsPerTile":8'));
 
   const plainStudio = phaseStudio();
   await run(plainStudio, twoRoomSpec);

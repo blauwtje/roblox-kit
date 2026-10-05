@@ -17,6 +17,7 @@
     "test": "node --test",
     "hero-props": "node scripts/hero-props.ts",
     "hero-props:upload": "node scripts/upload-hero-props.ts",
+    "materials": "node scripts/materials.ts",
     "smoke:studio": "node scripts/smoke-studio.ts",
     "check:blink": "node scripts/check-blink-output.ts",
     "smoke:data": "node scripts/smoke-data.ts",
