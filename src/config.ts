@@ -99,6 +99,10 @@ export const config = Object.freeze({
   qualityReviewersPerRoom: 3,
   /** Milliseconds one reference-scored reviewer (a headless `claude -p` reading every reference and capture) may take. */
   qualityReviewTimeoutMs: 420_000,
+  /** Rounds of one visual-judge loop; `judge_round` reports `round-limit` from this round on. */
+  maxJudgeRounds: 3,
+  /** Where `judge_round` appends one line per round, under the project folder. */
+  judgeLogFile: ".roblox-kit/judge-log.jsonl",
   /** The score every axis median of a room must reach to pass the quality review, on the 1-10 scale. */
   visualPassScore: 7,
   calibrationReferenceMeanFloor: 6,
