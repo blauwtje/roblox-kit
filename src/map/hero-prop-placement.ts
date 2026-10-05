@@ -1,5 +1,5 @@
 import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
-import type { Preset } from "../style/preset-schema.ts";
+import { heroParts, type Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import { roomBounds, type PropRecord } from "./prop-placement.ts";
@@ -84,7 +84,9 @@ function heroRecord(
 ): HeroPropRecord {
   const { width, height, depth } = recipe.size;
   const surfaces: HeroPropRecord["surfaces"] = {};
-  for (const role of new Set<SurfaceRole>(recipe.parts.map((part) => part.role))) {
+  for (const role of new Set<SurfaceRole>(
+    heroParts(recipe.operations).map((part) => part.shape.role),
+  )) {
     const { color, material } = style.surfaces[role];
     surfaces[role] = { color, material };
   }

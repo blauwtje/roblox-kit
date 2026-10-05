@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { config } from "../config.ts";
 import { recipeHash } from "../hero-props/recipe-hash.ts";
 import { loadPresets } from "../style/load-preset.ts";
-import type { Preset } from "../style/preset-schema.ts";
+import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { propsOf } from "./build-map-tool.ts";
 import { readHeroAssets } from "../hero-props/hero-asset-store.ts";
@@ -121,7 +121,10 @@ await test("the recipe hash repeats generate-hero-prop's computation over the re
     "utf8",
   );
   const roleColors = Object.fromEntries(
-    recipe.parts.map((part) => [part.role, base.surfaces[part.role].color]),
+    heroParts(recipe.operations).map((part) => [
+      part.shape.role,
+      base.surfaces[part.shape.role].color,
+    ]),
   );
   assert.equal(hash, recipeHash({ recipe, roleColors }, generator));
   assert.match(hash, /^[0-9a-f]{12}$/);
@@ -143,7 +146,7 @@ await test("a recorded asset takes the replaced set piece's slot, standing on it
     yaw: trackBed.yaw,
     size: { x: recipe.size.width, y: recipe.size.height, z: recipe.size.depth },
     surfaces: Object.fromEntries(
-      [...new Set(recipe.parts.map((part) => part.role))].map((role) => [
+      [...new Set(heroParts(recipe.operations).map((part) => part.shape.role))].map((role) => [
         role,
         { color: base.surfaces[role].color, material: base.surfaces[role].material },
       ]),

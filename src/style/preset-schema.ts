@@ -238,34 +238,35 @@ const propRule = z.strictObject({
 
 const studPoint = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 
-/** A box subtracted from a part, centered `center` studs from the part's own center. */
-const heroCut = z.strictObject({ center: studPoint, size: studDimensions });
+/** The phases of a hero prop's recipe, in the order its operations run. */
+export const heroPhases = ["blockout", "structure", "form", "material", "surface"] as const;
 
-/** Fields every hero-prop part shares: the surface role it takes, where its center sits and how it is finished. */
-const heroPartBase = {
+/** Fields every hero-prop operation shares: the phase that groups it. */
+const heroOperationBase = { phase: z.enum(heroPhases) };
+
+/** Fields every shape operation shares: the surface role it takes, where its center sits and its bevel. */
+const heroShapeBase = {
+  ...heroOperationBase,
   role: surfaceRoleName,
   /** Studs from the prop's footprint center on the floor (x across, y up, z along the depth). */
   center: studPoint,
-  /** Studs of bevel on every edge of the part, in place of a sharp edge. */
+  /** Studs of bevel on every edge of the shape, in place of a sharp edge. */
   bevel: z.number().positive().optional(),
-  /** Boxes cut out of the part after its bevel. */
-  cuts: z.array(heroCut).min(1).optional(),
-  /** `count` copies of the part, each `step` studs further than the one before; the first stays on `center`. */
-  array: z.strictObject({ count: z.number().int().min(2).max(64), step: studPoint }).optional(),
 };
 
-/** Sides of a round part, a cylinder or a lathe; the generator's own default when absent. */
+/** Sides of a round shape, a cylinder or a lathe; the generator's own default when absent. */
 const heroSegments = z.number().int().min(3).max(64).optional();
 
 const profilePoint = z.strictObject({ x: z.number(), y: z.number() });
 
-/** One shape of a hero prop; the generator joins the parts of each role into one mesh. */
-const heroPart = z.discriminatedUnion("shape", [
-  z.strictObject({ shape: z.literal("box"), ...heroPartBase, size: studDimensions }),
+/** An operation that adds a piece; the cut and array operations after it change that piece. */
+const heroShapeOperation = z.discriminatedUnion("op", [
+  /** A box, bevelled on every edge when `bevel` is set. */
+  z.strictObject({ op: z.literal("box"), ...heroShapeBase, size: studDimensions }),
   /** A cylinder whose axis runs along `axis`, `length` studs long. */
   z.strictObject({
-    shape: z.literal("cylinder"),
-    ...heroPartBase,
+    op: z.literal("cylinder"),
+    ...heroShapeBase,
     radius: z.number().positive(),
     length: z.number().positive(),
     axis: z.enum(["x", "y", "z"]),
@@ -273,39 +274,113 @@ const heroPart = z.discriminatedUnion("shape", [
   }),
   /** A closed ring of `points` (radius from the axis, offset along it) revolved once around `axis`. */
   z.strictObject({
-    shape: z.literal("lathe"),
-    ...heroPartBase,
+    op: z.literal("lathe"),
+    ...heroShapeBase,
     points: z.array(z.strictObject({ radius: z.number().positive(), offset: z.number() })).min(3),
     axis: z.enum(["x", "y", "z"]),
     segments: heroSegments,
   }),
   /** A polygon of `points` (x across, y up) extruded `depth` studs along z, centered on `center`. */
   z.strictObject({
-    shape: z.literal("profile"),
-    ...heroPartBase,
+    op: z.literal("profile"),
+    ...heroShapeBase,
     points: z.array(profilePoint).min(3),
     depth: z.number().positive(),
   }),
   /** A closed polygon `section` (x across, y up) swept along `path`, whose points are studs from `center`. */
   z.strictObject({
-    shape: z.literal("sweep"),
-    ...heroPartBase,
+    op: z.literal("sweep"),
+    ...heroShapeBase,
     section: z.array(profilePoint).min(3),
     path: z.array(studPoint).min(2),
   }),
 ]);
 
+/** A box subtracted from the piece the operation before it built, centered `center` studs from that piece's own center. */
+const heroCutOperation = z.strictObject({
+  op: z.literal("cut"),
+  ...heroOperationBase,
+  center: studPoint,
+  size: studDimensions,
+});
+
+/** `count` copies of the piece the operations before it built, each `step` studs further than the one before; the first stays on the piece's center. */
+const heroArrayOperation = z.strictObject({
+  op: z.literal("array"),
+  ...heroOperationBase,
+  count: z.number().int().min(2).max(64),
+  step: studPoint,
+});
+
+const heroOperation = z.union([heroShapeOperation, heroCutOperation, heroArrayOperation]);
+
+export type HeroShapeOperation = z.output<typeof heroShapeOperation>;
+type HeroCutOperation = z.output<typeof heroCutOperation>;
+type HeroArrayOperation = z.output<typeof heroArrayOperation>;
+type HeroOperation = z.output<typeof heroOperation>;
+
+/** A shape with the cuts and the array that follow it in a recipe's operations. */
+export interface HeroPart {
+  shape: HeroShapeOperation;
+  cuts: HeroCutOperation[];
+  array?: HeroArrayOperation;
+}
+
+/** Groups a recipe's operations into its pieces: each shape operation takes the cut and array operations after it. */
+export function heroParts(operations: HeroOperation[]): HeroPart[] {
+  const parts: HeroPart[] = [];
+  for (const operation of operations) {
+    const part = parts.at(-1);
+    if (operation.op === "cut") part?.cuts.push(operation);
+    else if (operation.op === "array") {
+      if (part !== undefined) part.array = operation;
+    } else parts.push({ shape: operation, cuts: [] });
+  }
+  return parts;
+}
+
+/** Why a recipe's operations break the rules, or undefined: phases never go back, and a cut or array changes a piece that has no array yet. */
+function heroOperationsProblem(operations: HeroOperation[]): string | undefined {
+  let phaseIndex = 0;
+  let pieceOpen = false;
+  for (const [index, operation] of operations.entries()) {
+    const operationPhase = heroPhases.indexOf(operation.phase);
+    const label = `operation ${String(index)} (${operation.op})`;
+    if (operationPhase < phaseIndex) return `${label} goes back to the ${operation.phase} phase`;
+    phaseIndex = operationPhase;
+    if (
+      operation.op === "box" ||
+      operation.op === "cylinder" ||
+      operation.op === "lathe" ||
+      operation.op === "profile" ||
+      operation.op === "sweep"
+    ) {
+      pieceOpen = true;
+    } else {
+      if (!pieceOpen) return `${label} has no piece to change, or its piece already has an array`;
+      if (operation.op === "array") pieceOpen = false;
+    }
+  }
+  return undefined;
+}
 /** Most triangles a hero prop's mesh may hold, so a room's props stay inside its performance budget. */
 const maxHeroTriangles = 20000;
 
-/** A hero prop built from primitive shapes in studs: what it is, the set piece it replaces, its overall size and mesh budget. */
+/** A hero prop built from an ordered list of operations in studs: what it is, the set piece it replaces, its overall size and mesh budget. */
 const heroProp = z.strictObject({
   description: z.string().min(1),
   /** Kind of the set piece this prop takes the slot of. */
   replaces: z.string().min(1),
   size: studDimensions,
   triangleBudget: z.number().int().positive().max(maxHeroTriangles),
-  parts: z.array(heroPart).min(1),
+  /** What builds the prop, phase by phase: the generator runs the operations in order and joins the pieces of each role into one mesh. */
+  operations: z
+    .array(heroOperation)
+    .min(1)
+    .superRefine((operations, context) => {
+      const problem = heroOperationsProblem(operations);
+      if (problem !== undefined) context.addIssue({ code: "custom", message: problem });
+    }),
 });
 
 /** What a room of one type shows: the set pieces that identify it, the arrangements that fill it, the text its signs carry and the room names a reviewer may call it. */

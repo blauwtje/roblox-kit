@@ -7,8 +7,12 @@ import { resolveRelations } from "../map/relation-solver.ts";
 import { placeSetPieces } from "../map/set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "../map/size-rules.ts";
 import { loadPresets } from "./load-preset.ts";
-import { roleTexelDensity, texelDensity } from "./preset-schema.ts";
-import type { Preset } from "./preset-schema.ts";
+import {
+  heroParts,
+  roleTexelDensity,
+  texelDensity,
+  type HeroShapeOperation,
+} from "./preset-schema.ts";
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
 
@@ -177,7 +181,6 @@ await test("the ticket hall's ticket counter replaces its ticket-counter set pie
 
 type Axis = "x" | "y" | "z";
 type Bounds = Record<Axis, { min: number; max: number }>;
-type HeroPart = NonNullable<Preset["heroProps"]>[string]["parts"][number];
 
 /** A cylinder-like part's extent from its center: `low` to `high` along its axis, `radius` on the other two. */
 function roundBounds(axis: Axis, radius: number, low: number, high: number): Bounds {
@@ -190,45 +193,45 @@ function roundBounds(axis: Axis, radius: number, low: number, high: number): Bou
   };
 }
 
-/** The part's extent from its own center, array copies excluded; bevels and cuts only remove material, so they are ignored. */
-function shapeBounds(part: HeroPart): Bounds {
-  switch (part.shape) {
+/** The shape's extent from its own center, array copies excluded; bevels and cuts only remove material, so they are ignored. */
+function shapeBounds(shape: HeroShapeOperation): Bounds {
+  switch (shape.op) {
     case "box":
       return {
-        x: { min: -part.size.width / 2, max: part.size.width / 2 },
-        y: { min: -part.size.height / 2, max: part.size.height / 2 },
-        z: { min: -part.size.depth / 2, max: part.size.depth / 2 },
+        x: { min: -shape.size.width / 2, max: shape.size.width / 2 },
+        y: { min: -shape.size.height / 2, max: shape.size.height / 2 },
+        z: { min: -shape.size.depth / 2, max: shape.size.depth / 2 },
       };
     case "cylinder":
-      return roundBounds(part.axis, part.radius, -part.length / 2, part.length / 2);
+      return roundBounds(shape.axis, shape.radius, -shape.length / 2, shape.length / 2);
     case "lathe":
       return roundBounds(
-        part.axis,
-        Math.max(...part.points.map((point) => point.radius)),
-        Math.min(...part.points.map((point) => point.offset)),
-        Math.max(...part.points.map((point) => point.offset)),
+        shape.axis,
+        Math.max(...shape.points.map((point) => point.radius)),
+        Math.min(...shape.points.map((point) => point.offset)),
+        Math.max(...shape.points.map((point) => point.offset)),
       );
     case "sweep": {
       // Each path point carries the section turned to face along the path, so it reaches at most the
       // section's farthest corner from the section origin in any direction.
-      const reach = Math.max(...part.section.map((corner) => Math.hypot(corner.x, corner.y)));
+      const reach = Math.max(...shape.section.map((corner) => Math.hypot(corner.x, corner.y)));
       const reachAlong = (axis: Axis) => ({
-        min: Math.min(...part.path.map((point) => point[axis])) - reach,
-        max: Math.max(...part.path.map((point) => point[axis])) + reach,
+        min: Math.min(...shape.path.map((point) => point[axis])) - reach,
+        max: Math.max(...shape.path.map((point) => point[axis])) + reach,
       });
       return { x: reachAlong("x"), y: reachAlong("y"), z: reachAlong("z") };
     }
     case "profile":
       return {
         x: {
-          min: Math.min(...part.points.map((point) => point.x)),
-          max: Math.max(...part.points.map((point) => point.x)),
+          min: Math.min(...shape.points.map((point) => point.x)),
+          max: Math.max(...shape.points.map((point) => point.x)),
         },
         y: {
-          min: Math.min(...part.points.map((point) => point.y)),
-          max: Math.max(...part.points.map((point) => point.y)),
+          min: Math.min(...shape.points.map((point) => point.y)),
+          max: Math.max(...shape.points.map((point) => point.y)),
         },
-        z: { min: -part.depth / 2, max: part.depth / 2 },
+        z: { min: -shape.depth / 2, max: shape.depth / 2 },
       };
   }
 }
@@ -238,8 +241,8 @@ await test("every part of each hero prop lies inside the prop's size", async () 
   assert.ok(heroProps !== undefined);
   for (const [kind, heroProp] of Object.entries(heroProps)) {
     const { width, height, depth } = heroProp.size;
-    for (const part of heroProp.parts) {
-      const bounds = shapeBounds(part);
+    for (const part of heroParts(heroProp.operations)) {
+      const bounds = shapeBounds(part.shape);
       // The array's first copy stays on `center`, the last sits `step * (count - 1)` further.
       const copies = part.array === undefined ? 0 : part.array.count - 1;
       const shift = {
@@ -248,18 +251,21 @@ await test("every part of each hero prop lies inside the prop's size", async () 
         z: (part.array?.step.z ?? 0) * copies,
       };
       for (const axis of ["x", "y", "z"] as const) {
-        const first = part.center[axis] + bounds[axis].min;
-        const last = part.center[axis] + bounds[axis].max;
+        const first = part.shape.center[axis] + bounds[axis].min;
+        const last = part.shape.center[axis] + bounds[axis].max;
         const low = Math.min(first, first + shift[axis]);
         const high = Math.max(last, last + shift[axis]);
         const [floor, ceiling] =
           axis === "y"
             ? [0, height]
             : [-(axis === "x" ? width : depth) / 2, (axis === "x" ? width : depth) / 2];
-        assert.ok(low >= floor - 1e-9, `${kind}: ${part.shape} part exceeds the ${axis} minimum`);
+        assert.ok(
+          low >= floor - 1e-9,
+          `${kind}: ${part.shape.op} part exceeds the ${axis} minimum`,
+        );
         assert.ok(
           high <= ceiling + 1e-9,
-          `${kind}: ${part.shape} part exceeds the ${axis} maximum`,
+          `${kind}: ${part.shape.op} part exceeds the ${axis} maximum`,
         );
       }
     }

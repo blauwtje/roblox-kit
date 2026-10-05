@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { config } from "../config.ts";
 import { loadPresets } from "../style/load-preset.ts";
-import type { Preset } from "../style/preset-schema.ts";
+import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
 import { blenderPath } from "./blender-path.ts";
 import { recipeHash } from "./recipe-hash.ts";
@@ -35,7 +35,7 @@ function structureProblems(recipe: HeroPropRecipe, structure: GlbStructure): str
       `${String(structure.triangles)} triangles exceed the budget of ${String(recipe.triangleBudget)}`,
     );
   }
-  for (const role of new Set(recipe.parts.map((part) => part.role))) {
+  for (const role of new Set(heroParts(recipe.operations).map((part) => part.shape.role))) {
     if (!structure.meshNames.includes(role)) problems.push(`no mesh named "${role}"`);
     if (!structure.materialNames.includes(role)) problems.push(`no material named "${role}"`);
   }
@@ -67,8 +67,8 @@ export async function generateHeroProp(
   if (recipe === undefined) throw new Error(`Preset "${presetName}" has no hero prop "${kind}"`);
 
   const roleColors: Record<string, string> = {};
-  for (const part of recipe.parts) {
-    roleColors[part.role] = preset.surfaces[part.role].color;
+  for (const part of heroParts(recipe.operations)) {
+    roleColors[part.shape.role] = preset.surfaces[part.shape.role].color;
   }
   const generatorSource = await readFile(generatorScript, "utf8");
   const hash = recipeHash({ recipe, roleColors }, generatorSource);
@@ -79,7 +79,10 @@ export async function generateHeroProp(
   const glb = new URL(glbFileName, directory);
   await mkdir(directory, { recursive: true });
   const recipeFile = new URL(recipeFileName, directory);
-  await writeFile(recipeFile, JSON.stringify({ parts: recipe.parts, roles: roleColors }, null, 2));
+  await writeFile(
+    recipeFile,
+    JSON.stringify({ operations: recipe.operations, roles: roleColors }, null, 2),
+  );
 
   await execFileAsync(
     blenderPath(process.env),

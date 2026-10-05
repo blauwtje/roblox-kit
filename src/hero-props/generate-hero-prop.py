@@ -180,6 +180,19 @@ def cut_piece(data, part):
     return result
 
 
+def group_operations(operations):
+    """Folds the ordered operations into parts: each shape operation takes the cut and array operations after it."""
+    parts = []
+    for operation in operations:
+        if operation["op"] == "cut":
+            parts[-1].setdefault("cuts", []).append(operation)
+        elif operation["op"] == "array":
+            parts[-1]["array"] = operation
+        else:
+            parts.append(dict(operation, shape=operation["op"]))
+    return parts
+
+
 def add_part(mesh, part):
     """Builds one part into `mesh`: shape, bevel, cuts, then the array copies."""
     piece = bmesh.new()
@@ -429,7 +442,7 @@ def main():
         recipe = json.load(handle)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     parts_by_role = {}
-    for part in recipe["parts"]:
+    for part in group_operations(recipe["operations"]):
         parts_by_role.setdefault(part["role"], []).append(part)
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"

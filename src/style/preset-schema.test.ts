@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { presetOverridesSchema, presetSchema } from "./preset-schema.ts";
+import { heroParts, presetOverridesSchema, presetSchema } from "./preset-schema.ts";
 
 const surface = { material: "Concrete", color: "#808080" };
 const light = { range: 40, brightness: 1, color: "#ffffff" };
@@ -291,10 +291,17 @@ const heroCar = {
   replaces: "track-bed",
   size: { width: 10, height: 12, depth: 40 },
   triangleBudget: 20000,
-  parts: [
-    { shape: "box", role: "wall", center: { x: 0, y: 6, z: 0 }, size: fixtureSize },
+  operations: [
     {
-      shape: "cylinder",
+      op: "box",
+      phase: "blockout",
+      role: "wall",
+      center: { x: 0, y: 6, z: 0 },
+      size: fixtureSize,
+    },
+    {
+      op: "cylinder",
+      phase: "structure",
       role: "trim",
       center: { x: 0, y: 1, z: 0 },
       radius: 1,
@@ -302,7 +309,8 @@ const heroCar = {
       axis: "x",
     },
     {
-      shape: "profile",
+      op: "profile",
+      phase: "form",
       role: "accent",
       center: { x: 0, y: 8, z: 0 },
       points: [
@@ -319,7 +327,7 @@ const roomWithHero = (heroProps: string[]) => ({
   concourse: { setPieces: ["departure-board"], signLabel: "Concourse", heroProps },
 });
 
-await test("presetSchema accepts a hero prop recipe with box, cylinder and profile parts and a room type that declares it", () => {
+await test("presetSchema accepts a hero prop recipe with box, cylinder and profile operations and a room type that declares it", () => {
   const preset = {
     ...validPreset(),
     heroProps: { "train-car": heroCar },
@@ -342,7 +350,7 @@ await test("presetSchema rejects a hero prop over 20000 triangles and accepts ex
 });
 
 await test("presetSchema rejects a hero prop recipe missing a field or carrying an unknown one", () => {
-  for (const field of ["description", "replaces", "size", "triangleBudget", "parts"]) {
+  for (const field of ["description", "replaces", "size", "triangleBudget", "operations"]) {
     const recipe = Object.fromEntries(Object.entries(heroCar).filter(([key]) => key !== field));
     const preset = { ...validPreset(), heroProps: { car: recipe } };
     assert.equal(presetSchema.safeParse(preset).success, false, field);
@@ -352,31 +360,11 @@ await test("presetSchema rejects a hero prop recipe missing a field or carrying 
     presetSchema.safeParse({ ...validPreset(), heroProps: { car: extra } }).success,
     false,
   );
-});
-
-await test("presetSchema rejects a hero prop part with an unknown shape or role, another shape's field or too few profile points", () => {
-  const center = { x: 0, y: 0, z: 0 };
-  const invalidParts = [
-    { shape: "sphere", role: "wall", center, radius: 1 },
-    { shape: "box", role: "roof", center, size: fixtureSize },
-    { shape: "box", role: "wall", center, size: fixtureSize, radius: 1 },
-    { shape: "cylinder", role: "wall", center, radius: 1, length: 2, axis: "w" },
-    {
-      shape: "profile",
-      role: "wall",
-      center,
-      points: [
-        { x: 0, y: 0 },
-        { x: 1, y: 1 },
-      ],
-      depth: 1,
-    },
-  ];
-  for (const part of invalidParts) {
-    const recipe = { ...heroCar, parts: [part] };
-    const preset = { ...validPreset(), heroProps: { car: recipe } };
-    assert.equal(presetSchema.safeParse(preset).success, false, JSON.stringify(part));
-  }
+  const noOperations = { ...heroCar, operations: [] };
+  assert.equal(
+    presetSchema.safeParse({ ...validPreset(), heroProps: { car: noOperations } }).success,
+    false,
+  );
 });
 
 const shapeCenter = { x: 0, y: 0, z: 0 };
@@ -391,95 +379,188 @@ const heroRing = [
   { radius: 2, offset: -1 },
   { radius: 2, offset: 1 },
 ];
-const heroWith = (part: object) => ({
+const heroWith = (operations: object[]) => ({
   ...validPreset(),
-  heroProps: { car: { ...heroCar, parts: [part] } },
+  heroProps: { car: { ...heroCar, operations } },
 });
+const heroBox = {
+  op: "box",
+  phase: "structure",
+  role: "wall",
+  center: shapeCenter,
+  size: fixtureSize,
+};
+const heroCut = { op: "cut", phase: "structure", center: shapeCenter, size: fixtureSize };
+const heroArray = { op: "array", phase: "structure", count: 4, step: { x: 3, y: 0, z: 0 } };
 
-await test("presetSchema accepts lathe and sweep parts, and bevel, cuts, array and segments on a part", () => {
-  const validParts = [
+await test("presetSchema rejects a hero prop operation with an unknown op, phase or role, another op's field or too few profile points", () => {
+  const invalidOperations = [
+    { op: "sphere", phase: "form", role: "wall", center: shapeCenter, radius: 1 },
+    { ...heroBox, role: "roof" },
+    { ...heroBox, phase: "polish" },
+    { ...heroBox, phase: undefined },
+    { ...heroBox, radius: 1 },
+    { ...heroBox, shape: "box" },
     {
-      shape: "lathe",
-      role: "wall",
-      center: shapeCenter,
-      points: heroRing,
-      axis: "z",
-      segments: 16,
-    },
-    {
-      shape: "sweep",
-      role: "trim",
-      center: shapeCenter,
-      section: heroSquare,
-      path: [shapeCenter, { x: 0, y: 4, z: 0 }],
-    },
-    {
-      shape: "box",
-      role: "wall",
-      center: shapeCenter,
-      size: fixtureSize,
-      bevel: 0.1,
-      cuts: [{ center: shapeCenter, size: fixtureSize }],
-      array: { count: 4, step: { x: 3, y: 0, z: 0 } },
-    },
-    {
-      shape: "cylinder",
+      op: "cylinder",
+      phase: "form",
       role: "wall",
       center: shapeCenter,
       radius: 1,
       length: 2,
-      axis: "y",
-      segments: 8,
+      axis: "w",
+    },
+    {
+      op: "profile",
+      phase: "form",
+      role: "wall",
+      center: shapeCenter,
+      points: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      depth: 1,
     },
   ];
-  for (const part of validParts) {
-    const result = presetSchema.safeParse(heroWith(part));
-    assert.equal(result.success, true, JSON.stringify(part));
+  for (const operation of invalidOperations) {
+    const result = presetSchema.safeParse(heroWith([operation]));
+    assert.equal(result.success, false, JSON.stringify(operation));
   }
 });
 
-await test("presetSchema rejects bad lathe, sweep, bevel, cuts, array and segments values", () => {
-  const box = { shape: "box", role: "wall", center: shapeCenter, size: fixtureSize };
-  const invalidParts = [
-    { shape: "lathe", role: "wall", center: shapeCenter, points: heroRing.slice(0, 2), axis: "z" },
-    { shape: "lathe", role: "wall", center: shapeCenter, points: heroRing, axis: "w" },
-    {
-      shape: "lathe",
-      role: "wall",
-      center: shapeCenter,
-      points: [{ radius: 0, offset: 0 }, ...heroRing],
-      axis: "z",
-    },
-    { shape: "lathe", role: "wall", center: shapeCenter, points: heroRing, axis: "z", segments: 2 },
-    { shape: "sweep", role: "trim", center: shapeCenter, section: heroSquare, path: [shapeCenter] },
-    {
-      shape: "sweep",
-      role: "trim",
-      center: shapeCenter,
-      section: heroSquare.slice(0, 2),
-      path: [shapeCenter, { x: 0, y: 4, z: 0 }],
-    },
-    { ...box, bevel: 0 },
-    { ...box, bevel: -1 },
-    { ...box, cuts: [] },
-    { ...box, cuts: [{ center: shapeCenter }] },
-    { ...box, array: { count: 1, step: shapeCenter } },
-    { ...box, array: { count: 65, step: shapeCenter } },
-    { ...box, array: { count: 3 } },
-    {
-      shape: "cylinder",
-      role: "wall",
-      center: shapeCenter,
-      radius: 1,
-      length: 2,
-      axis: "y",
-      segments: 65,
-    },
+await test("presetSchema accepts lathe and sweep operations, a bevel, cuts, an array and segments", () => {
+  const validOperations = [
+    [
+      {
+        op: "lathe",
+        phase: "form",
+        role: "wall",
+        center: shapeCenter,
+        points: heroRing,
+        axis: "z",
+        segments: 16,
+      },
+    ],
+    [
+      {
+        op: "sweep",
+        phase: "form",
+        role: "trim",
+        center: shapeCenter,
+        section: heroSquare,
+        path: [shapeCenter, { x: 0, y: 4, z: 0 }],
+      },
+    ],
+    [{ ...heroBox, bevel: 0.1 }, heroCut, heroCut, heroArray],
+    [
+      { ...heroBox, phase: "blockout" },
+      { ...heroCut, phase: "form" },
+      { ...heroArray, phase: "surface" },
+    ],
+    [
+      {
+        op: "cylinder",
+        phase: "material",
+        role: "wall",
+        center: shapeCenter,
+        radius: 1,
+        length: 2,
+        axis: "y",
+        segments: 8,
+      },
+    ],
   ];
-  for (const part of invalidParts) {
-    const result = presetSchema.safeParse(heroWith(part));
-    assert.equal(result.success, false, JSON.stringify(part));
+  for (const operations of validOperations) {
+    const result = presetSchema.safeParse(heroWith(operations));
+    assert.equal(result.success, true, JSON.stringify(operations));
   }
+});
+
+await test("presetSchema rejects bad lathe, sweep, bevel, cut, array and segments values", () => {
+  const lathe = { op: "lathe", phase: "form", role: "wall", center: shapeCenter, axis: "z" };
+  const invalidOperations = [
+    [{ ...lathe, points: heroRing.slice(0, 2) }],
+    [{ ...lathe, points: heroRing, axis: "w" }],
+    [{ ...lathe, points: [{ radius: 0, offset: 0 }, ...heroRing] }],
+    [{ ...lathe, points: heroRing, segments: 2 }],
+    [
+      {
+        op: "sweep",
+        phase: "form",
+        role: "trim",
+        center: shapeCenter,
+        section: heroSquare,
+        path: [shapeCenter],
+      },
+    ],
+    [
+      {
+        op: "sweep",
+        phase: "form",
+        role: "trim",
+        center: shapeCenter,
+        section: heroSquare.slice(0, 2),
+        path: [shapeCenter, { x: 0, y: 4, z: 0 }],
+      },
+    ],
+    [{ ...heroBox, bevel: 0 }],
+    [{ ...heroBox, bevel: -1 }],
+    [heroBox, { op: "cut", phase: "structure", center: shapeCenter }],
+    [heroBox, { ...heroCut, role: "wall" }],
+    [heroBox, { ...heroArray, count: 1 }],
+    [heroBox, { ...heroArray, count: 65 }],
+    [heroBox, { op: "array", phase: "structure", count: 3 }],
+    [
+      {
+        op: "cylinder",
+        phase: "form",
+        role: "wall",
+        center: shapeCenter,
+        radius: 1,
+        length: 2,
+        axis: "y",
+        segments: 65,
+      },
+    ],
+  ];
+  for (const operations of invalidOperations) {
+    const result = presetSchema.safeParse(heroWith(operations));
+    assert.equal(result.success, false, JSON.stringify(operations));
+  }
+});
+
+await test("presetSchema rejects hero prop operations whose phase goes back, or a cut or array with no piece to change", () => {
+  const invalidOperations = {
+    "phase goes back": [
+      { ...heroBox, phase: "form" },
+      { ...heroBox, phase: "structure" },
+    ],
+    "cut goes back": [
+      { ...heroBox, phase: "form" },
+      { ...heroCut, phase: "blockout" },
+    ],
+    "cut first": [heroCut, heroBox],
+    "array first": [heroArray, heroBox],
+    "cut after an array": [heroBox, heroArray, heroCut],
+    "second array": [heroBox, heroArray, heroArray],
+  };
+  for (const [name, operations] of Object.entries(invalidOperations)) {
+    const result = presetSchema.safeParse(heroWith(operations));
+    assert.equal(result.success, false, name);
+  }
+});
+
+await test("heroParts gives each shape the cuts and the array after it, in order", () => {
+  const second = { ...heroBox, role: "trim", phase: "form" } as const;
+  const parsed = presetSchema.parse(
+    heroWith([heroBox, heroCut, heroArray, second, { ...heroCut, phase: "form" }]),
+  );
+  const operations = parsed.heroProps?.car?.operations ?? [];
+  const [box, cut, array, trim, trimCut] = operations;
+  assert.deepEqual(heroParts(operations), [
+    { shape: box, cuts: [cut], array },
+    { shape: trim, cuts: [trimCut] },
+  ]);
 });
 
 await test("presetSchema takes 1 or 2 hero prop kinds on a room type and rejects none or 3", () => {

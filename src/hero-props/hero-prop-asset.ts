@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { config } from "../config.ts";
-import type { Preset } from "../style/preset-schema.ts";
+import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { heroAssetsFile, readHeroAssets } from "./hero-asset-store.ts";
 import {
   lookUpOpenCloudCredentials,
@@ -45,8 +45,8 @@ export async function heroRecipeHash(preset: Preset, kind: string): Promise<stri
   const recipe = preset.heroProps?.[kind];
   if (recipe === undefined) throw new Error(`The preset has no hero prop "${kind}".`);
   const roleColors: Record<string, string> = {};
-  for (const part of recipe.parts) {
-    roleColors[part.role] = preset.surfaces[part.role].color;
+  for (const part of heroParts(recipe.operations)) {
+    roleColors[part.shape.role] = preset.surfaces[part.shape.role].color;
   }
   return recipeHash({ recipe, roleColors }, await readFile(heroGeneratorScript, "utf8"));
 }
