@@ -17,6 +17,7 @@
       "variant": {
         "baseMaterial": "SmoothPlastic",
         "studsPerTile": 8,
+        "materialPattern": "Regular",
         "maps": {
           "color": "rbxassetid://94057716701691",
           "normal": "rbxassetid://133134289971393",
@@ -33,11 +34,12 @@
         "seed": 32,
         "roughness": 0.35,
         "metalness": 0.1,
-        "studsPerTile": 12
+        "studsPerTile": 8
       },
       "variant": {
         "baseMaterial": "SmoothPlastic",
-        "studsPerTile": 12,
+        "studsPerTile": 8,
+        "materialPattern": "Regular",
         "maps": {
           "color": "rbxassetid://94577196174331",
           "normal": "rbxassetid://110065199098099",
@@ -59,6 +61,7 @@
       "variant": {
         "baseMaterial": "Metal",
         "studsPerTile": 4,
+        "materialPattern": "Regular",
         "maps": {
           "color": "rbxassetid://83411752871916",
           "normal": "rbxassetid://109095510650278",
@@ -75,11 +78,12 @@
         "seed": 34,
         "roughness": 0.5,
         "metalness": 0.7,
-        "studsPerTile": 8
+        "studsPerTile": 12
       },
       "variant": {
         "baseMaterial": "Metal",
-        "studsPerTile": 8,
+        "studsPerTile": 12,
+        "materialPattern": "Regular",
         "maps": {
           "color": "rbxassetid://83080171855685",
           "normal": "rbxassetid://135126207529716",

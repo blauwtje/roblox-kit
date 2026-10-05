@@ -7,6 +7,7 @@ import { resolveRelations } from "../map/relation-solver.ts";
 import { placeSetPieces } from "../map/set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "../map/size-rules.ts";
 import { loadPresets } from "./load-preset.ts";
+import { roleTexelDensity, texelDensity } from "./preset-schema.ts";
 import type { Preset } from "./preset-schema.ts";
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
@@ -44,6 +45,29 @@ await test("every bundled preset uses built-in Materials only and gives every Ma
           `${name} ${role} has a MaterialVariant without maps`,
         );
       }
+    }
+  }
+});
+
+await test("every role variant tiles at its role's texel density and sets MaterialPattern by surface", async () => {
+  const presets = await loadPresets();
+  const organicPatterns = new Set(["brick", "concrete"]);
+  for (const [name, preset] of presets) {
+    for (const [role, surface] of Object.entries(preset.surfaces)) {
+      const { variant, texture } = surface;
+      if (variant === undefined || texture === undefined) {
+        continue;
+      }
+      const label = `${name} ${role}`;
+      assert.equal(variant.studsPerTile, texture.studsPerTile, `${label} tile size`);
+      const target = roleTexelDensity[role as keyof typeof roleTexelDensity];
+      const density = texelDensity(variant.studsPerTile);
+      assert.ok(
+        Math.abs(density - target) <= target * 0.1,
+        `${label}: ${String(density)} px/stud, target ${String(target)}`,
+      );
+      const expected = organicPatterns.has(texture.pattern) ? "Organic" : "Regular";
+      assert.equal(variant.materialPattern, expected, `${label} ${texture.pattern} pattern`);
     }
   }
 });

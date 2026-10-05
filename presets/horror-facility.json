@@ -12,11 +12,12 @@
         "seed": 21,
         "roughness": 0.55,
         "metalness": 0.8,
-        "studsPerTile": 6
+        "studsPerTile": 8
       },
       "variant": {
         "baseMaterial": "DiamondPlate",
-        "studsPerTile": 6,
+        "studsPerTile": 8,
+        "materialPattern": "Regular",
         "maps": {
           "color": "rbxassetid://130065057630819",
           "normal": "rbxassetid://112792974910106",
@@ -33,11 +34,12 @@
         "seed": 22,
         "roughness": 0.9,
         "metalness": 0,
-        "studsPerTile": 10
+        "studsPerTile": 8
       },
       "variant": {
         "baseMaterial": "Concrete",
-        "studsPerTile": 10,
+        "studsPerTile": 8,
+        "materialPattern": "Organic",
         "maps": {
           "color": "rbxassetid://76104096918380",
           "normal": "rbxassetid://97686264626805",
@@ -59,6 +61,7 @@
       "variant": {
         "baseMaterial": "Metal",
         "studsPerTile": 4,
+        "materialPattern": "Regular",
         "maps": {
           "color": "rbxassetid://77907082513793",
           "normal": "rbxassetid://83985631849811",
@@ -80,6 +83,7 @@
       "variant": {
         "baseMaterial": "Concrete",
         "studsPerTile": 12,
+        "materialPattern": "Organic",
         "maps": {
           "color": "rbxassetid://133304636609178",
           "normal": "rbxassetid://78280306109777",

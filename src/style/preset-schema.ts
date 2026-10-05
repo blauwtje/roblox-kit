@@ -15,6 +15,30 @@ export const materialPatterns = ["brick", "tile", "concrete", "metal", "plate", 
 /** The four maps a material recipe bakes, in the order of MaterialVariant's map properties. */
 export const materialMapNames = ["color", "normal", "roughness", "metalness"] as const;
 
+/** Pixels along one side of each map `src/style/material-recipe.py` bakes (its `SIZE`). */
+export const materialMapSize = 512;
+
+/**
+ * Target texel density in pixels per stud for each surface role, from Roblox's guideline of 256 px per
+ * 2 studs (128 px per stud, F7) at the close range of trim and accent, falling to half of that for floors
+ * and walls and a third for a ceiling nobody stands near. A tile spans `materialMapSize / density` studs.
+ */
+export const roleTexelDensity = {
+  floor: 64,
+  wall: 64,
+  trim: 128,
+  ceiling: 43,
+  accent: 128,
+} as const;
+
+/** Pixels per stud of a map tiled every `studsPerTile` studs. */
+export function texelDensity(studsPerTile: number): number {
+  return materialMapSize / studsPerTile;
+}
+
+/** Roblox's MaterialPattern: Organic breaks the visible repeat of a tiled texture. */
+export const materialPatternNames = ["Regular", "Organic"] as const;
+
 const unit = z.number().min(0).max(1);
 
 /**
@@ -52,6 +76,8 @@ const surfaceRole = z.strictObject({
     .strictObject({
       baseMaterial: materialName,
       studsPerTile: z.number().positive(),
+      /** Organic for natural surfaces (concrete, brick); Regular for patterned ones (tiles, panels, metal). */
+      materialPattern: z.enum(materialPatternNames).optional(),
       maps: materialMaps.optional(),
     })
     .optional(),
