@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
-import { mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
+import { graphMapSpecSchema, mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
 
 const room = { name: "hall", x: 0, z: 0, width: 20, depth: 20 };
 const minimalSpec = { mapId: "m", rooms: [room] };
@@ -141,4 +141,22 @@ await test("a room keeps an optional room type, and an empty one is rejected", (
     mapSpecSchema.safeParse({ mapId: "m", rooms: [{ ...room, roomType: "" }] }).success,
     false,
   );
+});
+
+await test("a graph spec's rooms have no center and its edges name two different rooms", () => {
+  const rooms = [
+    { name: "a", width: 20, depth: 20 },
+    { name: "b", width: 20, depth: 20 },
+  ];
+  const parse = (edges: object[], roomList: object[] = rooms) =>
+    graphMapSpecSchema.safeParse({ mapId: "m", rooms: roomList, graph: { edges } });
+  assert.equal(parse([{ a: "a", b: "b" }]).success, true);
+  assert.equal(parse([{ a: "a", b: "missing" }]).success, false);
+  assert.equal(parse([{ a: "a", b: "a" }]).success, false);
+  assert.equal(
+    parse([{ a: "a", b: "b" }], [{ ...rooms[0], x: 0, z: 0 }, rooms[1] as object]).success,
+    false,
+  );
+  assert.equal(parse([], [rooms[0] as object, rooms[0] as object]).success, false);
+  assert.equal(graphMapSpecSchema.safeParse({ mapId: "m", rooms }).success, false);
 });

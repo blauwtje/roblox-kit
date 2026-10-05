@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
-import { layoutMap } from "./map-layout.ts";
+import { layoutMap, solveRoomGraph } from "./map-layout.ts";
 import type { PartRecord } from "./map-layout.ts";
-import { mapSpecSchema } from "./map-spec.ts";
+import { graphMapSpecSchema, mapSpecSchema } from "./map-spec.ts";
 
 const threeRoomInput = {
   mapId: "three-rooms",
@@ -305,4 +305,130 @@ await test("ceilings take the style's ceiling color and material", () => {
 
 await test("the ceiling tag is a non-empty config name", () => {
   assert.ok(config.ceilingTag.length > 0);
+});
+
+const graphRoom = (name: string, extra: object = {}) => ({ name, width: 40, depth: 40, ...extra });
+
+function graphSpec(names: string[], edges: [string, string][], extra: object = {}) {
+  return graphMapSpecSchema.parse({
+    mapId: "graph",
+    rooms: names.map((name) => graphRoom(name)),
+    graph: { edges: edges.map(([a, b]) => ({ a, b })) },
+    ...extra,
+  });
+}
+
+/** The world position along the wall of each door, per room, per side. */
+function doorCenters(room: ReturnType<typeof solveRoomGraph>["rooms"][number]) {
+  return room.doors.map((door) => ({
+    side: door.side,
+    world: door.offset + (door.side === "north" || door.side === "south" ? room.x : room.z),
+  }));
+}
+
+function assertSolved(
+  spec: ReturnType<typeof graphSpec>,
+  solved: ReturnType<typeof solveRoomGraph>,
+) {
+  const byName = new Map(solved.rooms.map((room) => [room.name, room]));
+  for (const [index, first] of solved.rooms.entries()) {
+    for (const second of solved.rooms.slice(index + 1)) {
+      const overlapX = 40 - Math.abs(first.x - second.x);
+      const overlapZ = 40 - Math.abs(first.z - second.z);
+      assert.ok(
+        overlapX <= config.overlapToleranceStuds || overlapZ <= config.overlapToleranceStuds,
+        `${first.name} overlaps ${second.name}`,
+      );
+    }
+  }
+  const opposite = { north: "south", south: "north", east: "west", west: "east" } as const;
+  for (const edge of spec.graph.edges) {
+    const first = byName.get(edge.a);
+    const second = byName.get(edge.b);
+    assert.ok(first && second);
+    const shared = doorCenters(first).filter((door) =>
+      doorCenters(second).some(
+        (other) => other.side === opposite[door.side] && Math.abs(other.world - door.world) < 1e-9,
+      ),
+    );
+    assert.equal(shared.length, 1, `${edge.a} and ${edge.b} share one matching door pair`);
+  }
+}
+
+await test("a room graph solves to touching rooms with matching doors", () => {
+  const spec = graphSpec(
+    ["a", "b", "c"],
+    [
+      ["a", "b"],
+      ["b", "c"],
+    ],
+  );
+  const solved = solveRoomGraph(spec);
+  assert.equal(solved.rooms.length, 3);
+  assertSolved(spec, solved);
+  assert.equal("graph" in solved, false);
+});
+
+await test("a graph with a loop solves with every edge a door", () => {
+  const edges: [string, string][] = [
+    ["a", "b"],
+    ["b", "c"],
+    ["c", "d"],
+    ["d", "a"],
+  ];
+  const spec = graphSpec(["a", "b", "c", "d"], edges);
+  assertSolved(spec, solveRoomGraph(spec));
+});
+
+await test("the same graph and seed give the same layout, other seeds may differ", () => {
+  const edges: [string, string][] = [
+    ["a", "b"],
+    ["a", "c"],
+    ["a", "d"],
+  ];
+  const names = ["a", "b", "c", "d"];
+  const first = solveRoomGraph(graphSpec(names, edges, { seed: 7 }));
+  assert.deepEqual(solveRoomGraph(graphSpec(names, edges, { seed: 7 })), first);
+  const layouts = new Set(
+    [1, 2, 3, 4, 5, 6].map((seed) =>
+      JSON.stringify(solveRoomGraph(graphSpec(names, edges, { seed }))),
+    ),
+  );
+  assert.ok(layouts.size > 1);
+});
+
+await test("layoutMap builds a graph spec's parts with doors cut in the walls", () => {
+  const spec = graphSpec(["a", "b"], [["a", "b"]]);
+  const { parts } = layoutMap(spec);
+  const walls = parts.filter((part) => part.kind === "wall" && part.room === "a");
+  assert.ok(walls.length >= 5, "the wall with the door is split in two");
+  assert.deepEqual(layoutMap(solveRoomGraph(spec)), layoutMap(spec));
+});
+
+await test("a graph no layout fits is rejected", () => {
+  const names = ["hub", "n", "e", "s", "w", "extra"];
+  const edges = names.slice(1).map((name): [string, string] => ["hub", name]);
+  assert.throws(() => solveRoomGraph(graphSpec(names, edges)), /No layout fits/);
+});
+
+await test("a disconnected graph is rejected", () => {
+  assert.throws(
+    () => solveRoomGraph(graphSpec(["a", "b", "c"], [["a", "b"]])),
+    /not connected.*"c"/,
+  );
+});
+
+await test("joined rooms need the same door width, and a door must fit the shared wall", () => {
+  const widths = graphMapSpecSchema.parse({
+    mapId: "graph",
+    rooms: [graphRoom("a", { doorWidth: 8 }), graphRoom("b")],
+    graph: { edges: [{ a: "a", b: "b" }] },
+  });
+  assert.throws(() => solveRoomGraph(widths), /same doorWidth/);
+  const wide = graphMapSpecSchema.parse({
+    mapId: "graph",
+    rooms: [graphRoom("a", { doorWidth: 40 }), graphRoom("b", { doorWidth: 40 })],
+    graph: { edges: [{ a: "a", b: "b" }] },
+  });
+  assert.throws(() => solveRoomGraph(wide), /No layout fits/);
 });
