@@ -197,3 +197,48 @@ await test("pendants hang in a centered grid the drop below the ceiling", () => 
   const xs = fixtures.map((light) => light.position.x - 10);
   assert.equal(Math.min(...xs), -Math.max(...xs));
 });
+
+/** Three 20-stud rooms in a row, joined by doors, the first holding the spawn pad. */
+const corridor = spec([
+  {
+    name: "entry",
+    x: 0,
+    z: 0,
+    width: 20,
+    depth: 20,
+    spawn: true,
+    doors: [{ side: "east", offset: 0 }],
+  },
+  {
+    name: "middle",
+    x: 20,
+    z: 0,
+    width: 20,
+    depth: 20,
+    doors: [
+      { side: "west", offset: 0 },
+      { side: "east", offset: 0 },
+    ],
+  },
+  { name: "deep", x: 40, z: 0, width: 20, depth: 20, doors: [{ side: "west", offset: 0 }] },
+]);
+
+await test("light range shrinks with a room's door distance from the spawn room", () => {
+  const ranges = new Map<string, number>();
+  for (const light of placeLights(corridor, lightRoles)) {
+    if (light.role !== "focal") {
+      ranges.set(light.zone, light.range);
+    }
+  }
+  const hero = lightRoles.hero.range;
+  const marker = lightRoles.zoneMarker.range;
+  // All three rooms are the same size, so the first one is the hero; "deep" is at progression 1 (0.6 of the range).
+  assert.equal(ranges.get("entry"), hero);
+  assert.ok(Math.abs((ranges.get("middle") ?? 0) - marker * 0.8) < 1e-9);
+  assert.ok(Math.abs((ranges.get("deep") ?? 0) - marker * 0.6) < 1e-9);
+});
+
+await test("the focal light over the spawn pad keeps its full range", () => {
+  const focal = placeLights(corridor, lightRoles).find((light) => light.role === "focal");
+  assert.equal(focal?.range, lightRoles.focal.range);
+});

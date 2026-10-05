@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadPresets } from "./load-preset.ts";
-import { resolveStyle } from "./resolve-style.ts";
+import { mapSpecSchema } from "../map/map-spec.ts";
+import { progressionFactor, resolveStyle, roomProgression } from "./resolve-style.ts";
 
 const presets = await loadPresets();
 
@@ -71,4 +72,48 @@ await test("an override that breaks an array length rule throws", () => {
       }),
     /Invalid style overrides/,
   );
+});
+
+const rowDoors = [
+  { name: "a", x: 0, doors: [{ side: "east", offset: 0 }], spawn: true },
+  {
+    name: "b",
+    x: 20,
+    doors: [
+      { side: "west", offset: 0 },
+      { side: "east", offset: 0 },
+    ],
+  },
+  { name: "c", x: 40, doors: [{ side: "west", offset: 0 }] },
+  { name: "island", x: 100, doors: [] },
+].map((room) => ({ width: 20, depth: 20, z: 0, ...room }));
+
+await test("progression runs from 0 at the spawn room to 1 at the room farthest by doors", () => {
+  const progression = roomProgression(mapSpecSchema.parse({ mapId: "m", rooms: rowDoors }));
+  assert.deepEqual(
+    [...progression],
+    [
+      ["a", 0],
+      ["b", 0.5],
+      ["c", 1],
+      ["island", 0],
+    ],
+  );
+});
+
+await test("doors that do not line up, or a map without a spawn room, leave every room at 0", () => {
+  const shifted = rowDoors.map((room) =>
+    room.name === "b" ? { ...room, doors: [{ side: "west", offset: 5 }] } : room,
+  );
+  const unjoined = roomProgression(mapSpecSchema.parse({ mapId: "m", rooms: shifted }));
+  assert.equal(unjoined.get("c"), 0);
+  assert.equal(unjoined.get("b"), 0);
+  const unspawned = rowDoors.map((room) => ({ ...room, spawn: false }));
+  const noSpawn = roomProgression(mapSpecSchema.parse({ mapId: "m", rooms: unspawned }));
+  assert.deepEqual([...noSpawn.values()], [0, 0, 0, 0]);
+});
+
+await test("a factor runs from 1 at progression 0 to the value at the deepest room", () => {
+  assert.equal(progressionFactor(0, 0.6), 1);
+  assert.equal(progressionFactor(1, 2), 2);
 });

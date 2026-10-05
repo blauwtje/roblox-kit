@@ -1,6 +1,7 @@
 import { config } from "../config.ts";
 import type { TrimProfileKind } from "../hero-props/prop-recipes.ts";
 import type { Preset } from "../style/preset-schema.ts";
+import { progressionFactor, progressionScale, roomProgression } from "../style/resolve-style.ts";
 import type { PartRecord, Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 
@@ -146,6 +147,7 @@ function bandParts(
   measure: RoomMeasure,
   wall: PartRecord,
   surfaces: DetailSurfaces,
+  progression: number,
 ): DetailPart[] {
   const { side, label } = wallLabel(wall);
   const runsAlongX = side === "north" || side === "south";
@@ -178,7 +180,9 @@ function bandParts(
       kind: "stripe",
       role: "accent",
       depth: detailDimensions.stripeDepthStuds,
-      height: detailDimensions.stripeHeightStuds,
+      height:
+        detailDimensions.stripeHeightStuds *
+        progressionFactor(progression, progressionScale.accentStripeHeight),
       centerHeight: wallHeight * detailDimensions.stripeHeightFraction,
     },
   ];
@@ -350,7 +354,8 @@ function archParts(
 
 /**
  * Baseboards, crowns, accent stripes, corner pillars and doorway arches for every room of a laid-out map,
- * painted from the preset's trim and accent surfaces. Deterministic: the same inputs give the same parts.
+ * painted from the preset's trim and accent surfaces; the accent stripe grows with the room's depth from the
+ * spawn room (`roomProgression`). Deterministic: the same inputs give the same parts.
  * `parts` are the parts `layoutMap` returned for `spec`.
  */
 export function buildRoomDetails(
@@ -359,11 +364,12 @@ export function buildRoomDetails(
   surfaces: DetailSurfaces,
 ): DetailPart[] {
   const details: DetailPart[] = [];
+  const progression = roomProgression(spec);
   for (const room of spec.rooms) {
     const measure = measureRoom(spec, room);
     const walls = parts.filter((part) => part.kind === "wall" && part.room === room.name);
     for (const wall of walls) {
-      details.push(...bandParts(room, measure, wall, surfaces));
+      details.push(...bandParts(room, measure, wall, surfaces, progression.get(room.name) ?? 0));
     }
     details.push(...pillarParts(room, measure, surfaces));
     for (const [doorIndex, door] of room.doors.entries()) {

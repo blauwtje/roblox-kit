@@ -4,6 +4,7 @@ import type { MapSpec, RoomSpec } from "../map/map-spec.ts";
 import { cornerReachStuds, roomBounds } from "../map/prop-placement.ts";
 import type { RoomBounds } from "../map/prop-placement.ts";
 import type { Preset } from "../style/preset-schema.ts";
+import { progressionFactor, progressionScale, roomProgression } from "../style/resolve-style.ts";
 
 export type LightRoleName = keyof Preset["lightRoles"];
 
@@ -122,7 +123,8 @@ function fixtureBoxes(spec: MapSpec, room: RoomSpec, fixtures: LightFixtures): F
  * one light at its center below the ceiling: the hero in the largest room, a zone marker in each
  * other room, and only the hero casts shadows. With them, every room's center light is a hero that
  * casts shadows and the fixtures repeat as shadowless zone markers, each holding its light. A room
- * with a spawn pad gets a focal light over the pad.
+ * with a spawn pad gets a focal light over the pad. Every light's range shrinks with the room's depth
+ * from the spawn room (`roomProgression`), to `progressionScale.lightRange` of its role's range.
  */
 export function placeLights(
   spec: MapSpec,
@@ -130,8 +132,11 @@ export function placeLights(
   lightFixtures?: Preset["lightFixtures"],
 ): LightPlacement[] {
   const heroRoom = largestRoom(spec.rooms);
+  const progression = roomProgression(spec);
   const placements: LightPlacement[] = [];
   for (const room of spec.rooms) {
+    // Rooms deeper from the spawn room get a shorter reach, which reads as dimmer light.
+    const reach = progressionFactor(progression.get(room.name) ?? 0, progressionScale.lightRange);
     const wallHeight = room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds;
     const isHeroRoom = lightFixtures !== undefined || room === heroRoom;
     const role = isHeroRoom ? "hero" : "zoneMarker";
@@ -139,7 +144,7 @@ export function placeLights(
       zone: room.name,
       role,
       position: { x: room.x, y: wallHeight - config.lightCeilingDropStuds, z: room.z },
-      range: lightRoles[role].range,
+      range: lightRoles[role].range * reach,
       shadows: isHeroRoom,
     });
     if (lightFixtures !== undefined) {
@@ -148,7 +153,7 @@ export function placeLights(
           zone: room.name,
           role: "zoneMarker",
           position: fixture.position,
-          range: lightRoles.zoneMarker.range,
+          range: lightRoles.zoneMarker.range * reach,
           shadows: false,
           fixture,
         });
@@ -159,7 +164,7 @@ export function placeLights(
         zone: room.name,
         role: "focal",
         position: { x: room.x, y: config.focalLightHeightStuds, z: room.z },
-        range: lightRoles.focal.range,
+        range: lightRoles.focal.range * reach,
         shadows: false,
       });
     }
