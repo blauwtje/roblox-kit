@@ -669,7 +669,7 @@ await test("a hero asset that fails to load becomes a warning naming its asset i
 await test("build-map.luau loads each hero asset in pcall and builds the fallback set piece on failure", async () => {
   const source = await readFile(new URL("../../luau/build-map.luau", import.meta.url), "utf8");
   const loading = source.slice(source.indexOf("local loaded, heroOrError = pcall"));
-  assert.match(loading, /pcall\(function\(\)\s+return InsertService:LoadAsset\(assetId\)/);
+  assert.match(loading, /pcall\(function\(\)[\s\S]*?InsertService:LoadAsset\(assetId\)/);
   assert.ok(loading.includes("addProp(model, generators, record.fallback, countByKind)"));
   assert.ok(source.includes("heroLoadFailures = heroLoadFailures"));
 });

@@ -634,7 +634,10 @@ async function probeHeroProps(connection: StudioConnection): Promise<string> {
 const paintedMapLuau = `
 local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
 local variant = game:GetService("MaterialService"):FindFirstChild("${smokeMapSpec.mapId}-wall")
-local painted = { floors = {}, walls = {}, wallVariants = {}, variantBase = "", variantStuds = 0, variantMaps = {} }
+local painted = { floors = {}, walls = {}, wallVariants = {}, variantBase = "", variantStuds = 0, variantMaps = {}, wallVariantCount = 0 }
+for _, child in game:GetService("MaterialService"):GetChildren() do
+  if child.Name == "${smokeMapSpec.mapId}-wall" then painted.wallVariantCount += 1 end
+end
 for _, part in model:GetChildren() do
   local list = if string.find(part.Name, "floor", 1, true) then painted.floors elseif string.find(part.Name, "wall", 1, true) then painted.walls else nil
   if list then table.insert(list, part.Color:ToHex()) end
@@ -651,6 +654,7 @@ const paintedMapSchema = z.object({
   floors: z.array(z.string()),
   walls: z.array(z.string()),
   wallVariants: z.array(z.string()),
+  wallVariantCount: z.number(),
   variantBase: z.string(),
   variantStuds: z.number(),
   variantMaps: z.object({
@@ -679,6 +683,7 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
     [...new Set(painted.wallVariants)],
     [`${smokeMapSpec.mapId}-wall`],
   );
+  expectEqual("one wall MaterialVariant shared by every wall", painted.wallVariantCount, 1);
   expectEqual("MaterialVariant base", painted.variantBase, smokeWallVariant.baseMaterial);
   expectEqual("MaterialVariant studsPerTile", painted.variantStuds, smokeWallVariant.studsPerTile);
   const noMaps = { color: "", normal: "", roughness: "", metalness: "" };

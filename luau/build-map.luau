@@ -180,8 +180,15 @@ local function mapsFolder(): Instance
 	return folder
 end
 
+-- The MaterialVariant of each role this run has made: every part of a role shares the one instance.
+local variantByRole: { [string]: MaterialVariant } = {}
+
 -- The MaterialVariant of a role, named after the map and role; a rebuild reuses it and refreshes its values.
 local function variantFor(role: string, variant: Variant): MaterialVariant
+	local made = variantByRole[role]
+	if made then
+		return made
+	end
 	local variantName = `{arguments.mapId}-{role}`
 	local existing = MaterialService:FindFirstChild(variantName)
 	local materialVariant = if existing and existing:IsA("MaterialVariant")
@@ -199,6 +206,7 @@ local function variantFor(role: string, variant: Variant): MaterialVariant
 	-- Organic breaks the visible repeat of a tiled texture on long walls and floors.
 	materialVariant.MaterialPattern = if maps then Enum.MaterialPattern.Organic else Enum.MaterialPattern.Regular
 	materialVariant.Parent = MaterialService
+	variantByRole[role] = materialVariant
 	return materialVariant
 end
 
@@ -444,13 +452,22 @@ local function addHeroProps(
 ): { HeroLoadFailure }
 	local failures: { HeroLoadFailure } = {}
 	local heroCountByKind: { [string]: number } = {}
+	-- Each asset is loaded once; a repeat clones it, so its parts keep the same texture ids and share one draw call.
+	local loadedByAssetId: { [number]: Model } = {}
 	for _, record in arguments.heroProps or ({} :: { HeroPropRecord }) do
 		local assetId = tonumber(record.assetId)
 		if not assetId then
 			error(`Hero prop {record.kind} has the asset id "{record.assetId}", which is not a number.`, 0)
 		end
 		local loaded, heroOrError = pcall(function()
-			return InsertService:LoadAsset(assetId)
+			local template = loadedByAssetId[assetId]
+			if template then
+				return template:Clone() :: Model
+			end
+			-- LoadAsset is typed as Instance but returns the Model that holds the asset.
+			local asset = InsertService:LoadAsset(assetId) :: Model
+			loadedByAssetId[assetId] = asset:Clone() :: Model
+			return asset
 		end)
 		if not loaded then
 			table.insert(failures, { kind = record.kind, assetId = record.assetId, error = tostring(heroOrError) })
