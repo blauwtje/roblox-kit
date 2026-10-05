@@ -430,10 +430,14 @@ function fixtureLightPlacements() {
 }
 
 async function probeBuildMap(connection: StudioConnection): Promise<string> {
-  const { layout, details } = await styledSmokeMap();
+  const { layout, details, trim } = await styledSmokeMap();
+  // A trim run replaced by its profile mesh stands as a Model, which build_map's part count leaves out.
   const zonedPartCount = layout.parts.length + details.length;
   const expectedPartCount =
-    zonedPartCount + ceilingLightPlacements().length + fixtureLightPlacements().length;
+    zonedPartCount +
+    ceilingLightPlacements().length +
+    fixtureLightPlacements().length -
+    trim.trimMeshes.length;
   const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
   expectEqual("build_map partCount", output.partCount, expectedPartCount);

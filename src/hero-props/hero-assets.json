@@ -254,5 +254,53 @@
   "15f02eca56dd": {
     "kind": "prop-rail",
     "assetId": "109948980061302"
+  },
+  "25af2c54fd1c": {
+    "kind": "trim-ogee",
+    "assetId": "71284709301327"
+  },
+  "da1a753e5bfd": {
+    "kind": "trim-bead",
+    "assetId": "98967859974079"
+  },
+  "b5fbcb9cd050": {
+    "kind": "trim-quarter-round",
+    "assetId": "107484732234321"
+  },
+  "a8a45e103552": {
+    "kind": "trim-ogee",
+    "assetId": "107501004788474"
+  },
+  "94466cbda66a": {
+    "kind": "trim-bead",
+    "assetId": "130899930879902"
+  },
+  "5d4319842e77": {
+    "kind": "trim-quarter-round",
+    "assetId": "112929729526818"
+  },
+  "74e8fc336ed3": {
+    "kind": "trim-ogee",
+    "assetId": "129423647739996"
+  },
+  "a33390d50d12": {
+    "kind": "trim-bead",
+    "assetId": "105519843133145"
+  },
+  "f2d60ffb6672": {
+    "kind": "trim-quarter-round",
+    "assetId": "97533353813833"
+  },
+  "c20e4881e372": {
+    "kind": "trim-ogee",
+    "assetId": "82659819153416"
+  },
+  "b55e3bcdce99": {
+    "kind": "trim-bead",
+    "assetId": "109770170967319"
+  },
+  "be0c688c6280": {
+    "kind": "trim-quarter-round",
+    "assetId": "89176041130601"
   }
 }
