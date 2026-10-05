@@ -150,4 +150,8 @@ export const config = Object.freeze({
   maxPlaytestTimeoutSeconds: 300,
   /** Seconds one playtest session call may take beyond the harness timeout: starting, reporting, cleanup. */
   playtestCallMarginSeconds: 10,
+  /** Seconds `run_in_playtest` waits for its code to return, with the default and the bounds. */
+  defaultRunInPlaytestTimeoutSeconds: 10,
+  minRunInPlaytestTimeoutSeconds: 1,
+  maxRunInPlaytestTimeoutSeconds: 60,
 });

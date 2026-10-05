@@ -29,3 +29,11 @@ export function serverHarnessSource(checkBody: string): Promise<string> {
 export function clientHarnessSource(checkBody: string): Promise<string> {
   return harnessSource("playtest-client-harness.luau", checkBody);
 }
+
+/**
+ * Source of the `run_in_playtest` probe Script with `code` as the body of `probe()`, which returns
+ * one JSON-encodable value.
+ */
+export function playtestProbeSource(code: string): Promise<string> {
+  return harnessSource("playtest-probe.luau", code);
+}
