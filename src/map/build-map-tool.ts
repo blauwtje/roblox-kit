@@ -177,11 +177,22 @@ function lightRecordsOf(
   });
 }
 
+/** The terrain materials the style draws with a role's variant, as `{ material, role }`; a role whose variant has another base material is left out. */
+function terrainOverridesOf(
+  style: Preset | undefined,
+  variants: Record<string, Variant>,
+): { material: string; role: string }[] {
+  return Object.entries(style?.terrainVariants ?? {})
+    .filter(([material, role]) => variants[role]?.baseMaterial === material)
+    .map(([material, role]) => ({ material, role }));
+}
+
 /** What every phase of one build shares. */
 interface BuildContext {
   mapId: string;
   terrainFills: TerrainFill[];
   variants: Record<string, Variant>;
+  terrainOverrides: { material: string; role: string }[];
   generators: Record<string, string>;
   /** The hero props the props phase loads from their assets, beside the set pieces left in `props`. */
   heroProps: HeroPropRecord[];
@@ -202,6 +213,7 @@ function phaseArguments(
       parts: phase.parts,
       terrainFills: build.terrainFills,
       variants: build.variants,
+      terrainOverrides: build.terrainOverrides,
       materials: build.materials,
     },
     "floors and ceilings": {
@@ -351,6 +363,7 @@ async function buildMap(
     mapId: input.mapId,
     terrainFills: layout.terrainFills,
     variants,
+    terrainOverrides: terrainOverridesOf(style, variants),
     generators,
     heroProps,
     trimMeshes,

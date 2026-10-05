@@ -98,6 +98,11 @@ type TerrainChunk = {
 	heights: { number },
 }
 
+type TerrainOverride = {
+	material: string,
+	role: string,
+}
+
 type TerrainFill = {
 	shape: string,
 	center: Vector,
@@ -126,6 +131,8 @@ type Arguments = {
 	terrainChunk: TerrainChunk?,
 	-- Flat MaterialVariant of each surface role that has one.
 	variants: { [string]: Variant }?,
+	-- Terrain materials drawn with the MaterialVariant of a role.
+	terrainOverrides: { TerrainOverride }?,
 	lights: { LightRecord }?,
 }
 
@@ -229,6 +236,41 @@ local function variantFor(role: string, variant: Variant): MaterialVariant
 	materialVariant.Parent = MaterialService
 	variantByRole[role] = materialVariant
 	return materialVariant
+end
+
+-- The surface roles of a preset; a map's variants are named `<mapId>-<role>` (remove-map.luau takes the same list as an argument).
+local SURFACE_ROLES = { "floor", "wall", "trim", "ceiling", "accent" }
+
+-- Clears every terrain material override that points at one of this map's variants, so a rebuild keeps no stale one.
+local function clearTerrainOverrides()
+	local ownNames: { [string]: boolean } = {}
+	for _, role in SURFACE_ROLES do
+		ownNames[`{arguments.mapId}-{role}`] = true
+	end
+	for _, material in Enum.Material:GetEnumItems() do
+		-- Reading the override of a material Studio does not support (Neon, Glass) errors; such a material has none.
+		local found, overrideName = pcall(function()
+			return MaterialService:GetBaseMaterialOverride(material)
+		end)
+		if found and ownNames[overrideName] then
+			MaterialService:SetBaseMaterialOverride(material, "")
+		end
+	end
+end
+
+-- Draws each named terrain material with the MaterialVariant of its role.
+local function applyTerrainOverrides()
+	clearTerrainOverrides()
+	local variants = arguments.variants or {}
+	for _, override in arguments.terrainOverrides or ({} :: { TerrainOverride }) do
+		local variant = variants[override.role]
+		if variant then
+			MaterialService:SetBaseMaterialOverride(
+				materialNamed(override.material),
+				variantFor(override.role, variant).Name
+			)
+		end
+	end
 end
 
 -- A variant only renders on a part whose Material is the variant's base material.
@@ -593,6 +635,7 @@ local function buildShell(): (boolean, number)
 		end
 	end
 	model:SetAttribute(TERRAIN_ATTRIBUTE_NAME, HttpService:JSONEncode(terrainFills))
+	applyTerrainOverrides()
 	model.Parent = folder
 	return oldModel ~= nil, countPartChildren(model)
 end

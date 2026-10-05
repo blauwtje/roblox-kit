@@ -49,6 +49,21 @@ if typeof(encodedFills) == "string" then
 	end
 end
 
+-- A terrain material drawn with one of this map's variants goes back to the engine's own.
+local ownNames: { [string]: boolean } = {}
+for _, role in arguments.roles do
+	ownNames[`{arguments.mapId}-{role}`] = true
+end
+for _, material in Enum.Material:GetEnumItems() do
+	-- Reading the override of a material Studio does not support (Neon, Glass) errors; such a material has none.
+	local found, overrideName = pcall(function()
+		return MaterialService:GetBaseMaterialOverride(material)
+	end)
+	if found and ownNames[overrideName] then
+		MaterialService:SetBaseMaterialOverride(material, "")
+	end
+end
+
 -- Exact names only, so another map's variants (`<other>-<role>`) are never touched.
 for _, role in arguments.roles do
 	local variant = MaterialService:FindFirstChild(`{arguments.mapId}-{role}`)

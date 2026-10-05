@@ -410,6 +410,11 @@ export const presetSchema = z.strictObject({
     accent: surfaceRole,
   }),
   lighting,
+  /**
+   * Terrain materials drawn with a surface role's MaterialVariant, keyed by material name (`Concrete` to `wall`).
+   * An entry takes effect only when that role's variant has the same `baseMaterial`, like a part's variant.
+   */
+  terrainVariants: z.record(materialName, surfaceRoleName).optional(),
   /** The look the lighting recipe aims for, which the image rubric scores a room against. */
   lightingIntent: z.string().min(1),
   /** Only the hero light casts shadows, so no role carries a shadows field. */

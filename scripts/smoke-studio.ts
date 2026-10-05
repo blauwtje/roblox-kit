@@ -177,6 +177,8 @@ const terrainSmokeSpec = relationMapSpecSchema.parse({
   mapId: "smoke-terrain",
   seed: 3,
   rooms: [{ name: "lookout", x: 2300, z: 2300, width: 20, depth: 20 }],
+  // The train-station ceiling role has a Concrete variant, so Concrete terrain is drawn with it.
+  style: { preset: "train-station", overrides: { terrainVariants: { Concrete: "ceiling" } } },
   terrain: [
     {
       shape: "heightmap",
@@ -1275,9 +1277,14 @@ for x = 1, voxels.Size.X do
   end
 end
 table.sort(names)
-return game:GetService("HttpService"):JSONEncode({ solid = solid, materials = names })`;
+local concreteOverride = game:GetService("MaterialService"):GetBaseMaterialOverride(Enum.Material.Concrete)
+return game:GetService("HttpService"):JSONEncode({ solid = solid, materials = names, concreteOverride = concreteOverride })`;
 
-const terrainBoxSchema = z.object({ solid: z.number(), materials: z.array(z.string()) });
+const terrainBoxSchema = z.object({
+  solid: z.number(),
+  materials: z.array(z.string()),
+  concreteOverride: z.string(),
+});
 
 /** Builds a heightmap map, reads its voxels back against the plan, then removes it and expects empty terrain. */
 async function probeTerrainHeightmap(connection: StudioConnection): Promise<string> {
@@ -1304,12 +1311,18 @@ async function probeTerrainHeightmap(connection: StudioConnection): Promise<stri
     true,
   );
   expectEqual("heightmap base material present", built.materials.includes("Ground"), true);
+  expectEqual(
+    "Concrete terrain drawn with the ceiling variant",
+    built.concreteOverride,
+    `${terrainSmokeSpec.mapId}-ceiling`,
+  );
   await callRealTool(removeMapTool, { mapId: terrainSmokeSpec.mapId }, connection);
   const cleared = terrainBoxSchema.parse(
     JSON.parse(await executeLuau(connection, studioId, terrainBoxLuau)),
   );
   expectEqual("heightmap voxels after remove_map", cleared.solid, 0);
-  return `${String(built.solid)} voxels (plan ${String(expected)}) in ${String(chunks.length)} chunks, materials ${built.materials.join(", ")}; none after remove_map`;
+  expectEqual("Concrete terrain override after remove_map", cleared.concreteOverride, "");
+  return `${String(built.solid)} voxels (plan ${String(expected)}) in ${String(chunks.length)} chunks, materials ${built.materials.join(", ")}; Concrete drawn with the ceiling variant; none after remove_map`;
 }
 
 /** Name of the step that builds the smoke map every later step uses; `--only` always keeps it. */
