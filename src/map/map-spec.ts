@@ -67,7 +67,56 @@ const roomGraphSchema = z.strictObject({
   edges: z.array(z.strictObject({ a: z.string().min(1), b: z.string().min(1) })).default([]),
 });
 
+/** Whether a stud value lies on the Terrain voxel grid, which WriteVoxels regions must. */
+function onVoxelGrid(value: number): boolean {
+  return (
+    Math.abs(value / config.terrainVoxelStuds - Math.round(value / config.terrainVoxelStuds)) < 1e-9
+  );
+}
+
+/** Noise heightmap terrain: the box (`center`, `size`) holds the ground, whose surface rises from its bottom to `size.y`. */
+const heightmapFillSchema = z
+  .strictObject({
+    shape: z.literal("heightmap"),
+    center: vector,
+    size: positiveVector,
+    /** Material below the surface layer of every column. */
+    material: materialName,
+    /** Surface materials: sand low, snow high, rock on steep slopes, grass elsewhere. */
+    layers: z
+      .strictObject({
+        sand: materialName.default("Sand"),
+        grass: materialName.default("Grass"),
+        rock: materialName.default("Rock"),
+        snow: materialName.default("Snow"),
+      })
+      .default({ sand: "Sand", grass: "Grass", rock: "Rock", snow: "Snow" }),
+    /** Seeds the noise and the erosion; absent uses the map seed. */
+    seed: z.int().nonnegative().optional(),
+    /** Distance over which the noise's largest features vary. */
+    noiseScaleStuds: positiveStud.default(120),
+    /** Erosion droplets per column; 0 leaves the raw noise. */
+    erosion: z.number().min(0).default(4),
+  })
+  .superRefine((fill, context) => {
+    const corners = [
+      ["x", fill.center.x - fill.size.x / 2],
+      ["y", fill.center.y - fill.size.y / 2],
+      ["z", fill.center.z - fill.size.z / 2],
+    ] as const;
+    for (const [axis, minimum] of corners) {
+      if (!onVoxelGrid(minimum) || !onVoxelGrid(fill.size[axis])) {
+        context.addIssue({
+          code: "custom",
+          message: `A heightmap's box must lie on the ${String(config.terrainVoxelStuds)}-stud voxel grid: its minimum ${axis} and its size ${axis} must be multiples of ${String(config.terrainVoxelStuds)}.`,
+          path: ["size", axis],
+        });
+      }
+    }
+  });
+
 const terrainFillSchema = z.discriminatedUnion("shape", [
+  heightmapFillSchema,
   z.strictObject({
     shape: z.literal("block"),
     center: vector,
@@ -182,6 +231,7 @@ export type RoomSpec = MapSpec["rooms"][number];
 export type Objective = z.output<typeof objectiveSchema>;
 export type PerformanceBudget = z.output<typeof performanceBudgetSchema>;
 export type TerrainFill = MapSpec["terrain"][number];
+export type HeightmapFill = Extract<TerrainFill, { shape: "heightmap" }>;
 export type RelationMapSpec = z.output<typeof relationMapSpecSchema>;
 export type RelationRoomSpec = RelationMapSpec["rooms"][number];
 export type GraphMapSpec = z.output<typeof graphMapSpecSchema>;

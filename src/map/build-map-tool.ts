@@ -21,6 +21,7 @@ import {
 } from "./hero-prop-placement.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
+import { terrainChunks } from "./terrain-heightmap.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
@@ -75,7 +76,7 @@ function boundsOfBox(center: Vector, size: Vector): Bounds {
 }
 
 function boundsOfFill(fill: TerrainFill): Bounds {
-  if (fill.shape === "block") {
+  if (fill.shape !== "ball") {
     return boundsOfBox(fill.center, fill.size);
   }
   const diameter = 2 * fill.radius;
@@ -233,7 +234,9 @@ function materialsOf(
 ): string[] {
   return [
     ...parts.map((part) => part.material),
-    ...terrainFills.map((fill) => fill.material),
+    ...terrainFills.flatMap((fill) =>
+      fill.shape === "heightmap" ? [fill.material, ...Object.values(fill.layers)] : [fill.material],
+    ),
     ...Object.values(variants).map((variant) => variant.baseMaterial),
   ];
 }
@@ -357,6 +360,10 @@ async function buildMap(
       variants,
     ),
   };
+  // Heightmaps are generated before Studio is touched; the shell phase records them, then their chunks are written.
+  const chunks = layout.terrainFills.flatMap((fill) =>
+    fill.shape === "heightmap" ? terrainChunks(fill, spec.seed ?? config.defaultSeed) : [],
+  );
   const studioId = await selectStudio(context.studio, input.studioId);
   const phases = groupBuildPhases({
     parts: layout.parts,
@@ -377,6 +384,23 @@ async function buildMap(
         resultSchema: builtPhaseSchema,
       });
       partCount = built.partCount;
+      if (phase.name === "shell") {
+        for (const terrainChunk of chunks) {
+          await runLuauFile({
+            connection: context.studio,
+            studioId,
+            fileName: "build-map.luau",
+            datamodelType: "Edit",
+            arguments: {
+              phase: "terrain",
+              mapId: input.mapId,
+              mapsFolderName: config.mapsFolderName,
+              terrainChunk,
+            },
+            resultSchema: builtPhaseSchema,
+          });
+        }
+      }
       for (const failure of built.heroLoadFailures ?? []) {
         const fallback = heroProps.find((hero) => hero.assetId === failure.assetId)?.fallback.kind;
         if (fallback === undefined && trimMeshes.some((mesh) => mesh.assetId === failure.assetId)) {
@@ -441,7 +465,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. build_map only reads recorded assets and never uploads; an asset that fails to load builds the set piece instead with a warning naming the asset id and error; a hero prop with no recorded asset keeps its set piece and a warning says to generate and upload it from a clone of the roblox-kit repo. Each other prop whose kind's prop-<kind> recipe has a recorded asset is that mesh instead, stretched on each axis to the prop's box; a kind with no recorded asset keeps its ProceduralModel, with no warning. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
-    `replaces the Model and clears the terrain its previous build filled. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
+    `replaces the Model and clears the terrain its previous build filled. A terrain fill of shape heightmap { center, size, material, layers, seed, noiseScaleStuds, erosion } is seeded fractal noise with particle hydraulic erosion inside its box (minimum corner and size on the 4-stud voxel grid, size.y the tallest height above the box bottom), written with WriteVoxels in chunks after the shell phase: sand low, snow high, rock on steep slopes, grass elsewhere, and the fill's material below. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
     `The build runs in six phases (shell, floors and ceilings, openings, surfaces, props, lighting), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
     `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead).`,
   inputSchema: buildMapInput,

@@ -11,6 +11,7 @@ type Arguments = {
 -- build-map.luau stores vectors as `{ x, y, z }` objects, not arrays.
 type Vector = { x: number, y: number, z: number }
 
+-- A heightmap fill has a size, so it clears as the block of its box.
 type TerrainFill = {
 	material: string,
 	center: Vector,

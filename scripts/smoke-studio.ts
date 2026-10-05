@@ -11,6 +11,7 @@ import { removeMapTool } from "../src/map/remove-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
+import { solidVoxelCount, terrainChunks } from "../src/map/terrain-heightmap.ts";
 import type { PropRecord } from "../src/map/prop-placement.ts";
 import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
 import { heroPropsOf, trimMeshesOf } from "../src/map/hero-prop-placement.ts";
@@ -171,6 +172,21 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
   ],
 });
 
+/** A map holding only a noise heightmap, inside the smoke region and spanning four chunks; the terrain step builds and removes it. */
+const terrainSmokeSpec = relationMapSpecSchema.parse({
+  mapId: "smoke-terrain",
+  seed: 3,
+  rooms: [{ name: "lookout", x: 2300, z: 2300, width: 20, depth: 20 }],
+  terrain: [
+    {
+      shape: "heightmap",
+      center: { x: 2044, y: -8, z: 2030 },
+      size: { x: 160, y: 24, z: 140 },
+      material: "Ground",
+    },
+  ],
+});
+
 /** The smoke map with every room centered: what layout, lights and the checks below expect. */
 const smokeMapSpec = resolveRelations(smokeRelationSpec);
 
@@ -265,6 +281,7 @@ destroyNamed(mapsFolder, "${smokeMapSpec.mapId}")
 destroyNamed(mapsFolder, "${blockerModelName}")
 destroyNamed(mapsFolder, "${secondSmokeSpec.mapId}")
 destroyNamed(mapsFolder, "${facadeSmokeSpec.mapId}")
+destroyNamed(mapsFolder, "${terrainSmokeSpec.mapId}")
 if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
 for _, variant in game:GetService("MaterialService"):GetChildren() do
   if variant:IsA("MaterialVariant") and string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then variant:Destroy() end
@@ -1235,6 +1252,66 @@ async function probeRemoveMapLighting(
   return "lighting held while B remained and returned to the original after B; folder, terrain and variants gone";
 }
 
+/** Reports the solid voxels and the materials of the heightmap's box as JSON. */
+const terrainBoxLuau = `
+local min = Vector3.new(2044 - 80, -20, 2030 - 70)
+local max = Vector3.new(2044 + 80, 4, 2030 + 70)
+local voxels, occupancies = workspace.Terrain:ReadVoxels(Region3.new(min, max), 4)
+local solid = 0
+local seen = {}
+local names = {}
+for x = 1, voxels.Size.X do
+  for y = 1, voxels.Size.Y do
+    for z = 1, voxels.Size.Z do
+      local material = voxels[x][y][z]
+      if material ~= Enum.Material.Air then
+        solid += 1
+        if not seen[material] then
+          seen[material] = true
+          table.insert(names, material.Name)
+        end
+      end
+    end
+  end
+end
+table.sort(names)
+return game:GetService("HttpService"):JSONEncode({ solid = solid, materials = names })`;
+
+const terrainBoxSchema = z.object({ solid: z.number(), materials: z.array(z.string()) });
+
+/** Builds a heightmap map, reads its voxels back against the plan, then removes it and expects empty terrain. */
+async function probeTerrainHeightmap(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const fill = terrainSmokeSpec.terrain[0];
+  if (fill?.shape !== "heightmap") {
+    throw new Error("The terrain smoke spec has no heightmap.");
+  }
+  const chunks = terrainChunks(fill, terrainSmokeSpec.seed ?? config.defaultSeed);
+  expectEqual("heightmap chunks", chunks.length, 4);
+  await callRealTool(buildMapTool, terrainSmokeSpec, connection);
+  const built = terrainBoxSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, terrainBoxLuau)),
+  );
+  const expected = solidVoxelCount(chunks);
+  expectEqual(
+    "heightmap solid voxels within 1% of the plan",
+    Math.abs(built.solid - expected) <= expected / 100,
+    true,
+  );
+  expectEqual(
+    "heightmap uses the base and several surface materials",
+    built.materials.length >= 3,
+    true,
+  );
+  expectEqual("heightmap base material present", built.materials.includes("Ground"), true);
+  await callRealTool(removeMapTool, { mapId: terrainSmokeSpec.mapId }, connection);
+  const cleared = terrainBoxSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, terrainBoxLuau)),
+  );
+  expectEqual("heightmap voxels after remove_map", cleared.solid, 0);
+  return `${String(built.solid)} voxels (plan ${String(expected)}) in ${String(chunks.length)} chunks, materials ${built.materials.join(", ")}; none after remove_map`;
+}
+
 /** Name of the step that builds the smoke map every later step uses; `--only` always keeps it. */
 const buildStepName = "build_map";
 
@@ -1272,6 +1349,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       ["build_map profile trim", () => probeProfileTrim(connection)],
       ["build_map facade", () => probeFacade(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
+      ["build_map terrain heightmap", () => probeTerrainHeightmap(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],

@@ -51,6 +51,14 @@ export const config = Object.freeze({
   defaultSeed: 1,
   /** Grid that the center of a room placed by relation snaps to. */
   gridStuds: 5,
+  /** Side of a Terrain voxel, the resolution of a heightmap fill; its box must lie on this grid. */
+  terrainVoxelStuds: 4,
+  /** Columns along each side of one heightmap chunk sent to Studio, so one call stays far below the Luau size limit. */
+  terrainChunkColumns: 32,
+  /** Heightmap shape: the share of its height below which a column is sand and above which it is snow, and the slope (rise per stud) from which it is rock. */
+  terrainSandFraction: 0.12,
+  terrainSnowFraction: 0.85,
+  terrainRockSlope: 0.45,
 
   /** How far below the ceiling a room light hangs. */
   lightCeilingDropStuds: 1,

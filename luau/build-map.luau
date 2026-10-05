@@ -84,6 +84,20 @@ type LightRecord = {
 	color: string,
 }
 
+-- One rectangle of heightmap columns: the heights and surface layers of `columns` by `rows` voxel columns.
+type TerrainChunk = {
+	origin: Vector,
+	columns: number,
+	rows: number,
+	voxelsY: number,
+	voxelStuds: number,
+	baseMaterial: string,
+	layerMaterials: { string },
+	-- Per column (`column * rows + row`, both 0-based) the 0-based index into layerMaterials, and the surface height.
+	surface: { number },
+	heights: { number },
+}
+
 type TerrainFill = {
 	shape: string,
 	center: Vector,
@@ -109,6 +123,7 @@ type Arguments = {
 	ceilingDropStuds: number?,
 	fixtureSizeStuds: number?,
 	terrainFills: { TerrainFill }?,
+	terrainChunk: TerrainChunk?,
 	-- Flat MaterialVariant of each surface role that has one.
 	variants: { [string]: Variant }?,
 	lights: { LightRecord }?,
@@ -153,6 +168,7 @@ local function materialNamed(materialName: string): Enum.Material
 	return (Enum.Material:FromName(materialName) :: any) :: Enum.Material
 end
 
+-- Fills a block or ball; a heightmap is written by writeTerrainChunk, and its box clears like a block.
 local function fillTerrain(fill: TerrainFill, material: Enum.Material)
 	local size = fill.size
 	local radius = fill.radius
@@ -572,11 +588,50 @@ local function buildShell(): (boolean, number)
 	addParts(model)
 	local terrainFills = arguments.terrainFills or ({} :: { TerrainFill })
 	for _, fill in terrainFills do
-		fillTerrain(fill, materialNamed(fill.material))
+		if fill.shape ~= "heightmap" then
+			fillTerrain(fill, materialNamed(fill.material))
+		end
 	end
 	model:SetAttribute(TERRAIN_ATTRIBUTE_NAME, HttpService:JSONEncode(terrainFills))
 	model.Parent = folder
 	return oldModel ~= nil, countPartChildren(model)
+end
+
+-- Writes one chunk of a heightmap fill: full voxels up to the surface, a part-filled top voxel, the top voxel's material
+-- from the column's surface layer and the base material below it.
+local function writeTerrainChunk(chunk: TerrainChunk)
+	local stud = chunk.voxelStuds
+	local base = materialNamed(chunk.baseMaterial)
+	local layers: { Enum.Material } = {}
+	for _, name in chunk.layerMaterials do
+		table.insert(layers, materialNamed(name))
+	end
+	local materials = table.create(chunk.columns)
+	local occupancies = table.create(chunk.columns)
+	for column = 1, chunk.columns do
+		materials[column] = table.create(chunk.voxelsY)
+		occupancies[column] = table.create(chunk.voxelsY)
+		for level = 1, chunk.voxelsY do
+			materials[column][level] = table.create(chunk.rows, Enum.Material.Air)
+			occupancies[column][level] = table.create(chunk.rows, 0)
+		end
+		for row = 1, chunk.rows do
+			local index = (column - 1) * chunk.rows + row
+			local height = chunk.heights[index]
+			local surfaceMaterial = layers[chunk.surface[index] + 1]
+			for level = 1, chunk.voxelsY do
+				local bottom = (level - 1) * stud
+				local fill = math.clamp((height - bottom) / stud, 0, 1)
+				if fill > 0 then
+					materials[column][level][row] = if height <= bottom + stud then surfaceMaterial else base
+					occupancies[column][level][row] = fill
+				end
+			end
+		end
+	end
+	local minimum = toVector3(chunk.origin)
+	local size = Vector3.new(chunk.columns, chunk.voxelsY, chunk.rows) * stud
+	workspace.Terrain:WriteVoxels(Region3.new(minimum, minimum + size), stud, materials, occupancies)
 end
 
 -- Runs the phase named in the arguments; returns whether the shell replaced a map (nil for later phases), the Model's part
@@ -594,6 +649,8 @@ local function runPhase(): (boolean?, number, { HeroLoadFailure }?)
 		failures = addPropModels(model)
 	elseif phase == "lighting" then
 		addLights(model)
+	elseif phase == "terrain" then
+		writeTerrainChunk(arguments.terrainChunk :: TerrainChunk)
 	else
 		error(`Unknown build phase "{phase}".`, 0)
 	end
