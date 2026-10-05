@@ -85,6 +85,18 @@ await test("the shipped registry starts as an array", () => {
   assert.ok(Array.isArray(tools));
 });
 
+await test("the shipped registry lists the playtest, remove_map, run_in_playtest and judge_round tools in order", () => {
+  const names = tools.map((tool) => tool.name);
+  const start = names.indexOf("run_playtest");
+  assert.notEqual(start, -1);
+  assert.deepEqual(names.slice(start), [
+    "run_playtest",
+    "remove_map",
+    "run_in_playtest",
+    "judge_round",
+  ]);
+});
+
 await test("tools/list follows array order and exposes schemas and annotations", async () => {
   const { client, close } = await connectClient([failTool, echoTool], "createServer");
   const listed = await client.listTools();

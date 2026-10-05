@@ -10,6 +10,9 @@ import { buildMapTool } from "../map/build-map-tool.ts";
 import { captureZonesTool } from "../map/capture-zones-tool.ts";
 import { createCheckMapTool } from "../map/check-map-tool.ts";
 import { CheckReportStore } from "../map/check-report-store.ts";
+import { createJudgeRoundTool } from "../eval/judge-round-tool.ts";
+import { removeMapTool } from "../map/remove-map-tool.ts";
+import { createRunInPlaytestTool } from "../playtest/run-in-playtest-tool.ts";
 import { createRunPlaytestTool } from "../playtest/run-playtest-tool.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
 import { StudioMcpClient } from "../studio/studio-mcp-client.ts";
@@ -25,6 +28,9 @@ export const tools: readonly ToolDefinition[] = [
   createCheckMapTool(checkReports),
   captureZonesTool,
   createRunPlaytestTool(),
+  removeMapTool,
+  createRunInPlaytestTool(),
+  createJudgeRoundTool(process.env["PROJECT_DIR"]),
 ];
 
 export interface ServerOptions {
