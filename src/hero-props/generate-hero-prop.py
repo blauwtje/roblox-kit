@@ -7,7 +7,11 @@ One object per role, named after it, joins that role's parts and carries a mater
 A part is built in this order: its shape (box, cylinder, lathe, profile or sweep), its `bevel`, its `cuts`
 (boxes subtracted from it) and its `array` (copies at a fixed step). Each role's object is shaded smooth with
 weighted normals, so the bevels catch light while the large faces stay flat.
-The parts have no randomness, so the recipe alone fixes the mesh. Recipe axes are x across, y up, z along
+Each role object is UV unwrapped and its material, a procedural one of noise, edge wear and ambient occlusion
+over the role's color, is baked with Cycles to a color, a normal and an occlusion-roughness-metalness map
+(green roughness, blue metalness, as glTF packs them), then replaced by a material reading those maps, so the
+GLB carries the maps and Roblox loads them as a SurfaceAppearance (probe-glb-textures.ts found that it does).
+The parts and the bake have no randomness (a fixed sample count), so the recipe alone fixes the mesh. Recipe axes are x across, y up, z along
 the depth; Blender is Z up and the glTF exporter turns it into Y up, so recipe (x, y, z) is Blender (x, -z, y).
 """
 
@@ -17,10 +21,17 @@ import sys
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 CYLINDER_SEGMENTS = 16
 BEVEL_SEGMENTS = 2
+MAP_SIZE = 512
+BAKE_SAMPLES = 16
+# Studs: the noise scale is one blotch per stud, wear reaches this far from an edge, occlusion this far from a corner.
+NOISE_SCALE = 1.0
+WEAR_RADIUS = 0.15
+OCCLUSION_DISTANCE = 0.5
 
 # Turns a cylinder's default Blender Z axis (the recipe's y axis) onto the recipe axis.
 CYLINDER_AXIS_ROTATIONS = {
@@ -208,13 +219,182 @@ def srgb_channel_to_linear(value):
     return ((value + 0.055) / 1.055) ** 2.4
 
 
-def role_material(role, hex_color):
-    material = bpy.data.materials.new(role)
-    material.use_nodes = True
+def role_color(hex_color):
     digits = hex_color.lstrip("#")
     channels = [int(digits[index : index + 2], 16) / 255 for index in (0, 2, 4)]
-    linear = [srgb_channel_to_linear(channel) for channel in channels] + [1.0]
-    material.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = linear
+    return [srgb_channel_to_linear(channel) for channel in channels] + [1.0]
+
+
+class MaterialGraph:
+    """Adds nodes to one material's tree, so the procedural material below reads as a list of steps."""
+
+    def __init__(self, material):
+        material.use_nodes = True
+        self.tree = material.node_tree
+        self.tree.nodes.clear()
+
+    def node(self, kind, **values):
+        node = self.tree.nodes.new(kind)
+        for name, value in values.items():
+            setattr(node, name, value)
+        return node
+
+    def link(self, source, target, name):
+        self.tree.links.new(source, target.inputs[name])
+
+    def math(self, operation, *inputs):
+        node = self.node("ShaderNodeMath", operation=operation, use_clamp=True)
+        for index, value in enumerate(inputs):
+            if isinstance(value, bpy.types.NodeSocket):
+                self.tree.links.new(value, node.inputs[index])
+            else:
+                node.inputs[index].default_value = value
+        return node.outputs[0]
+
+
+def procedural_material(role, hex_color):
+    """Noise, edge wear and occlusion over `hex_color`; returns the material and the sockets its bakes read."""
+    material = bpy.data.materials.new(role)
+    graph = MaterialGraph(material)
+    noise = graph.node("ShaderNodeTexNoise", noise_dimensions="3D")
+    noise.inputs["Scale"].default_value = NOISE_SCALE
+    noise.inputs["Detail"].default_value = 6.0
+    noise.inputs["Roughness"].default_value = 0.6
+    fine_noise = graph.node("ShaderNodeTexNoise", noise_dimensions="3D")
+    fine_noise.inputs["Scale"].default_value = 12.0 * NOISE_SCALE
+    fine_noise.inputs["Detail"].default_value = 3.0
+
+    # Wear: where the bevelled normal departs from the face normal, broken up by the noise.
+    bevel = graph.node("ShaderNodeBevel")
+    bevel.inputs["Radius"].default_value = WEAR_RADIUS
+    geometry = graph.node("ShaderNodeNewGeometry")
+    facing = graph.node("ShaderNodeVectorMath", operation="DOT_PRODUCT")
+    graph.tree.links.new(bevel.outputs["Normal"], facing.inputs[0])
+    graph.tree.links.new(geometry.outputs["Normal"], facing.inputs[1])
+    edge = graph.math("SUBTRACT", 1.0, facing.outputs["Value"])
+    edge_mask = graph.node("ShaderNodeMapRange")
+    edge_mask.inputs["From Min"].default_value = 0.01
+    edge_mask.inputs["From Max"].default_value = 0.2
+    graph.tree.links.new(edge, edge_mask.inputs["Value"])
+    noise_mask = graph.node("ShaderNodeMapRange")
+    noise_mask.inputs["From Min"].default_value = 0.4
+    noise_mask.inputs["From Max"].default_value = 0.6
+    graph.tree.links.new(fine_noise.outputs["Fac"], noise_mask.inputs["Value"])
+    wear = graph.math("MULTIPLY", edge_mask.outputs["Result"], noise_mask.outputs["Result"])
+
+    occlusion = graph.node("ShaderNodeAmbientOcclusion", samples=8)
+    occlusion.inputs["Distance"].default_value = OCCLUSION_DISTANCE
+
+    base = graph.node("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY")
+    base.inputs["Factor"].default_value = 1.0
+    base.inputs["A"].default_value = role_color(hex_color)
+    tone = graph.math("MULTIPLY_ADD", noise.outputs["Fac"], 0.5, 0.75)
+    tone_color = graph.node("ShaderNodeCombineColor")
+    for channel in ("Red", "Green", "Blue"):
+        graph.link(tone, tone_color, channel)
+    graph.link(tone_color.outputs["Color"], base, "B")
+    worn = graph.node("ShaderNodeMix", data_type="RGBA", blend_type="MIX")
+    worn.inputs["B"].default_value = [min(1.0, channel * 1.8 + 0.05) for channel in role_color(hex_color)[:3]] + [1.0]
+    graph.link(wear, worn, "Factor")
+    graph.link(base.outputs["Result"], worn, "A")
+    shaded = graph.node("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY")
+    shaded.inputs["Factor"].default_value = 0.8
+    graph.link(worn.outputs["Result"], shaded, "A")
+    graph.link(occlusion.outputs["Color"], shaded, "B")
+
+    rough = graph.math("MULTIPLY_ADD", fine_noise.outputs["Fac"], 0.25, 0.6)
+    roughness = graph.math("SUBTRACT", rough, graph.math("MULTIPLY", wear, 0.3))
+    metalness = graph.math("MULTIPLY", wear, 0.6)
+
+    bump = graph.node("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.4
+    bump.inputs["Distance"].default_value = 0.02
+    graph.link(fine_noise.outputs["Fac"], bump, "Height")
+
+    principled = graph.node("ShaderNodeBsdfPrincipled")
+    graph.link(shaded.outputs["Result"], principled, "Base Color")
+    graph.link(roughness, principled, "Roughness")
+    graph.link(metalness, principled, "Metallic")
+    graph.link(bump.outputs["Normal"], principled, "Normal")
+    emission = graph.node("ShaderNodeEmission")
+    graph.link(metalness, emission, "Color")
+    output = graph.node("ShaderNodeOutputMaterial")
+    graph.tree.links.new(principled.outputs["BSDF"], output.inputs["Surface"])
+    return material, graph, output, principled, emission
+
+
+def bake_image(name, colorspace):
+    image = bpy.data.images.new(name, MAP_SIZE, MAP_SIZE, alpha=False)
+    image.colorspace_settings.name = colorspace
+    return image
+
+
+def bake_map(graph, output, shader, image, bake_type, **settings):
+    """Bakes the material through `shader` into `image`, the target node being the tree's active one."""
+    target = graph.node("ShaderNodeTexImage", image=image)
+    graph.tree.nodes.active = target
+    graph.tree.links.new(shader.outputs[0], output.inputs["Surface"])
+    bpy.ops.object.bake(type=bake_type, margin=4, **settings)
+    graph.tree.nodes.remove(target)
+
+
+def pixels_of(image):
+    pixels = np.empty(MAP_SIZE * MAP_SIZE * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    return pixels.reshape(-1, 4)
+
+
+def unwrap(role_object):
+    bpy.ops.object.select_all(action="DESELECT")
+    role_object.select_set(True)
+    bpy.context.view_layer.objects.active = role_object
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.01)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def baked_material(role, hex_color, role_object):
+    """Unwraps `role_object`, bakes its procedural material to maps and returns a material reading them."""
+    unwrap(role_object)
+    procedural, graph, output, principled, emission = procedural_material(role, hex_color)
+    role_object.data.materials.clear()
+    role_object.data.materials.append(procedural)
+    color = bake_image(f"{role}-color", "sRGB")
+    normal = bake_image(f"{role}-normal", "Non-Color")
+    roughness = bake_image(f"{role}-roughness", "Non-Color")
+    metalness = bake_image(f"{role}-metalness", "Non-Color")
+    bake_map(graph, output, principled, color, "DIFFUSE", pass_filter={"COLOR"})
+    bake_map(graph, output, principled, normal, "NORMAL", normal_space="TANGENT")
+    bake_map(graph, output, principled, roughness, "ROUGHNESS")
+    bake_map(graph, output, emission, metalness, "EMIT")
+    packed = pixels_of(color).copy()
+    packed[:, 0] = 1.0
+    packed[:, 1] = pixels_of(roughness)[:, 0]
+    packed[:, 2] = pixels_of(metalness)[:, 0]
+    packed[:, 3] = 1.0
+    occlusion_roughness_metalness = bake_image(f"{role}-orm", "Non-Color")
+    occlusion_roughness_metalness.pixels.foreach_set(packed.reshape(-1))
+    bpy.data.materials.remove(procedural)
+    for spent in (roughness, metalness):
+        bpy.data.images.remove(spent)
+
+    material = bpy.data.materials.new(role)
+    final = MaterialGraph(material)
+    textured = final.node("ShaderNodeBsdfPrincipled")
+    color_node = final.node("ShaderNodeTexImage", image=color)
+    final.link(color_node.outputs["Color"], textured, "Base Color")
+    normal_node = final.node("ShaderNodeTexImage", image=normal)
+    normal_map = final.node("ShaderNodeNormalMap")
+    final.link(normal_node.outputs["Color"], normal_map, "Color")
+    final.link(normal_map.outputs["Normal"], textured, "Normal")
+    packed_node = final.node("ShaderNodeTexImage", image=occlusion_roughness_metalness)
+    split = final.node("ShaderNodeSeparateColor")
+    final.link(packed_node.outputs["Color"], split, "Color")
+    final.link(split.outputs["Green"], textured, "Roughness")
+    final.link(split.outputs["Blue"], textured, "Metallic")
+    surface = final.node("ShaderNodeOutputMaterial")
+    final.tree.links.new(textured.outputs["BSDF"], surface.inputs["Surface"])
     return material
 
 
@@ -223,7 +403,6 @@ def add_role_object(role, parts, hex_color):
     data = bpy.data.meshes.new(role)
     mesh.to_mesh(data)
     mesh.free()
-    data.materials.append(role_material(role, hex_color))
     data.shade_smooth()
     role_object = bpy.data.objects.new(role, data)
     bpy.context.scene.collection.objects.link(role_object)
@@ -233,6 +412,15 @@ def add_role_object(role, parts, hex_color):
     role_object.data = shaded
     bpy.data.meshes.remove(data)
     shaded.name = role
+    return role_object
+
+
+def bake_role_materials(role_objects, colors):
+    """Bakes each role's material once every role object stands in the scene, so occlusion sees the whole prop."""
+    for role, role_object in role_objects.items():
+        material = baked_material(role, colors[role], role_object)
+        role_object.data.materials.clear()
+        role_object.data.materials.append(material)
 
 
 def main():
@@ -243,8 +431,17 @@ def main():
     parts_by_role = {}
     for part in recipe["parts"]:
         parts_by_role.setdefault(part["role"], []).append(part)
-    for role in sorted(parts_by_role):
-        add_role_object(role, parts_by_role[role], recipe["roles"][role])
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = BAKE_SAMPLES
+    scene.cycles.use_denoising = False
+    scene.cycles.seed = 0
+    role_objects = {
+        role: add_role_object(role, parts_by_role[role], recipe["roles"][role])
+        for role in sorted(parts_by_role)
+    }
+    bake_role_materials(role_objects, recipe["roles"])
     bpy.ops.export_scene.gltf(filepath=output_path, export_format="GLB", export_yup=True)
 
 

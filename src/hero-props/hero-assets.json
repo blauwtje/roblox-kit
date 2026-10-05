@@ -218,5 +218,13 @@
   "e3efdcc47804": {
     "kind": "material-metalness",
     "assetId": "132551521488165"
+  },
+  "4b2ba84d303a": {
+    "kind": "train-car",
+    "assetId": "110961191787716"
+  },
+  "324865a892fe": {
+    "kind": "departure-board",
+    "assetId": "72409183400744"
   }
 }

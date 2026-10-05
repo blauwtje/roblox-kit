@@ -410,7 +410,9 @@ local function addParts(model: Model)
 	end
 end
 
--- Colors one hero MeshPart from the surface its name names; a name that names no surface fails the build.
+-- Sets one hero MeshPart's material from the surface its name names, and its color too unless the asset embeds
+-- baked maps (the GLB importer made a SurfaceAppearance, which the part's Color would not tint);
+-- a name that names no surface fails the build.
 local function paintHeroPart(part: MeshPart, record: HeroPropRecord)
 	local surface = record.surfaces[part.Name]
 	if not surface then
@@ -425,7 +427,9 @@ local function paintHeroPart(part: MeshPart, record: HeroPropRecord)
 			0
 		)
 	end
-	part.Color = Color3.fromHex(surface.color)
+	if not part:FindFirstChildOfClass("SurfaceAppearance") then
+		part.Color = Color3.fromHex(surface.color)
+	end
 	part.Material = materialNamed(surface.material)
 end
 
