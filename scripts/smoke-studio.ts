@@ -19,6 +19,7 @@ import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
 import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 const presets = await loadPresets();
@@ -303,6 +304,7 @@ async function executeLuau(
   studioId: string,
   code: string,
 ): Promise<string> {
+  await awaitEditMode(connection, { studioId });
   const result = await connection.callTool({
     name: "execute_luau",
     studioId,
@@ -1042,6 +1044,7 @@ const connection = new StudioMcpClient({
   timeoutMs: config.upstreamTimeoutMs,
 });
 try {
+  await awaitEditMode(connection);
   await assertViewportVisible(connection);
   const capabilities = [
     ...(await probeCapabilities(connection)),

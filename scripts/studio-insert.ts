@@ -1,3 +1,4 @@
+import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
 import { createRunPlaytestTool } from "../src/playtest/run-playtest-tool.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
 
@@ -19,6 +20,7 @@ export async function executeLuau(
   studioId: string,
   code: string,
 ): Promise<string> {
+  await awaitEditMode(connection, { studioId });
   const result = await connection.callTool({
     name: "execute_luau",
     studioId,

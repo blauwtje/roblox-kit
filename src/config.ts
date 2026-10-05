@@ -13,6 +13,9 @@ export const config = Object.freeze({
   /** How long an empty Studio list is re-asked on one connection: a fresh StudioMCP lists nothing at first. */
   studioDiscoveryTimeoutMs: 15_000,
   studioDiscoveryPollIntervalMs: 1000,
+  /** How long a smoke script waits for Studio to report Edit mode, re-asked every studioEditModePollIntervalMs: a playtest that just stopped takes a few seconds to leave Play mode. */
+  studioEditModeTimeoutMs: 30_000,
+  studioEditModePollIntervalMs: 500,
   /** Characters of text `execute_luau` returns before Studio cuts it; the smoke probe fails if Studio changes this. */
   executeLuauMaxResultChars: 100_000,
   /** What Studio appends to an `execute_luau` result it cut. */

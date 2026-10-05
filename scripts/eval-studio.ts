@@ -17,6 +17,7 @@ import { resolveStyle } from "../src/style/resolve-style.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
+import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
 import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 /**
@@ -219,6 +220,7 @@ const connection = new StudioMcpClient({
   timeoutMs: config.upstreamTimeoutMs,
 });
 try {
+  await awaitEditMode(connection);
   await assertViewportVisible(connection);
   const files = (await readdir(benchmarksUrl)).filter((name) => name.endsWith(".json")).sort();
   const failedPlaceChecks: string[] = [];
