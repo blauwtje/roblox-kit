@@ -4,6 +4,8 @@ import type { Preset } from "../style/preset-schema.ts";
 import { progressionFactor, progressionScale, roomProgression } from "../style/resolve-style.ts";
 import type { PartRecord, Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
+import { surfacePatternTiles } from "./surface-patterns.ts";
+import type { PatternSurface } from "./surface-patterns.ts";
 
 type Side = RoomSpec["doors"][number]["side"];
 
@@ -15,7 +17,7 @@ export type DetailSurfaces = Pick<Preset["surfaces"], "trim" | "accent">;
  * so it cannot block a player or change what `check_map` measures.
  */
 export interface DetailPart extends Omit<PartRecord, "kind" | "role"> {
-  kind: "trim" | "stripe" | "pillar" | "arch";
+  kind: "trim" | "stripe" | "pillar" | "arch" | "tile";
   role: "trim" | "accent";
   /** The profile mesh that stands in for this box when its asset is recorded; the box is the fallback. */
   profile?: TrimProfile;
@@ -355,17 +357,19 @@ function archParts(
 /**
  * Baseboards, crowns, accent stripes, corner pillars and doorway arches for every room of a laid-out map,
  * painted from the preset's trim and accent surfaces; the accent stripe grows with the room's depth from the
- * spawn room (`roomProgression`). Deterministic: the same inputs give the same parts.
+ * spawn room (`roomProgression`). Each of `patternSurfaces` ("floor", "ceiling") also gets a wave-function-collapse
+ * tile pattern in every room; none by default. Deterministic: the same inputs give the same parts.
  * `parts` are the parts `layoutMap` returned for `spec`.
  */
 export function buildRoomDetails(
   spec: MapSpec,
   parts: PartRecord[],
   surfaces: DetailSurfaces,
+  patternSurfaces: readonly PatternSurface[] = [],
 ): DetailPart[] {
   const details: DetailPart[] = [];
   const progression = roomProgression(spec);
-  for (const room of spec.rooms) {
+  for (const [roomIndex, room] of spec.rooms.entries()) {
     const measure = measureRoom(spec, room);
     const walls = parts.filter((part) => part.kind === "wall" && part.room === room.name);
     for (const wall of walls) {
@@ -374,6 +378,19 @@ export function buildRoomDetails(
     details.push(...pillarParts(room, measure, surfaces));
     for (const [doorIndex, door] of room.doors.entries()) {
       details.push(...archParts(room, measure, door, doorIndex + 1, surfaces));
+    }
+    for (const surface of patternSurfaces) {
+      const tiles = surfacePatternTiles({
+        room,
+        roomIndex,
+        surface,
+        wallThickness: measure.wallThickness,
+        wallHeight: measure.wallHeight,
+        seed: spec.seed ?? config.defaultSeed,
+      });
+      for (const tile of tiles) {
+        details.push(decorativePart({ ...tile, kind: "tile" }, surfaces));
+      }
     }
   }
   return details;
