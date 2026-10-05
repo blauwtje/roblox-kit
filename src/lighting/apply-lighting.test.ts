@@ -79,3 +79,54 @@ await test("apply-lighting.luau is strict, restores a stored snapshot before wri
   assert.ok(restoreAt > 0 && restoreAt < writeAt);
   assert.ok(snapshotAt > 0 && snapshotAt < writeAt);
 });
+
+function removeRequest(studio: FakeStudioConnection) {
+  return {
+    connection: studio,
+    studioId: "studio-a",
+    mapsFolderName: "Maps",
+    mapId: "town",
+    removing: true as const,
+  };
+}
+
+await test("removing sends the removing flag and no recipe, and returns the restored original", async () => {
+  const studio = studioReturning('{"restored":"original","remainingStyledMaps":[]}');
+  const removed = await applyLighting(removeRequest(studio));
+
+  assert.deepEqual(removed, { restored: "original", remainingStyledMaps: [] });
+  const code = String(studio.requests[0]?.arguments["code"]);
+  assert.equal(studio.requests[0]?.arguments["datamodel_type"], "Edit");
+  assert.ok(code.includes('"removing":true'));
+  assert.ok(!code.includes('"recipe"'));
+});
+
+await test("removing reads an absent restored key, which Luau drops for nil, as null with the remaining maps", async () => {
+  const studio = studioReturning('{"remainingStyledMaps":["keep","other"]}');
+  const removed = await applyLighting(removeRequest(studio));
+  assert.deepEqual(removed, { restored: null, remainingStyledMaps: ["keep", "other"] });
+});
+
+await test("removing reports the map's own snapshot for an older place", async () => {
+  const studio = studioReturning('{"restored":"map","remainingStyledMaps":[]}');
+  assert.deepEqual(await applyLighting(removeRequest(studio)), {
+    restored: "map",
+    remainingStyledMaps: [],
+  });
+});
+
+await test("removing rejects a restored value outside original and map", async () => {
+  await assert.rejects(
+    applyLighting(removeRequest(studioReturning('{"restored":"both","remainingStyledMaps":[]}'))),
+  );
+});
+
+await test("apply-lighting.luau saves the original once on the maps folder, restores it on removal and clears it", async () => {
+  const source = await readFile(new URL("../../luau/apply-lighting.luau", import.meta.url), "utf8");
+  const saveAt = source.indexOf("folder:SetAttribute(ORIGINAL_ATTRIBUTE_NAME, snapshot)");
+  const clearAt = source.indexOf("folder:SetAttribute(ORIGINAL_ATTRIBUTE_NAME, nil)");
+  assert.ok(source.includes('"RobloxKitOriginalLighting"'));
+  assert.ok(source.includes("folder:GetAttribute(ORIGINAL_ATTRIBUTE_NAME) == nil"));
+  assert.ok(saveAt > 0 && clearAt > 0);
+  assert.ok(source.includes('restored = "map"'));
+});

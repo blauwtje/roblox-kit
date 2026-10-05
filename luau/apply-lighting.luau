@@ -3,6 +3,11 @@
 -- only restores the stored snapshot. Before the first
 -- write the previous values and the effects it creates are stored as a JSON attribute on the map
 -- Model; a later apply restores that snapshot first and never snapshots its own values.
+-- The place's original lighting is also saved once, in the same shape, as a JSON attribute on the maps
+-- folder when a recipe is first applied with none saved and no other styled map; it is never overwritten.
+-- With `removing` nothing is applied: when the map is the last styled map the original (or, for an older
+-- place with none saved, the map's own snapshot) is restored and the folder attribute cleared; otherwise
+-- Lighting is left as it is. A styled map is a Model holding the snapshot attribute.
 -- The deprecated Technology property is never read or written.
 type AtmosphereValues = {
 	Density: number,
@@ -50,10 +55,14 @@ type Arguments = {
 	mapsFolderName: string,
 	-- Absent: restore the stored snapshot only.
 	recipe: Recipe?,
+	-- True: restore on removal of the map instead of applying.
+	removing: boolean?,
 }
 
 -- Attribute on the map Model holding the Lighting snapshot as JSON.
 local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
+-- Attribute on the maps folder holding the place's original Lighting as JSON, in the Snapshot shape.
+local ORIGINAL_ATTRIBUTE_NAME = "RobloxKitOriginalLighting"
 
 local arguments: Arguments = ...
 local HttpService = game:GetService("HttpService")
@@ -185,7 +194,47 @@ local function effectOrNew(className: string): Instance
 	return effect
 end
 
+local function findMapsFolder(): Instance
+	return workspace:FindFirstChild(arguments.mapsFolderName) :: Instance
+end
+
+-- Names of the styled maps under the folder other than this one, sorted.
+local function otherStyledMaps(): { string }
+	local names: { string } = {}
+	for _, child in findMapsFolder():GetChildren() do
+		if
+			child:IsA("Model")
+			and child.Name ~= arguments.mapId
+			and child:GetAttribute(SNAPSHOT_ATTRIBUTE_NAME) ~= nil
+		then
+			table.insert(names, child.Name)
+		end
+	end
+	table.sort(names)
+	return names
+end
+
 local model = findMapModel()
+local folder = findMapsFolder()
+local remaining = otherStyledMaps()
+
+if arguments.removing then
+	local mapEncoded = model:GetAttribute(SNAPSHOT_ATTRIBUTE_NAME)
+	local originalEncoded = folder:GetAttribute(ORIGINAL_ATTRIBUTE_NAME)
+	local restored: string? = nil
+	if typeof(mapEncoded) == "string" and #remaining == 0 then
+		if typeof(originalEncoded) == "string" then
+			restore(HttpService:JSONDecode(originalEncoded) :: Snapshot)
+			folder:SetAttribute(ORIGINAL_ATTRIBUTE_NAME, nil)
+			restored = "original"
+		else
+			restore(HttpService:JSONDecode(mapEncoded) :: Snapshot)
+			restored = "map"
+		end
+	end
+	return HttpService:JSONEncode({ restored = restored, remainingStyledMaps = remaining })
+end
+
 local encoded = model:GetAttribute(SNAPSHOT_ATTRIBUTE_NAME)
 local recipe = arguments.recipe
 local snapshotTaken = false
@@ -193,7 +242,11 @@ if typeof(encoded) == "string" then
 	restore(HttpService:JSONDecode(encoded) :: Snapshot)
 elseif recipe then
 	snapshotTaken = true
-	model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, HttpService:JSONEncode(snapshotNow()))
+	local snapshot = HttpService:JSONEncode(snapshotNow())
+	model:SetAttribute(SNAPSHOT_ATTRIBUTE_NAME, snapshot)
+	if folder:GetAttribute(ORIGINAL_ATTRIBUTE_NAME) == nil and #remaining == 0 then
+		folder:SetAttribute(ORIGINAL_ATTRIBUTE_NAME, snapshot)
+	end
 end
 
 if recipe then
