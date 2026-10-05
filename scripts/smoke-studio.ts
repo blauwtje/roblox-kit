@@ -6,6 +6,7 @@ import { buildMapTool, propsOf } from "../src/map/build-map-tool.ts";
 import { captureZonesTool } from "../src/map/capture-zones-tool.ts";
 import { CheckReportStore } from "../src/map/check-report-store.ts";
 import { createCheckMapTool } from "../src/map/check-map-tool.ts";
+import { removeMapTool } from "../src/map/remove-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
@@ -152,10 +153,22 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
 const smokeMapSpec = resolveRelations(smokeRelationSpec);
 
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
-const smokeRegion = { min: [1960, -30, 1960], max: [2100, 30, 2040] };
+const smokeRegion = { min: [1960, -30, 1960], max: [2100, 30, 2100] };
 
 /** Name of the Model the blocker probe puts beside the smoke map; the cleanup removes it by name. */
 const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
+
+/** A second styled map south of the smoke map, inside the smoke region, for the lighting rule across two maps. */
+const secondSmokeSpec = relationMapSpecSchema.parse({
+  mapId: `${smokeMapSpec.mapId}-b`,
+  style: { preset: "train-station" },
+  seed: 1,
+  wallHeight: 16,
+  doorWidth: 10,
+  rooms: [
+    { name: "hall", x: 2000, z: 2070, width: 20, depth: 20, spawn: true, roomType: "concourse" },
+  ],
+});
 
 /** Puts Lighting back from the snapshot the map Model holds; it must run before the Model is destroyed. */
 const restoreLightingLuau = `
@@ -199,6 +212,7 @@ end
 local mapsFolder = workspace:FindFirstChild("${config.mapsFolderName}")
 destroyNamed(mapsFolder, "${smokeMapSpec.mapId}")
 destroyNamed(mapsFolder, "${blockerModelName}")
+destroyNamed(mapsFolder, "${secondSmokeSpec.mapId}")
 if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
 for _, variant in game:GetService("MaterialService"):GetChildren() do
   if variant:IsA("MaterialVariant") and string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then variant:Destroy() end
@@ -903,6 +917,43 @@ async function probePlaytest(
   return `passed, ${String(output.checks.total)} checks over ${String(output.peers.length)} peers in ${String(output.durationMs)} ms`;
 }
 
+/** Proves the lighting rule: build A (already built), build B, remove A, remove B ends on the original lighting. */
+async function probeRemoveMapLighting(
+  connection: StudioConnection,
+  lightingBefore: z.output<typeof lightingStateSchema>,
+): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const readLighting = async () =>
+    lightingStateSchema.parse(
+      JSON.parse(await executeLuau(connection, studioId, lightingStateLuau)),
+    );
+  const styled = await readLighting();
+  if (JSON.stringify(styled) === JSON.stringify(lightingBefore)) {
+    throw new Error("The styled build left Lighting unchanged, so the rule cannot be told apart.");
+  }
+  await callRealTool(buildMapTool, secondSmokeSpec, connection);
+  const { output: removedFirst } = await callRealTool(
+    removeMapTool,
+    { mapId: smokeMapSpec.mapId },
+    connection,
+  );
+  expectEqual("remove_map A restored", removedFirst.lighting.restored, null);
+  expectEqual("remove_map A remaining styled maps", removedFirst.lighting.remainingStyledMaps, [
+    secondSmokeSpec.mapId,
+  ]);
+  expectEqual("remove_map A warnings", removedFirst.warnings.length, 1);
+  expectEqual("Lighting after removing A", await readLighting(), styled);
+  const { output: removedSecond } = await callRealTool(
+    removeMapTool,
+    { mapId: secondSmokeSpec.mapId },
+    connection,
+  );
+  expectEqual("remove_map B restored", removedSecond.lighting.restored, "original");
+  expectEqual("remove_map B remaining styled maps", removedSecond.lighting.remainingStyledMaps, []);
+  expectEqual("Lighting after removing B", await readLighting(), lightingBefore);
+  return "lighting held while B remained and returned to the original after B";
+}
+
 /** Builds the smoke map, drives the tools against it and always removes what it inserted. */
 async function probeMapTools(connection: StudioConnection): Promise<Capability[]> {
   const studioId = await selectStudio(connection, undefined);
@@ -955,6 +1006,11 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
           ),
       ]);
     }
+    // Last: it removes the smoke map, which the steps above use.
+    steps.push([
+      "remove_map keeps lighting until the last styled map goes",
+      () => probeRemoveMapLighting(connection, lightingBefore),
+    ]);
     for (const [capability, attempt] of steps) {
       findings.push(await probeTool(capability, attempt));
     }
