@@ -83,6 +83,46 @@ const surfaceRole = z.strictObject({
     .optional(),
 });
 
+/** The sprites `src/lighting/ambient-sprites.ts` draws for ambient effects. */
+export const spriteNames = ["dust", "steam", "spark", "glow"] as const;
+
+export type SpriteName = (typeof spriteNames)[number];
+
+/** What every ambient effect shares: its sprite, tint, look and where it hangs. */
+const ambientEffectBase = {
+  /** Names the effect's Attachment and emitter; unique within the preset. */
+  name: z.string().regex(/^[a-z][a-z0-9-]*$/, "expected a lowercase kebab-case name"),
+  sprite: z.enum(spriteNames),
+  /** Room types that get the effect; absent puts it in every room, typed or not. */
+  roomTypes: z.array(z.string().min(1)).min(1).optional(),
+  color: hexColor,
+  /** Studs above the room's floor top. */
+  heightStuds: z.number().min(0).max(100),
+  /** Transparency at birth (particles) or across the beam; particles fade to 1. */
+  transparency: z.number().min(0).max(1),
+  lightEmission: z.number().min(0).max(1),
+};
+
+/** A ParticleEmitter at the room's center, or a Beam across the room from west to east. */
+const ambientEffect = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("particles"),
+    ...ambientEffectBase,
+    /** Particles per second. */
+    rate: z.number().positive().max(200),
+    lifetimeSeconds: z.number().positive().max(20),
+    sizeStuds: z.number().positive().max(20),
+    speedStuds: z.number().min(0).max(50),
+  }),
+  z.strictObject({
+    kind: z.literal("beam"),
+    ...ambientEffectBase,
+    widthStuds: z.number().positive().max(50),
+  }),
+]);
+
+export type AmbientEffect = z.infer<typeof ambientEffect>;
+
 const lightRole = z.strictObject({
   range: z.number().positive().max(maxLightRange),
   brightness: z.number().nonnegative(),
@@ -433,6 +473,8 @@ export const presetSchema = z.strictObject({
   heroProps: z.record(z.string().min(1), heroProp).optional(),
   /** Room types this genre offers, keyed by type name; a room without a type keeps the plain prop kit. */
   roomTypes: z.record(z.string().min(1), roomType).optional(),
+  /** Ambient particles and beams with generated sprites, built after the lights; absent builds none. */
+  ambientEffects: z.array(ambientEffect).optional(),
   sizeRules: z.strictObject({
     agentRadius: z.number().positive(),
     agentHeight: z.number().positive(),

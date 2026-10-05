@@ -11,6 +11,7 @@ import { removeMapTool } from "../src/map/remove-map-tool.ts";
 import { placeLights } from "../src/lighting/light-placement.ts";
 import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
+import { ambientEffectsOf } from "../src/map/ambient-effects.ts";
 import { solidVoxelCount, terrainChunks } from "../src/map/terrain-heightmap.ts";
 import type { PropRecord } from "../src/map/prop-placement.ts";
 import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
@@ -211,6 +212,16 @@ const secondSmokeSpec = relationMapSpecSchema.parse({
 });
 
 /** One exterior shop with a door and three storeys, beside the second smoke map's place; removed by its own step. */
+const ambientSmokeSpec = relationMapSpecSchema.parse({
+  mapId: "smoke-ambient",
+  seed: 5,
+  style: { preset: "train-station" },
+  rooms: [
+    { name: "concourse", x: 2500, z: 2300, width: 60, depth: 40, roomType: "concourse" },
+    { name: "platform", x: 2500, z: 2400, width: 60, depth: 30, roomType: "platform" },
+  ],
+});
+
 const facadeSmokeSpec = relationMapSpecSchema.parse({
   mapId: `${smokeMapSpec.mapId}-facade`,
   style: { preset: "train-station" },
@@ -283,6 +294,7 @@ destroyNamed(mapsFolder, "${smokeMapSpec.mapId}")
 destroyNamed(mapsFolder, "${blockerModelName}")
 destroyNamed(mapsFolder, "${secondSmokeSpec.mapId}")
 destroyNamed(mapsFolder, "${facadeSmokeSpec.mapId}")
+destroyNamed(mapsFolder, "${ambientSmokeSpec.mapId}")
 destroyNamed(mapsFolder, "${terrainSmokeSpec.mapId}")
 if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
 for _, variant in game:GetService("MaterialService"):GetChildren() do
@@ -1325,6 +1337,62 @@ async function probeTerrainHeightmap(connection: StudioConnection): Promise<stri
   return `${String(built.solid)} voxels (plan ${String(expected)}) in ${String(chunks.length)} chunks, materials ${built.materials.join(", ")}; Concrete drawn with the ceiling variant; none after remove_map`;
 }
 
+/** Reads back the ambient emitters of the ambient smoke map: per class the count and how many carry a texture. */
+const ambientCountLuau = `
+local folder = workspace:FindFirstChild("${config.mapsFolderName}")
+local model = folder and folder:FindFirstChild("${ambientSmokeSpec.mapId}")
+local counts = { particles = 0, beams = 0, textured = 0, exists = model ~= nil }
+if model then
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("ParticleEmitter") then
+			counts.particles += 1
+		elseif descendant:IsA("Beam") then
+			counts.beams += 1
+		end
+		if (descendant:IsA("ParticleEmitter") or descendant:IsA("Beam")) and descendant.Texture ~= "" then
+			counts.textured += 1
+		end
+	end
+end
+return game:GetService("HttpService"):JSONEncode(counts)
+`;
+
+const ambientCountSchema = z.object({
+  particles: z.number().int(),
+  beams: z.number().int(),
+  textured: z.number().int(),
+  exists: z.boolean(),
+});
+
+/** Builds the ambient smoke map, checks one emitter per planned effect and an untextured-sprite warning per missing sprite, then removes it. */
+async function probeAmbientEffects(connection: StudioConnection): Promise<string> {
+  const studioId = await selectStudio(connection, undefined);
+  const preset = (await loadPresets()).get("train-station");
+  const effects = preset?.ambientEffects ?? [];
+  const spec = resolveRelations(ambientSmokeSpec);
+  const planned = ambientEffectsOf(spec, layoutMap(spec).parts, effects, {});
+  const built = (await callRealTool(buildMapTool, ambientSmokeSpec, connection)).output;
+  const counts = ambientCountSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, ambientCountLuau)),
+  );
+  const plannedBeams = planned.filter((record) => record.kind === "beam").length;
+  expectEqual("ambient particle emitters", counts.particles, planned.length - plannedBeams);
+  expectEqual("ambient beams", counts.beams, plannedBeams);
+  expectEqual("ambient effects phase", built.phases.at(-1)?.name, "ambient effects");
+  const spriteWarnings = built.warnings.filter((warning) => warning.startsWith("Ambient sprite"));
+  expectEqual(
+    "one warning per untextured sprite",
+    spriteWarnings.length > 0,
+    counts.textured < counts.particles + counts.beams,
+  );
+  await callRealTool(removeMapTool, { mapId: ambientSmokeSpec.mapId }, connection);
+  const cleared = ambientCountSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, ambientCountLuau)),
+  );
+  expectEqual("ambient map after remove_map", cleared.exists, false);
+  return `${String(counts.particles)} particle emitters and ${String(counts.beams)} beams as planned, ${String(counts.textured)} textured, ${String(spriteWarnings.length)} sprite warnings; none after remove_map`;
+}
+
 /** Name of the step that builds the smoke map every later step uses; `--only` always keeps it. */
 const buildStepName = "build_map";
 
@@ -1363,6 +1431,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       ["build_map facade", () => probeFacade(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["build_map terrain heightmap", () => probeTerrainHeightmap(connection)],
+      ["build_map ambient effects", () => probeAmbientEffects(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],

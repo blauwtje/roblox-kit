@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ambientEffectsOf } from "./ambient-effects.ts";
 import { buildPhaseNames, groupBuildPhases } from "./build-phases.ts";
 import { layoutMap } from "./map-layout.ts";
 import { mapSpecSchema } from "./map-spec.ts";
@@ -34,12 +35,40 @@ const layout = layoutMap(spec, surfaces, { ceilings: true });
 const details = buildRoomDetails(spec, layout.parts, surfaces);
 const props = placeProps(spec, ["bench", "lamp"], 1);
 const lights = [{ zone: "start" }, { zone: "hall" }];
-const phases = groupBuildPhases({ parts: layout.parts, details, props, lights });
+const effects = ambientEffectsOf(
+  spec,
+  layout.parts,
+  [
+    {
+      kind: "particles",
+      name: "dust",
+      sprite: "dust",
+      color: "#ffffff",
+      heightStuds: 5,
+      transparency: 0.5,
+      lightEmission: 0,
+      rate: 2,
+      lifetimeSeconds: 4,
+      sizeStuds: 0.3,
+      speedStuds: 0.5,
+    },
+  ],
+  {},
+);
+const phases = groupBuildPhases({ parts: layout.parts, details, props, lights, effects });
 
-await test("six phases come in the build order", () => {
+await test("seven phases come in the build order", () => {
   assert.deepEqual(
     phases.map((phase) => phase.name),
-    ["shell", "floors and ceilings", "openings", "surfaces", "props", "lighting"],
+    [
+      "shell",
+      "floors and ceilings",
+      "openings",
+      "surfaces",
+      "props",
+      "lighting",
+      "ambient effects",
+    ],
   );
   assert.deepEqual(
     phases.map((phase) => phase.name),
@@ -49,7 +78,10 @@ await test("six phases come in the build order", () => {
 
 await test("every part lands in exactly one phase", () => {
   const grouped = phases.flatMap((phase) => phase.parts);
-  assert.equal(grouped.length, layout.parts.length + details.length + props.length + lights.length);
+  assert.equal(
+    grouped.length,
+    layout.parts.length + details.length + props.length + lights.length + effects.length,
+  );
   assert.equal(new Set(grouped).size, grouped.length);
 });
 
@@ -63,17 +95,20 @@ await test("each phase holds the parts of its kind", () => {
   assert.deepEqual(kindsOf("surfaces"), new Set(["trim", "stripe", "pillar"]));
   assert.deepEqual(byName["props"], props);
   assert.deepEqual(byName["lighting"], lights);
+  assert.deepEqual(byName["ambient effects"], effects);
+  assert.equal(effects.length, 2);
 });
 
-await test("a layout without decor keeps all six phases, the empty ones with no parts", () => {
+await test("a layout without decor keeps all seven phases, the empty ones with no parts", () => {
   const bare = layoutMap(spec);
   const barePhases = groupBuildPhases({ parts: bare.parts, details: [], props: [], lights: [] });
-  assert.equal(barePhases.length, 6);
+  assert.equal(barePhases.length, 7);
   const counts = Object.fromEntries(barePhases.map((phase) => [phase.name, phase.parts.length]));
   assert.equal(counts["openings"], 0);
   assert.equal(counts["surfaces"], 0);
   assert.equal(counts["props"], 0);
   assert.equal(counts["lighting"], 0);
+  assert.equal(counts["ambient effects"], 0);
   assert.ok((counts["shell"] ?? 0) > 0);
   assert.ok((counts["floors and ceilings"] ?? 0) > 0);
 });

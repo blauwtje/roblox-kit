@@ -1916,6 +1916,61 @@
       "roomNames": ["ticket counter", "ticket office", "booking hall"]
     }
   },
+  "ambientEffects": [
+    {
+      "kind": "particles",
+      "name": "dust",
+      "sprite": "dust",
+      "roomTypes": ["concourse", "ticket-hall"],
+      "color": "#f4e6c8",
+      "heightStuds": 8,
+      "transparency": 0.6,
+      "lightEmission": 0.3,
+      "rate": 6,
+      "lifetimeSeconds": 8,
+      "sizeStuds": 0.25,
+      "speedStuds": 0.6
+    },
+    {
+      "kind": "particles",
+      "name": "steam",
+      "sprite": "steam",
+      "roomTypes": ["platform"],
+      "color": "#e8ecef",
+      "heightStuds": 2,
+      "transparency": 0.7,
+      "lightEmission": 0,
+      "rate": 3,
+      "lifetimeSeconds": 6,
+      "sizeStuds": 6,
+      "speedStuds": 1.5
+    },
+    {
+      "kind": "particles",
+      "name": "sparks",
+      "sprite": "spark",
+      "roomTypes": ["platform"],
+      "color": "#ffd27a",
+      "heightStuds": 14,
+      "transparency": 0.1,
+      "lightEmission": 1,
+      "rate": 1,
+      "lifetimeSeconds": 1.2,
+      "sizeStuds": 0.4,
+      "speedStuds": 4
+    },
+    {
+      "kind": "beam",
+      "name": "light-shaft",
+      "sprite": "glow",
+      "roomTypes": ["concourse"],
+      "color": "#fff3d6",
+      "heightStuds": 18,
+      "transparency": 0.85,
+      "lightEmission": 1,
+      "widthStuds": 8
+    }
+  ],
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,

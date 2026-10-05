@@ -49,7 +49,15 @@ function phaseStudio() {
 }
 
 /** The phase names in the order the tool runs them. */
-const phaseNames = ["shell", "floors and ceilings", "openings", "surfaces", "props", "lighting"];
+const phaseNames = [
+  "shell",
+  "floors and ceilings",
+  "openings",
+  "surfaces",
+  "props",
+  "lighting",
+  "ambient effects",
+];
 
 /** The arguments JSON of the request at `index`, which carries them inside its Luau code. */
 function requestArguments(connection: FakeStudioConnection, index: number) {
@@ -90,7 +98,7 @@ await test("sends the laid-out parts and fills to Studio phase by phase and retu
   const studio = phaseStudio();
   const result = await run(studio, twoRoomSpec);
 
-  assert.equal(studio.requests.length, 7);
+  assert.equal(studio.requests.length, 8);
   for (const request of studio.requests) {
     assert.equal(request.name, "execute_luau");
     assert.equal(request.arguments["datamodel_type"], "Edit");
@@ -216,7 +224,7 @@ await test("a style sends its lights per zone and applies its lighting recipe af
   const connection = styledStudio();
   await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
   const lighting = String(connection.requests[6]?.arguments["code"]);
-  assert.equal(connection.requests.length, 7);
+  assert.equal(connection.requests.length, 8);
   const { lights } = requestArguments(connection, 5) as {
     lights: {
       zone: string;
@@ -255,10 +263,10 @@ await test("the lighting phase carries what places a fixture at each ceiling lig
   assert.equal(lightingArguments["fixtureSizeStuds"], config.lightFixtureSizeStuds);
 });
 
-await test("without a style no lights are sent and the last request only restores Lighting", async () => {
+await test("without a style no lights are sent and the request after the lighting phase only restores Lighting", async () => {
   const connection = phaseStudio();
   await run(connection, twoRoomSpec);
-  assert.equal(connection.requests.length, 7);
+  assert.equal(connection.requests.length, 8);
   assert.deepEqual(requestArguments(connection, 5)["lights"], []);
   const restore = String(connection.requests[6]?.arguments["code"]);
   assert.ok(restore.includes('"mapId":"two-rooms"'));
@@ -268,7 +276,13 @@ await test("without a style no lights are sent and the last request only restore
 await test("each phase request names its phase and carries only what that phase builds", async () => {
   const connection = styledStudio();
   await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
-  const sent = phaseNames.map((_, index) => requestArguments(connection, index));
+  // The Lighting recipe request follows the lighting phase, so the ambient effects phase is one request later.
+  const sent = phaseNames.map((_, index) =>
+    requestArguments(connection, index < 6 ? index : index + 1),
+  );
+  const ambient = sent[6] as { phase: string; effects: { name: string; zone: string }[] };
+  assert.equal(ambient.phase, "ambient effects");
+  assert.ok(Array.isArray(ambient.effects));
 
   assert.deepEqual(
     sent.map((phaseArguments) => phaseArguments["phase"]),
@@ -301,7 +315,7 @@ await test("a phase failure names the phase and keeps Studio's message", async (
   assert.equal(connection.requests.length, 4);
 });
 
-await test("reports progress after each of the six phases", async () => {
+await test("reports progress after each of the seven phases", async () => {
   const progress: [number, number, string][] = [];
   await buildMapTool.handler(buildMapTool.inputSchema.parse(twoRoomSpec), {
     studio: phaseStudio(),
@@ -312,7 +326,7 @@ await test("reports progress after each of the six phases", async () => {
   });
   assert.deepEqual(
     progress,
-    phaseNames.map((name, index) => [index + 1, 6, name]),
+    phaseNames.map((name, index) => [index + 1, 7, name]),
   );
 });
 
@@ -703,4 +717,31 @@ await test("check-map.luau's placement check covers the hero Models", async () =
   assert.ok(placedBox.includes("HERO_KIND_ATTRIBUTE_NAME") && placedBox.includes("GetBoundingBox"));
   const placement = source.slice(source.indexOf("local function findPlacement"));
   assert.ok(placement.includes("placedBox(child)"));
+});
+
+await test("a typed room gets its style's ambient effects, untextured with one warning per unrecorded sprite", async () => {
+  const connection = styledStudio();
+  const typedSpec = {
+    ...twoRoomSpec,
+    style: { preset: "train-station" },
+    rooms: twoRoomSpec.rooms.map((room) =>
+      room.name === "hall" ? { ...room, roomType: "platform" } : room,
+    ),
+  };
+  const result = await run(connection, typedSpec);
+  const ambient = requestArguments(connection, 7) as {
+    phase: string;
+    effects: { name: string; zone: string; kind: string; texture?: string }[];
+  };
+  assert.equal(ambient.phase, "ambient effects");
+  assert.deepEqual(
+    ambient.effects.map((effect) => `${effect.zone}:${effect.name}`),
+    ["hall:steam", "hall:sparks"],
+  );
+  assert.ok(ambient.effects.every((effect) => effect.texture === undefined));
+  const warnings = (result.structuredContent as { warnings: string[] }).warnings.filter((warning) =>
+    warning.startsWith("Ambient sprite"),
+  );
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0] ?? "", /"steam".*untextured/);
 });

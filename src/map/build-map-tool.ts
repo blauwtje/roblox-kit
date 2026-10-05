@@ -21,6 +21,13 @@ import {
 } from "./hero-prop-placement.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
+import {
+  ambientEffectsOf,
+  missingSpriteWarnings,
+  type AmbientEffectRecord,
+} from "./ambient-effects.ts";
+import { recordedSprites } from "../lighting/ambient-sprites.ts";
+import { heroAssetsFile } from "../hero-props/hero-asset-store.ts";
 import { terrainChunks } from "./terrain-heightmap.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
@@ -45,13 +52,13 @@ const buildMapInput = relationMapSpecSchema.safeExtend({
 const buildMapOutput = z.strictObject({
   mapId: z.string(),
   partCount: z.number().int(),
-  /** The six build phases in the order they ran, each with the number of parts it built. */
+  /** The seven build phases in the order they ran, each with the number of parts it built. */
   phases: z.array(z.strictObject({ name: z.string(), partCount: z.number().int() })),
   bounds: boundsSchema,
   zones: z.array(
     z.strictObject({ name: z.string(), partCount: z.number().int(), bounds: boundsSchema }),
   ),
-  /** One line per set piece skipped because its room has no space for it, per hero prop not built and why, and per hero asset that failed to load. */
+  /** One line per set piece skipped because its room has no space for it, per hero prop not built and why, per hero asset that failed to load and per ambient sprite with no recorded asset. */
   warnings: z.array(z.string()),
 });
 
@@ -234,6 +241,7 @@ function phaseArguments(
       ceilingDropStuds: config.lightCeilingDropStuds,
       fixtureSizeStuds: config.lightFixtureSizeStuds,
     },
+    "ambient effects": { effects: phase.parts },
   };
   return { ...base, ...argumentsByPhase[phase.name] };
 }
@@ -359,6 +367,21 @@ async function buildMap(
   const generators = await generatorsOf([...props, ...heroProps.map((hero) => hero.fallback)]);
   const variants = variantsOf(style);
   const lights = lightRecordsOf(spec, layout.parts, style);
+  const effectSpecs = style?.ambientEffects ?? [];
+  const spriteTextures =
+    effectSpecs.length === 0 ? {} : await recordedSprites(heroSources.assetsFile ?? heroAssetsFile);
+  const effects: AmbientEffectRecord[] = ambientEffectsOf(
+    spec,
+    layout.parts,
+    effectSpecs,
+    spriteTextures,
+  );
+  warnings.push(
+    ...missingSpriteWarnings(
+      effectSpecs.filter((effect) => effects.some((record) => record.name === effect.name)),
+      spriteTextures,
+    ),
+  );
   const build: BuildContext = {
     mapId: input.mapId,
     terrainFills: layout.terrainFills,
@@ -384,6 +407,7 @@ async function buildMap(
     facades,
     props,
     lights,
+    effects,
   });
   let partCount = 0;
   for (const [index, phase] of phases.entries()) {
@@ -479,8 +503,8 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. A terrain fill of shape heightmap { center, size, material, layers, seed, noiseScaleStuds, erosion } is seeded fractal noise with particle hydraulic erosion inside its box (minimum corner and size on the 4-stud voxel grid, size.y the tallest height above the box bottom), written with WriteVoxels in chunks after the shell phase: sand low, snow high, rock on steep slopes, grass elsewhere, and the fill's material below. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
-    `The build runs in six phases (shell, floors and ceilings, openings, surfaces, props, lighting), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
-    `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead).`,
+    `A style with ambientEffects also gets, per room of a listed type (or every room), a ParticleEmitter at the floor's center or a Beam across the room from west to east under Attachments on the floor part, textured with its sprite (drawn by the repo's own code and recorded by hash in hero-assets.json); a sprite with no recorded asset builds its emitters untextured with a warning. The build runs in seven phases (shell, floors and ceilings, openings, surfaces, props, lighting, ambient effects), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
+    `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead), and one per ambient sprite with no recorded asset.`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
   annotations: {
