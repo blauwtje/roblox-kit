@@ -61,6 +61,8 @@ export const config = Object.freeze({
 
   /** Penetration below this depth is face contact, not an overlap. */
   overlapToleranceStuds: 0.05,
+  /** The relation solver's search when a related room would overlap another: grid steps it may add to a hallway or shift a room sideways, and tries before it gives up. */
+  relationSearch: { maxExtraGridSteps: 6, maxLateralGridSteps: 4, maxNodes: 20000 },
   pathfindingAgentRadiusStuds: 2,
   pathfindingAgentHeightStuds: 5,
   /** Straight-line distance beyond which a spawn and a target are reported as tooFar, not pathfound. */

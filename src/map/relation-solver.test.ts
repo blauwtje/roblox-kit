@@ -6,6 +6,8 @@ import { relationMapSpecSchema } from "./map-spec.ts";
 import type { RoomSpec } from "./map-spec.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
+/** Beside the hallway line, not on it: a lab 25 east of the hub overlaps it, one further east does not. */
+const sideBlocker = { name: "blocker", x: 25, z: 8, width: 10, depth: 10 };
 const hub = { name: "hub", x: 0, z: 0, width: 20, depth: 20 };
 
 function relatedRoom(
@@ -26,6 +28,16 @@ function relatedRoom(
 
 function resolve(rooms: object[]) {
   return resolveRelations(relationMapSpecSchema.parse({ mapId: "m", rooms }));
+}
+
+function roomsOverlapInTest(first: RoomSpec, second: RoomSpec) {
+  const overlapX =
+    Math.min(first.x + first.width / 2, second.x + second.width / 2) -
+    Math.max(first.x - first.width / 2, second.x - second.width / 2);
+  const overlapZ =
+    Math.min(first.z + first.depth / 2, second.z + second.depth / 2) -
+    Math.max(first.z - first.depth / 2, second.z - second.depth / 2);
+  return overlapX > config.overlapToleranceStuds && overlapZ > config.overlapToleranceStuds;
 }
 
 function roomNamed(rooms: RoomSpec[], name: string) {
@@ -125,9 +137,54 @@ await test("a cycle, an unknown target and a self relation name the rooms", () =
   assert.throws(() => resolve([relatedRoom("a", "a", "east", 10)]), /a -> a/);
 });
 
-await test("a room that lands on another room is an error naming both", () => {
-  const rooms = [hub, { ...hub, name: "blocker", x: 25 }, relatedRoom("lab", "hub", "east", 10)];
-  assert.throws(() => resolve(rooms), /"blocker" and "lab" overlap/);
+await test("a room that lands on another room moves along its hallway and keeps its relation", () => {
+  const rooms = [hub, sideBlocker, relatedRoom("lab", "hub", "east", 10)];
+  const resolved = resolve(rooms).rooms;
+  const lab = roomNamed(resolved, "lab");
+  const blocker = roomNamed(resolved, "blocker");
+  assert.ok(lab.x - lab.width / 2 >= blocker.x + blocker.width / 2 - config.overlapToleranceStuds);
+  assert.ok(lab.x > 0, "the lab stays east of the hub");
+  assert.ok(layoutMap({ mapId: "m", rooms: resolved } as never).parts.length > 0);
+  assert.deepEqual(resolve(rooms).rooms, resolved);
+});
+
+await test("a chain of related rooms stays clear of a blocker and keeps its directions", () => {
+  const rooms = [
+    hub,
+    { ...hub, name: "blocker", x: 25, z: 30, width: 20, depth: 20 },
+    relatedRoom("lab", "hub", "east", 10),
+    relatedRoom("vault", "lab", "south", 5),
+  ];
+  const resolved = resolve(rooms).rooms;
+  const pieces = resolved.filter((room) => room.name !== "hub" && room.name !== "blocker");
+  for (const piece of pieces) {
+    assert.ok(
+      !roomsOverlapInTest(piece, roomNamed(resolved, "blocker")),
+      `${piece.name} stays clear of the blocker`,
+    );
+  }
+  assert.ok(roomNamed(resolved, "vault").z > roomNamed(resolved, "lab").z, "the vault stays south");
+});
+
+await test("a room with no free pose is an error naming the overlap", () => {
+  const wall = { ...hub, name: "blocker", x: 60, z: 0, width: 100, depth: 200 };
+  assert.throws(
+    () => resolve([hub, wall, relatedRoom("lab", "hub", "east", 10)]),
+    /"blocker" and "lab" overlap/,
+  );
+});
+
+await test("the same seed gives the same poses", () => {
+  const rooms = [
+    hub,
+    sideBlocker,
+    { ...sideBlocker, name: "second", z: -8 },
+    relatedRoom("lab", "hub", "east", 10),
+  ];
+  const spec = { mapId: "m", seed: 7, rooms };
+  const first = resolveRelations(relationMapSpecSchema.parse(spec));
+  const second = resolveRelations(relationMapSpecSchema.parse(spec));
+  assert.deepEqual(first.rooms, second.rooms);
 });
 
 await test("a hallway named like an existing room is an error", () => {
