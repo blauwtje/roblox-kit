@@ -175,12 +175,26 @@ const propRule = z.strictObject({
 
 const studPoint = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 
-/** Fields every hero-prop part shares: the surface role it takes and where its center sits. */
+/** A box subtracted from a part, centered `center` studs from the part's own center. */
+const heroCut = z.strictObject({ center: studPoint, size: studDimensions });
+
+/** Fields every hero-prop part shares: the surface role it takes, where its center sits and how it is finished. */
 const heroPartBase = {
   role: surfaceRoleName,
   /** Studs from the prop's footprint center on the floor (x across, y up, z along the depth). */
   center: studPoint,
+  /** Studs of bevel on every edge of the part, in place of a sharp edge. */
+  bevel: z.number().positive().optional(),
+  /** Boxes cut out of the part after its bevel. */
+  cuts: z.array(heroCut).min(1).optional(),
+  /** `count` copies of the part, each `step` studs further than the one before; the first stays on `center`. */
+  array: z.strictObject({ count: z.number().int().min(2).max(64), step: studPoint }).optional(),
 };
+
+/** Sides of a round part, a cylinder or a lathe; the generator's own default when absent. */
+const heroSegments = z.number().int().min(3).max(64).optional();
+
+const profilePoint = z.strictObject({ x: z.number(), y: z.number() });
 
 /** One shape of a hero prop; the generator joins the parts of each role into one mesh. */
 const heroPart = z.discriminatedUnion("shape", [
@@ -192,13 +206,29 @@ const heroPart = z.discriminatedUnion("shape", [
     radius: z.number().positive(),
     length: z.number().positive(),
     axis: z.enum(["x", "y", "z"]),
+    segments: heroSegments,
+  }),
+  /** A closed ring of `points` (radius from the axis, offset along it) revolved once around `axis`. */
+  z.strictObject({
+    shape: z.literal("lathe"),
+    ...heroPartBase,
+    points: z.array(z.strictObject({ radius: z.number().positive(), offset: z.number() })).min(3),
+    axis: z.enum(["x", "y", "z"]),
+    segments: heroSegments,
   }),
   /** A polygon of `points` (x across, y up) extruded `depth` studs along z, centered on `center`. */
   z.strictObject({
     shape: z.literal("profile"),
     ...heroPartBase,
-    points: z.array(z.strictObject({ x: z.number(), y: z.number() })).min(3),
+    points: z.array(profilePoint).min(3),
     depth: z.number().positive(),
+  }),
+  /** A closed polygon `section` (x across, y up) swept along `path`, whose points are studs from `center`. */
+  z.strictObject({
+    shape: z.literal("sweep"),
+    ...heroPartBase,
+    section: z.array(profilePoint).min(3),
+    path: z.array(studPoint).min(2),
   }),
 ]);
 

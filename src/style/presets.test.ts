@@ -7,6 +7,7 @@ import { resolveRelations } from "../map/relation-solver.ts";
 import { placeSetPieces } from "../map/set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "../map/size-rules.ts";
 import { loadPresets } from "./load-preset.ts";
+import type { Preset } from "./preset-schema.ts";
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
 
@@ -150,14 +151,62 @@ await test("the ticket hall's ticket counter replaces its ticket-counter set pie
   );
 });
 
-/** Half the extent of a cylinder along each axis: half its length on its axis, its radius on the other two. */
-function cylinderHalfExtent(cylinder: { radius: number; length: number; axis: "x" | "y" | "z" }) {
-  const along = cylinder.length / 2;
+type Axis = "x" | "y" | "z";
+type Bounds = Record<Axis, { min: number; max: number }>;
+type HeroPart = NonNullable<Preset["heroProps"]>[string]["parts"][number];
+
+/** A cylinder-like part's extent from its center: `low` to `high` along its axis, `radius` on the other two. */
+function roundBounds(axis: Axis, radius: number, low: number, high: number): Bounds {
+  const across = { min: -radius, max: radius };
+  const along = { min: low, max: high };
   return {
-    x: cylinder.axis === "x" ? along : cylinder.radius,
-    y: cylinder.axis === "y" ? along : cylinder.radius,
-    z: cylinder.axis === "z" ? along : cylinder.radius,
+    x: axis === "x" ? along : across,
+    y: axis === "y" ? along : across,
+    z: axis === "z" ? along : across,
   };
+}
+
+/** The part's extent from its own center, array copies excluded; bevels and cuts only remove material, so they are ignored. */
+function shapeBounds(part: HeroPart): Bounds {
+  switch (part.shape) {
+    case "box":
+      return {
+        x: { min: -part.size.width / 2, max: part.size.width / 2 },
+        y: { min: -part.size.height / 2, max: part.size.height / 2 },
+        z: { min: -part.size.depth / 2, max: part.size.depth / 2 },
+      };
+    case "cylinder":
+      return roundBounds(part.axis, part.radius, -part.length / 2, part.length / 2);
+    case "lathe":
+      return roundBounds(
+        part.axis,
+        Math.max(...part.points.map((point) => point.radius)),
+        Math.min(...part.points.map((point) => point.offset)),
+        Math.max(...part.points.map((point) => point.offset)),
+      );
+    case "sweep": {
+      // Each path point carries the section turned to face along the path, so it reaches at most the
+      // section's farthest corner from the section origin in any direction.
+      const reach = Math.max(...part.section.map((corner) => Math.hypot(corner.x, corner.y)));
+      const reachAlong = (axis: Axis) => ({
+        min: Math.min(...part.path.map((point) => point[axis])) - reach,
+        max: Math.max(...part.path.map((point) => point[axis])) + reach,
+      });
+      return { x: reachAlong("x"), y: reachAlong("y"), z: reachAlong("z") };
+    }
+    case "profile":
+      return {
+        x: {
+          min: Math.min(...part.points.map((point) => point.x)),
+          max: Math.max(...part.points.map((point) => point.x)),
+        },
+        y: {
+          min: Math.min(...part.points.map((point) => point.y)),
+          max: Math.max(...part.points.map((point) => point.y)),
+        },
+        z: { min: -part.depth / 2, max: part.depth / 2 },
+      };
+  }
 }
 
 await test("every part of each hero prop lies inside the prop's size", async () => {
@@ -166,23 +215,29 @@ await test("every part of each hero prop lies inside the prop's size", async () 
   for (const [kind, heroProp] of Object.entries(heroProps)) {
     const { width, height, depth } = heroProp.size;
     for (const part of heroProp.parts) {
-      const half =
-        part.shape === "box"
-          ? { x: part.size.width / 2, y: part.size.height / 2, z: part.size.depth / 2 }
-          : part.shape === "cylinder"
-            ? cylinderHalfExtent(part)
-            : undefined;
-      assert.ok(half !== undefined, `${part.shape} part is not checked`);
-      assert.ok(
-        Math.abs(part.center.x) + half.x <= width / 2 + 1e-9,
-        `${kind}: part exceeds the width`,
-      );
-      assert.ok(part.center.y - half.y >= -1e-9, `${kind}: part sinks below the floor`);
-      assert.ok(part.center.y + half.y <= height + 1e-9, `${kind}: part exceeds the height`);
-      assert.ok(
-        Math.abs(part.center.z) + half.z <= depth / 2 + 1e-9,
-        `${kind}: part exceeds the depth`,
-      );
+      const bounds = shapeBounds(part);
+      // The array's first copy stays on `center`, the last sits `step * (count - 1)` further.
+      const copies = part.array === undefined ? 0 : part.array.count - 1;
+      const shift = {
+        x: (part.array?.step.x ?? 0) * copies,
+        y: (part.array?.step.y ?? 0) * copies,
+        z: (part.array?.step.z ?? 0) * copies,
+      };
+      for (const axis of ["x", "y", "z"] as const) {
+        const first = part.center[axis] + bounds[axis].min;
+        const last = part.center[axis] + bounds[axis].max;
+        const low = Math.min(first, first + shift[axis]);
+        const high = Math.max(last, last + shift[axis]);
+        const [floor, ceiling] =
+          axis === "y"
+            ? [0, height]
+            : [-(axis === "x" ? width : depth) / 2, (axis === "x" ? width : depth) / 2];
+        assert.ok(low >= floor - 1e-9, `${kind}: ${part.shape} part exceeds the ${axis} minimum`);
+        assert.ok(
+          high <= ceiling + 1e-9,
+          `${kind}: ${part.shape} part exceeds the ${axis} maximum`,
+        );
+      }
     }
   }
 });

@@ -379,6 +379,109 @@ await test("presetSchema rejects a hero prop part with an unknown shape or role,
   }
 });
 
+const shapeCenter = { x: 0, y: 0, z: 0 };
+const heroSquare = [
+  { x: -1, y: -1 },
+  { x: 1, y: -1 },
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+];
+const heroRing = [
+  { radius: 1, offset: -1 },
+  { radius: 2, offset: -1 },
+  { radius: 2, offset: 1 },
+];
+const heroWith = (part: object) => ({
+  ...validPreset(),
+  heroProps: { car: { ...heroCar, parts: [part] } },
+});
+
+await test("presetSchema accepts lathe and sweep parts, and bevel, cuts, array and segments on a part", () => {
+  const validParts = [
+    {
+      shape: "lathe",
+      role: "wall",
+      center: shapeCenter,
+      points: heroRing,
+      axis: "z",
+      segments: 16,
+    },
+    {
+      shape: "sweep",
+      role: "trim",
+      center: shapeCenter,
+      section: heroSquare,
+      path: [shapeCenter, { x: 0, y: 4, z: 0 }],
+    },
+    {
+      shape: "box",
+      role: "wall",
+      center: shapeCenter,
+      size: fixtureSize,
+      bevel: 0.1,
+      cuts: [{ center: shapeCenter, size: fixtureSize }],
+      array: { count: 4, step: { x: 3, y: 0, z: 0 } },
+    },
+    {
+      shape: "cylinder",
+      role: "wall",
+      center: shapeCenter,
+      radius: 1,
+      length: 2,
+      axis: "y",
+      segments: 8,
+    },
+  ];
+  for (const part of validParts) {
+    const result = presetSchema.safeParse(heroWith(part));
+    assert.equal(result.success, true, JSON.stringify(part));
+  }
+});
+
+await test("presetSchema rejects bad lathe, sweep, bevel, cuts, array and segments values", () => {
+  const box = { shape: "box", role: "wall", center: shapeCenter, size: fixtureSize };
+  const invalidParts = [
+    { shape: "lathe", role: "wall", center: shapeCenter, points: heroRing.slice(0, 2), axis: "z" },
+    { shape: "lathe", role: "wall", center: shapeCenter, points: heroRing, axis: "w" },
+    {
+      shape: "lathe",
+      role: "wall",
+      center: shapeCenter,
+      points: [{ radius: 0, offset: 0 }, ...heroRing],
+      axis: "z",
+    },
+    { shape: "lathe", role: "wall", center: shapeCenter, points: heroRing, axis: "z", segments: 2 },
+    { shape: "sweep", role: "trim", center: shapeCenter, section: heroSquare, path: [shapeCenter] },
+    {
+      shape: "sweep",
+      role: "trim",
+      center: shapeCenter,
+      section: heroSquare.slice(0, 2),
+      path: [shapeCenter, { x: 0, y: 4, z: 0 }],
+    },
+    { ...box, bevel: 0 },
+    { ...box, bevel: -1 },
+    { ...box, cuts: [] },
+    { ...box, cuts: [{ center: shapeCenter }] },
+    { ...box, array: { count: 1, step: shapeCenter } },
+    { ...box, array: { count: 65, step: shapeCenter } },
+    { ...box, array: { count: 3 } },
+    {
+      shape: "cylinder",
+      role: "wall",
+      center: shapeCenter,
+      radius: 1,
+      length: 2,
+      axis: "y",
+      segments: 65,
+    },
+  ];
+  for (const part of invalidParts) {
+    const result = presetSchema.safeParse(heroWith(part));
+    assert.equal(result.success, false, JSON.stringify(part));
+  }
+});
+
 await test("presetSchema takes 1 or 2 hero prop kinds on a room type and rejects none or 3", () => {
   for (const [kinds, accepted] of [
     [["a"], true],
