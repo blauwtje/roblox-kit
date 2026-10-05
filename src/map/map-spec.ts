@@ -35,6 +35,10 @@ const roomShape = {
   spawn: z.boolean().default(false),
   /** A key of the style preset's `roomTypes`; absent keeps the room a plain one. */
   roomType: z.string().min(1).optional(),
+  /** Marks a building seen from outside: its walls get a facade (storeys, bands, windows, cornice) on the outer face. */
+  exterior: z.boolean().optional(),
+  /** Storeys of the facade of an exterior room; absent uses the grammar's default. */
+  facadeFloors: z.int().positive().optional(),
   ...roomStyle,
 };
 

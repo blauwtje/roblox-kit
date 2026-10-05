@@ -14,6 +14,7 @@ import { relationMapSpecSchema } from "../src/map/map-spec.ts";
 import type { PropRecord } from "../src/map/prop-placement.ts";
 import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
 import { heroPropsOf, trimMeshesOf } from "../src/map/hero-prop-placement.ts";
+import { buildFacades } from "../src/map/facade-grammar.ts";
 import { buildRoomDetails } from "../src/map/room-details.ts";
 import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
@@ -191,6 +192,27 @@ const secondSmokeSpec = relationMapSpecSchema.parse({
   ],
 });
 
+/** One exterior shop with a door and three storeys, beside the second smoke map's place; removed by its own step. */
+const facadeSmokeSpec = relationMapSpecSchema.parse({
+  mapId: `${smokeMapSpec.mapId}-facade`,
+  style: { preset: "train-station" },
+  seed: 1,
+  wallHeight: 18,
+  doorWidth: 6,
+  rooms: [
+    {
+      name: "shop",
+      x: 2000,
+      z: 2070,
+      width: 30,
+      depth: 20,
+      exterior: true,
+      facadeFloors: 3,
+      doors: [{ side: "south", offset: 0 }],
+    },
+  ],
+});
+
 /** Puts Lighting back from the snapshot the map Model holds; it must run before the Model is destroyed. */
 const restoreLightingLuau = `
 local Lighting = game:GetService("Lighting")
@@ -242,6 +264,7 @@ local mapsFolder = workspace:FindFirstChild("${config.mapsFolderName}")
 destroyNamed(mapsFolder, "${smokeMapSpec.mapId}")
 destroyNamed(mapsFolder, "${blockerModelName}")
 destroyNamed(mapsFolder, "${secondSmokeSpec.mapId}")
+destroyNamed(mapsFolder, "${facadeSmokeSpec.mapId}")
 if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
 for _, variant in game:GetService("MaterialService"):GetChildren() do
   if variant:IsA("MaterialVariant") and string.sub(variant.Name, 1, ${String(smokeMapSpec.mapId.length + 1)}) == "${smokeMapSpec.mapId}-" then variant:Destroy() end
@@ -452,6 +475,82 @@ async function probeBuildMap(connection: StudioConnection): Promise<string> {
     zonedPartCount,
   );
   return `${String(output.partCount)} parts in ${String(output.zones.length)} zones`;
+}
+
+/** Name, position and collision of every facade part of the facade smoke map. */
+const facadePartsLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${facadeSmokeSpec.mapId}")
+local found = {}
+for _, child in model:GetChildren() do
+  if child:IsA("BasePart") and child.Name:find("-facade-", 1, true) then
+    table.insert(found, { name = child.Name, x = child.Position.X, y = child.Position.Y, z = child.Position.Z, canCollide = child.CanCollide })
+  end
+end
+table.sort(found, function(a, b) return a.name < b.name end)
+return game:GetService("HttpService"):JSONEncode(found)`;
+
+const facadePartsSchema = z.array(
+  z.object({
+    name: z.string(),
+    x: z.number(),
+    y: z.number(),
+    z: z.number(),
+    canCollide: z.boolean(),
+  }),
+);
+
+/**
+ * Builds an exterior room and proves its facade parts stand in Studio exactly where the grammar puts them,
+ * decorative, in every storey and clear of the doorway, then removes the map so later steps see only theirs.
+ */
+async function probeFacade(connection: StudioConnection): Promise<string> {
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const spec = resolveRelations(facadeSmokeSpec);
+  const expected = buildFacades(
+    spec,
+    layoutMap(spec, preset.surfaces, { ceilings: true }).parts,
+    preset.surfaces,
+  ).sort((a, b) => (a.name < b.name ? -1 : 1));
+  expectEqual("expected facade parts exist", expected.length > 0, true);
+  await callRealTool(buildMapTool, facadeSmokeSpec, connection);
+  const studioId = await selectStudio(connection, undefined);
+  const built = facadePartsSchema.parse(
+    JSON.parse(await executeLuau(connection, studioId, facadePartsLuau)),
+  );
+  expectEqual(
+    "facade part names",
+    built.map((part) => part.name),
+    expected.map((part) => part.name),
+  );
+  for (const [index, part] of built.entries()) {
+    const planned = expected[index];
+    if (planned === undefined) {
+      throw new Error(`No planned facade part for ${part.name}.`);
+    }
+    expectClose(`${part.name} x`, part.x, planned.position.x);
+    expectClose(`${part.name} y`, part.y, planned.position.y);
+    expectClose(`${part.name} z`, part.z, planned.position.z);
+    expectEqual(`${part.name} canCollide`, part.canCollide, false);
+  }
+  const paneHeights = new Set(
+    built.filter((part) => part.name.includes("-pane-")).map((part) => part.y.toFixed(2)),
+  );
+  expectEqual("storeys with windows", paneHeights.size, 3);
+  // The south door spans x 1997 to 2003 on the south wall; no south part may cover it.
+  const doorMin = 2000 - 3;
+  const doorMax = 2000 + 3;
+  const coversDoor = expected.filter(
+    (part) =>
+      part.name.includes("-south-") &&
+      part.position.x - part.size.x / 2 < doorMax &&
+      part.position.x + part.size.x / 2 > doorMin,
+  );
+  expectEqual("facade parts covering the doorway", coversDoor.length, 0);
+  await callRealTool(removeMapTool, { mapId: facadeSmokeSpec.mapId }, connection);
+  return `${String(built.length)} facade parts built where planned, ${String(paneHeights.size)} storeys of windows`;
 }
 
 /** The ceilings, generator ModuleScripts and ProceduralModels of the built map, and every BasePart under it. */
@@ -1171,6 +1270,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
       ["build_map hero props", () => probeHeroProps(connection)],
       ["build_map profile trim", () => probeProfileTrim(connection)],
+      ["build_map facade", () => probeFacade(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],

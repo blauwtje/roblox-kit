@@ -25,6 +25,7 @@ import { placeArrangements } from "./arrangement-placement.ts";
 import { placeProps, type PropRecord } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
+import { buildFacades } from "./facade-grammar.ts";
 import { buildRoomDetails, type DetailPart } from "./room-details.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
@@ -320,6 +321,7 @@ async function buildMap(
   const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
   const details: DetailPart[] =
     style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
+  const facades = style === undefined ? [] : buildFacades(spec, layout.parts, style.surfaces);
   const placed = style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
   const heroes =
     style === undefined || spec.style === undefined
@@ -350,13 +352,19 @@ async function buildMap(
     heroProps,
     trimMeshes,
     materials: materialsOf(
-      [...layout.parts, ...details, ...heroSurfaces],
+      [...layout.parts, ...details, ...facades, ...heroSurfaces],
       layout.terrainFills,
       variants,
     ),
   };
   const studioId = await selectStudio(context.studio, input.studioId);
-  const phases = groupBuildPhases({ parts: layout.parts, details: trim.details, props, lights });
+  const phases = groupBuildPhases({
+    parts: layout.parts,
+    details: trim.details,
+    facades,
+    props,
+    lights,
+  });
   let partCount = 0;
   for (const [index, phase] of phases.entries()) {
     try {
@@ -401,7 +409,9 @@ async function buildMap(
     await context.reportProgress?.(index + 1, phases.length, phase.name);
   }
   const bounds = unionOf([
-    ...[...layout.parts, ...details].map((part) => boundsOfBox(part.position, part.size)),
+    ...[...layout.parts, ...details, ...facades].map((part) =>
+      boundsOfBox(part.position, part.size),
+    ),
     ...layout.terrainFills.map(boundsOfFill),
   ]);
   return toolResult({
@@ -413,7 +423,7 @@ async function buildMap(
         phase.parts.length + (phase.name === "props" ? heroProps.length + trimMeshes.length : 0),
     })),
     bounds,
-    zones: zonesOf([...layout.parts, ...details]),
+    zones: zonesOf([...layout.parts, ...details, ...facades]),
     warnings,
   });
 }
@@ -427,7 +437,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor (each light within ${String(config.lightCeilingDropStuds)} stud of a ceiling also gets a ${String(config.lightFixtureSizeStuds)}-stud Neon fixture part against the ceiling, tagged ${config.ceilingTag} so it hides with the ceilings), applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A styled room marked exterior (optionally with facadeFloors storeys) also gets a facade on the outer face of its walls: an accent band between storeys, a framed window per bay and storey and a trim cornice, none colliding. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor (each light within ${String(config.lightCeilingDropStuds)} stud of a ceiling also gets a ${String(config.lightFixtureSizeStuds)}-stud Neon fixture part against the ceiling, tagged ${config.ceilingTag} so it hides with the ceilings), applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
     `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. build_map only reads recorded assets and never uploads; an asset that fails to load builds the set piece instead with a warning naming the asset id and error; a hero prop with no recorded asset keeps its set piece and a warning says to generate and upload it from a clone of the roblox-kit repo. Each other prop whose kind's prop-<kind> recipe has a recorded asset is that mesh instead, stretched on each axis to the prop's box; a kind with no recorded asset keeps its ProceduralModel, with no warning. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
