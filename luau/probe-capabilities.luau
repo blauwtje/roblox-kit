@@ -72,7 +72,15 @@ probe("PathfindingService in Edit", function()
 	floor.Parent = workspace
 	return withTemporary(floor, function()
 		local path = game:GetService("PathfindingService"):CreatePath()
-		path:ComputeAsync(Vector3.new(-20, 5002, 0), Vector3.new(20, 5002, 0))
+		-- The navigation mesh over a part made a moment ago can lag behind it, so the first walk may
+		-- find no path; a few short waits give it time before the probe counts as failed.
+		for _ = 1, 5 do
+			path:ComputeAsync(Vector3.new(-20, 5002, 0), Vector3.new(20, 5002, 0))
+			if path.Status == Enum.PathStatus.Success then
+				break
+			end
+			task.wait(0.5)
+		end
 		if path.Status ~= Enum.PathStatus.Success then
 			error(`path status {path.Status.Name}`, 0)
 		end
