@@ -72,8 +72,10 @@ function styledStudio() {
   });
 }
 
-function run(studio: FakeStudioConnection, spec: object) {
-  return buildMapTool.handler(buildMapTool.inputSchema.parse(spec), { studio });
+/** Runs build_map against an empty hero asset record, so the committed uploads never change a result. */
+async function run(studio: FakeStudioConnection, spec: object) {
+  const tool = buildMapToolWith(await fakeHeroSources(false));
+  return tool.handler(tool.inputSchema.parse(spec), { studio });
 }
 
 await test("build_map is registered with a strict schema and the mapId lifetime in its description", () => {

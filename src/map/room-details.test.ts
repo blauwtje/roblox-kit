@@ -217,12 +217,18 @@ await test("a profile with a recorded asset becomes a mesh with its box as the f
   const preset = (await loadPresets()).get("train-station");
   assert.ok(preset);
   const details = detailsOf(doorRoom);
-  const unrecorded = await trimMeshesOf(details, { base: preset, style: preset });
+  const directory = await mkdtemp(join(tmpdir(), "trim-mesh-"));
+  const emptyFile = pathToFileURL(join(directory, "empty-assets.json"));
+  await writeFile(emptyFile, "{}");
+  const unrecorded = await trimMeshesOf(
+    details,
+    { base: preset, style: preset },
+    { assetsFile: emptyFile },
+  );
   assert.deepEqual(unrecorded.trimMeshes, []);
   assert.equal(unrecorded.details.length, details.length);
 
   const hash = await heroRecipeHash(preset, "trim-ogee");
-  const directory = await mkdtemp(join(tmpdir(), "trim-mesh-"));
   const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
   await writeFile(assetsFile, JSON.stringify({ [hash]: { kind: "trim-ogee", assetId: "555" } }));
   const result = await trimMeshesOf(details, { base: preset, style: preset }, { assetsFile });
