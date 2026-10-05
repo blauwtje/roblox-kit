@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and seven skills (`skills/`):
 
-- `roblox-kit` (`src/server/main.ts`): this repo's own server with four tools, `build_map`, `check_map`, `capture_zones` and `run_playtest`.
+- `roblox-kit` (`src/server/main.ts`): this repo's own server with seven tools, `build_map`, `check_map`, `capture_zones`, `run_playtest`, `remove_map`, `run_in_playtest` and `judge_round`.
 - `studio` (`src/studio/launch-studio-mcp.ts`): a thin launcher that execs Roblox's built-in Studio MCP server with inherited stdio.
 
 `.mcp.json` mirrors the plugin's server config for local development (`${CLAUDE_PLUGIN_ROOT:-.}`). Keep the two in sync.

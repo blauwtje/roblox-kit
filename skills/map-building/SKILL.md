@@ -35,7 +35,7 @@ A preset's `heroProps` recipes (size in studs, palette roles, `triangleBudget`, 
 
 ## Clean up the shared place
 
-The open place is shared and no tool deletes a map. Before finishing a test or demo build, destroy `Workspace.RobloxKitMaps.<mapId>` with `execute_luau`. Fill its terrain with Air first, using the fills stored in the Model's `RobloxKitTerrainFills` attribute as JSON, because destroying the Model leaves that terrain behind. Never touch a map you did not build.
+The open place is shared. Before finishing a test or demo build, call `remove_map` with the `mapId`: it fills the map's terrain with Air, destroys its MaterialVariants and its Model, and restores the place's original lighting once the last styled map is gone (`warnings` names the styled maps that remain). A `mapId` that is not a built map fails the call before any change. Never remove a map you did not build.
 
 ## Judgment
 

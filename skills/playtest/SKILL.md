@@ -29,7 +29,7 @@ A playtest proves something only when a check states a fact and a report says wh
 
 ## Built-in tools
 
-- `run_playtest` is for repeatable assertions; Studio's tools are for one look or a hand-driven input.
+- `run_playtest` is for repeatable assertions, and its `serverChecks` already run in a live server Script. For one look inside a session you started with `start_stop_play`, call `run_in_playtest` with a Luau body that returns one JSON value: it runs on the server of that session, so `require` returns the live module instances. Stop the session when done, because `run_in_playtest` never starts or stops one. Studio's other tools are for a hand-driven input.
 - Start play with `start_stop_play` (`is_start` true), check `get_studio_state` for the available datamodel types, and stop it with `is_start` false.
 - `character_navigation` needs `datamodel_type` `Client`. `user_mouse_input` and `user_keyboard_input` send ordered actions to the game.
 - `get_console_output` reads the output log for script errors and prints.

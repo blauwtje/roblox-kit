@@ -19,7 +19,7 @@ Studio's quick connect for Claude Code is not needed. The plugin already starts 
 
 ## Tool reference
 
-The server `roblox-kit` has four tools. Every tool takes an optional `studioId`, which is required only when more than one Studio is connected. All distances are in studs. North is -Z, south is +Z, east is +X and west is -X.
+The server `roblox-kit` has seven tools. Every tool takes an optional `studioId`, which is required only when more than one Studio is connected. All distances are in studs. North is -Z, south is +Z, east is +X and west is -X.
 
 ### build_map
 
@@ -114,6 +114,42 @@ Give at least one of `serverChecks` and `clientChecks`. Inside a body, call `che
 The session call to Studio may run 10 seconds past the timeout, for starting the session, sending the report and removing the scripts. StudioMCP itself did not cut an `execute_luau` call that ran 70 seconds.
 
 Returns `{ passed, peers, checks, errors, durationMs }`. `peers` lists the server first, then each client by player name, each with its checks (`name`, `passed`, `detail`). `checks` counts `total`, `passed` and `failed` over all peers. `errors` lists problems outside single checks, such as clients that never reported.
+
+### remove_map
+
+Removes a map that `build_map` built: fills its terrain with Air, destroys its MaterialVariants and its Model under `Workspace.RobloxKitMaps`, and destroys that folder when it is left empty. A `mapId` that is not a Model there fails the call before any change. Lighting goes back to the place's original once the last styled map is removed.
+
+| Input   | Type             | Meaning                                |
+| ------- | ---------------- | -------------------------------------- |
+| `mapId` | string, required | The `mapId` that `build_map` returned. |
+
+Returns `{ mapId, lighting, warnings }`. `lighting` has `restored` (`original`, `map` for a place built by an older version, or null) and `remainingStyledMaps`, the styled maps that kept the lighting as it is. `warnings` explains either case.
+
+### run_in_playtest
+
+Runs Luau code once in the server of a playtest that is already running and returns the value it returns. Start the playtest first with `start_stop_play`; this tool never starts or stops one. It inserts a `Script` into `ServerScriptService` whose body is the code, so `require` returns the live module instances, unlike `execute_luau` with `datamodel_type` `Server`, which gets its own module copies. The `Script` is removed in every outcome. For repeatable assertions use `run_playtest` `serverChecks`.
+
+| Input            | Type              | Meaning                                                                                           |
+| ---------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `code`           | string, required  | Luau body that ends with `return` of one JSON-encodable value, or returns nothing for null.       |
+| `timeoutSeconds` | integer, optional | How long to wait for the code to return. Code that never returns, or does not compile, times out. |
+
+Returns `{ value, durationMs }`. A throw fails the call with its message.
+
+### judge_round
+
+Decides one round of the visual-judge loop from what its agents returned. It drops judge findings without `evidence.visible` (returned as `rejected`), turns place-check mismatches and empty answers into `spec-miss` blocker findings, turns each quality axis median below 7 into a major finding, marks repeats of earlier rounds, sets `stopReason` and appends one line to `.roblox-kit/judge-log.jsonl` in the project folder, which it adds to `.gitignore`. It needs the `PROJECT_DIR` environment variable. Dispatching the agents stays with the caller.
+
+| Input            | Type                         | Meaning                                             |
+| ---------------- | ---------------------------- | --------------------------------------------------- |
+| `round`          | integer from 1, required     | The round of the loop.                              |
+| `spec`           | object, required             | The `build_map` spec, with its `mapId`.             |
+| `zones`          | array of strings             | The zones judged this round.                        |
+| `findings`       | array                        | The findings the `visual-judge` agent returned.     |
+| `placeChecks`    | array of `{ zone, answer }`  | The place-check agent's answer for each typed room. |
+| `qualityAnswers` | array of `{ zone, answers }` | The three quality reviewers' answers for each room. |
+
+Returns `{ round, date, mapId, zones, scores, findings, rejected, stopReason, logFile }`. `stopReason` is `pass`, `round-limit`, `repeat` or null while the loop goes on.
 
 ## Limits
 
