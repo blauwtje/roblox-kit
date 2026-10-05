@@ -222,6 +222,25 @@ const ambientSmokeSpec = relationMapSpecSchema.parse({
   ],
 });
 
+/** A styled platform, with a door sign from its concourse, whose sign and lamps the train-station preset animates; removed by its own step. */
+const idleSmokeSpec = relationMapSpecSchema.parse({
+  mapId: "smoke-idle",
+  seed: 7,
+  style: { preset: "train-station" },
+  rooms: [
+    { name: "concourse", x: 2500, z: 2600, width: 60, depth: 30, doors: [{ side: "south" }] },
+    {
+      name: "platform",
+      x: 2500,
+      z: 2630,
+      width: 60,
+      depth: 30,
+      roomType: "platform",
+      doors: [{ side: "north" }],
+    },
+  ],
+});
+
 const facadeSmokeSpec = relationMapSpecSchema.parse({
   mapId: `${smokeMapSpec.mapId}-facade`,
   style: { preset: "train-station" },
@@ -295,6 +314,7 @@ destroyNamed(mapsFolder, "${blockerModelName}")
 destroyNamed(mapsFolder, "${secondSmokeSpec.mapId}")
 destroyNamed(mapsFolder, "${facadeSmokeSpec.mapId}")
 destroyNamed(mapsFolder, "${ambientSmokeSpec.mapId}")
+destroyNamed(mapsFolder, "${idleSmokeSpec.mapId}")
 destroyNamed(mapsFolder, "${terrainSmokeSpec.mapId}")
 if mapsFolder and #mapsFolder:GetChildren() == 0 then mapsFolder:Destroy() end
 for _, variant in game:GetService("MaterialService"):GetChildren() do
@@ -1217,6 +1237,48 @@ async function probePlaytest(
   return `passed, ${String(output.checks.total)} checks over ${String(output.peers.length)} peers in ${String(output.durationMs)} ms`;
 }
 
+/** Server checks for the idle smoke map: the Script is there, and each animated sign and lamp moved within a second. */
+const idleServerChecks = `
+local maps = workspace:WaitForChild("${config.mapsFolderName}", 10)
+local map = maps and maps:FindFirstChild("${idleSmokeSpec.mapId}")
+check("idle map present", map ~= nil, "Workspace.${config.mapsFolderName}.${idleSmokeSpec.mapId}")
+if not map then return end
+check("idle Script present", map:FindFirstChild("RobloxKitIdleAnimation") ~= nil, "RobloxKitIdleAnimation")
+local animated = {}
+for _, descendant in map:GetDescendants() do
+  if descendant:IsA("Model") and descendant:GetAttribute("IdleSwayDegrees") ~= nil then
+    table.insert(animated, descendant)
+  end
+end
+local kinds = {}
+for _, model in animated do kinds[string.match(model.Name, "^(.-)%-%d+$") or model.Name] = true end
+check("an animated sign", kinds["sign"] == true, "sign")
+check("an animated lamp", kinds["lamp"] == true, "lamp")
+local before = {}
+for index, model in animated do before[index] = model:GetPivot() end
+task.wait(1)
+local moved = 0
+for index, model in animated do
+  local delta = before[index]:ToObjectSpace(model:GetPivot())
+  local _, angle = delta:ToAxisAngle()
+  if delta.Position.Magnitude > 1e-4 or math.abs(angle) > 1e-5 then moved += 1 end
+end
+check("every animated prop moved within a second", #animated > 0 and moved == #animated, tostring(moved) .. " of " .. tostring(#animated))`;
+
+/** Builds the idle smoke map, checks in a run playtest that its signs and lamps sway, then removes it. */
+async function probeIdleAnimation(connection: StudioConnection): Promise<string> {
+  await callRealTool(buildMapTool, idleSmokeSpec, connection);
+  try {
+    return await probePlaytest(
+      connection,
+      { mode: "run", serverChecks: idleServerChecks, timeoutSeconds: 30 },
+      1,
+    );
+  } finally {
+    await callRealTool(removeMapTool, { mapId: idleSmokeSpec.mapId }, connection);
+  }
+}
+
 /** Proves the lighting rule: build A (already built), build B, remove A, remove B ends on the original lighting. */
 async function probeRemoveMapLighting(
   connection: StudioConnection,
@@ -1432,6 +1494,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["build_map terrain heightmap", () => probeTerrainHeightmap(connection)],
       ["build_map ambient effects", () => probeAmbientEffects(connection)],
+      ["build_map idle animation", () => probeIdleAnimation(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],
       ["capture_zones", () => probeCaptureZones(connection)],

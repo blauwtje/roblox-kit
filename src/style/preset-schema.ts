@@ -123,6 +123,18 @@ const ambientEffect = z.discriminatedUnion("kind", [
 
 export type AmbientEffect = z.infer<typeof ambientEffect>;
 
+/** How one prop kind sways in a running game: a sine plus noise about a hinge at the top or bottom of its box. */
+const idleAnimation = z.strictObject({
+  /** Largest tilt in degrees either way. */
+  swayDegrees: z.number().positive().max(45),
+  /** Seconds of one full swing. */
+  periodSeconds: z.number().positive(),
+  /** `top` for a hanging prop such as a sign, `bottom` for a standing one such as a lamp post. */
+  hinge: z.enum(["top", "bottom"]),
+});
+
+export type IdleAnimation = z.infer<typeof idleAnimation>;
+
 const lightRole = z.strictObject({
   range: z.number().positive().max(maxLightRange),
   brightness: z.number().nonnegative(),
@@ -475,6 +487,8 @@ export const presetSchema = z.strictObject({
   roomTypes: z.record(z.string().min(1), roomType).optional(),
   /** Ambient particles and beams with generated sprites, built after the lights; absent builds none. */
   ambientEffects: z.array(ambientEffect).optional(),
+  /** Idle sway keyed by prop kind, run by a server Script in the map during play; absent animates nothing. */
+  idleAnimations: z.record(z.string().min(1), idleAnimation).optional(),
   sizeRules: z.strictObject({
     agentRadius: z.number().positive(),
     agentHeight: z.number().positive(),

@@ -14,7 +14,8 @@
 -- after the phase (the BaseParts that are children of the Model); the shell phase also reports
 -- whether it replaced a map. The ambient effects phase hangs each effect record's ParticleEmitter, or Beam
 -- between two Attachments, under its zone's floor part; it adds no parts and an empty texture leaves the
--- emitter untextured.
+-- emitter untextured. A prop kind listed in `idleAnimations` gets the sway attributes on each of its ProceduralModels,
+-- and the props phase then adds one server Script holding `idleScript` under the Model, which sways them during play.
 type Vector = { x: number, y: number, z: number }
 
 type PartRecord = {
@@ -120,6 +121,13 @@ type TerrainChunk = {
 	heights: { number },
 }
 
+-- How one prop kind sways during play; see luau/idle-animation.luau.
+type IdleAnimation = {
+	swayDegrees: number,
+	periodSeconds: number,
+	hinge: string,
+}
+
 type TerrainOverride = {
 	material: string,
 	role: string,
@@ -157,6 +165,9 @@ type Arguments = {
 	terrainOverrides: { TerrainOverride }?,
 	lights: { LightRecord }?,
 	effects: { AmbientEffectRecord }?,
+	-- Props phase: the idle sway of each animated prop kind, and the server Script source that runs it.
+	idleAnimations: { [string]: IdleAnimation }?,
+	idleScript: string?,
 }
 
 -- Attribute on the map Model holding the terrain fills of its build as JSON, so a rebuild can clear them.
@@ -166,6 +177,8 @@ local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
 local FIXTURE_TOLERANCE_STUDS = 0.001
 -- Attribute naming a hero Model's kind; check-map.luau finds hero Models by it.
 local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
+-- Name of the server Script that runs the idle sway; idle-animation.luau reads the three attributes below.
+local IDLE_SCRIPT_NAME = "RobloxKitIdleAnimation"
 
 local arguments: Arguments = ...
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
@@ -361,6 +374,12 @@ local function addProp(
 	proceduralModel:SetAttribute("Seed", record.seed)
 	for name, value in record.attributes or ({} :: { [string]: string }) do
 		proceduralModel:SetAttribute(name, if string.match(name, "Color$") then Color3.fromHex(value) else value)
+	end
+	local idle = (arguments.idleAnimations or ({} :: { [string]: IdleAnimation }))[record.kind]
+	if idle then
+		proceduralModel:SetAttribute("IdleSwayDegrees", idle.swayDegrees)
+		proceduralModel:SetAttribute("IdlePeriodSeconds", idle.periodSeconds)
+		proceduralModel:SetAttribute("IdleHinge", idle.hinge)
 	end
 	local turn = CFrame.Angles(0, math.rad(record.yaw or 0), 0)
 	proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)) * turn)
@@ -630,6 +649,13 @@ local function addPropModels(model: Model): { HeroLoadFailure }
 	end
 	local failures = addHeroProps(model, generators, countByKind, proceduralModels)
 	waitForGeneration(proceduralModels)
+	if arguments.idleScript then
+		local idleScript = Instance.new("Script")
+		idleScript.Name = IDLE_SCRIPT_NAME
+		idleScript.RunContext = Enum.RunContext.Server
+		idleScript.Source = arguments.idleScript
+		idleScript.Parent = model
+	end
 	return failures
 end
 

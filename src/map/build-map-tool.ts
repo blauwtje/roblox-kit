@@ -9,7 +9,7 @@ import type { ToolContext, ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
-import type { Preset } from "../style/preset-schema.ts";
+import type { IdleAnimation, Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
 import type { HeroPropSources } from "../hero-props/hero-prop-asset.ts";
@@ -30,7 +30,7 @@ import { recordedSprites } from "../lighting/ambient-sprites.ts";
 import { heroAssetsFile } from "../hero-props/hero-asset-store.ts";
 import { terrainChunks } from "./terrain-heightmap.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
-import { placeProps, type PropRecord } from "./prop-placement.ts";
+import { placeProps, type PropKind, type PropRecord } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
 import { buildFacades } from "./facade-grammar.ts";
@@ -40,6 +40,8 @@ import { resolveRelations } from "./relation-solver.ts";
 const presets = await loadPresets();
 
 const propGeneratorDirectory = new URL("../../luau/props/", import.meta.url);
+
+const idleScriptFile = new URL("../../luau/idle-animation.luau", import.meta.url);
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
@@ -207,6 +209,23 @@ interface BuildContext {
   trimMeshes: TrimMeshRecord[];
   /** Every material name of the build, checked by the shell phase before anything is built. */
   materials: string[];
+  /** The style's idle sway of each prop kind the map places, and the server Script source that runs it; absent when none applies. */
+  idle?: { idleAnimations: Record<string, IdleAnimation>; idleScript: string };
+}
+
+/** The style's idle animations of the prop kinds in `props`, with the Script source; undefined when none applies. */
+async function idleOf(
+  style: Preset | undefined,
+  props: PropRecord[],
+): Promise<BuildContext["idle"]> {
+  const kinds = new Set(props.map((prop) => prop.kind));
+  const idleAnimations = Object.fromEntries(
+    Object.entries(style?.idleAnimations ?? {}).filter(([kind]) => kinds.has(kind as PropKind)),
+  );
+  if (Object.keys(idleAnimations).length === 0) {
+    return undefined;
+  }
+  return { idleAnimations, idleScript: await readFile(idleScriptFile, "utf8") };
 }
 
 /** The arguments `build-map.luau` takes for one phase, beside the phase name, the map id and the maps folder. */
@@ -234,6 +253,7 @@ function phaseArguments(
       props: phase.parts,
       generators: build.generators,
       heroProps: [...build.heroProps, ...build.trimMeshes],
+      ...build.idle,
     },
     lighting: {
       lights: phase.parts,
@@ -390,6 +410,7 @@ async function buildMap(
     generators,
     heroProps,
     trimMeshes,
+    idle: await idleOf(style, [...props, ...heroProps.map((hero) => hero.fallback)]),
     materials: materialsOf(
       [...layout.parts, ...details, ...facades, ...heroSurfaces],
       layout.terrainFills,
@@ -503,7 +524,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. A terrain fill of shape heightmap { center, size, material, layers, seed, noiseScaleStuds, erosion } is seeded fractal noise with particle hydraulic erosion inside its box (minimum corner and size on the 4-stud voxel grid, size.y the tallest height above the box bottom), written with WriteVoxels in chunks after the shell phase: sand low, snow high, rock on steep slopes, grass elsewhere, and the fill's material below. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
-    `A style with ambientEffects also gets, per room of a listed type (or every room), a ParticleEmitter at the floor's center or a Beam across the room from west to east under Attachments on the floor part, textured with its sprite (drawn by the repo's own code and recorded by hash in hero-assets.json); a sprite with no recorded asset builds its emitters untextured with a warning. The build runs in seven phases (shell, floors and ceilings, openings, surfaces, props, lighting, ambient effects), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
+    `A style with ambientEffects also gets, per room of a listed type (or every room), a ParticleEmitter at the floor's center or a Beam across the room from west to east under Attachments on the floor part, textured with its sprite (drawn by the repo's own code and recorded by hash in hero-assets.json); a sprite with no recorded asset builds its emitters untextured with a warning. A style with idleAnimations also gives each set piece of a listed kind sway attributes and the map one server Script that sways them about the top or bottom of their box during play. The build runs in seven phases (shell, floors and ceilings, openings, surfaces, props, lighting, ambient effects), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
     `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead), and one per ambient sprite with no recorded asset.`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,

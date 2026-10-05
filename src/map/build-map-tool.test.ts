@@ -745,3 +745,51 @@ await test("a typed room gets its style's ambient effects, untextured with one w
   assert.equal(warnings.length, 2);
   assert.match(warnings[0] ?? "", /"steam".*untextured/);
 });
+
+await test("the props phase carries the style's idle animations of placed kinds and the idle Script, and an unstyled map none", async () => {
+  const connection = styledStudio();
+  const typedSpec = {
+    ...twoRoomSpec,
+    style: { preset: "train-station" },
+    rooms: twoRoomSpec.rooms.map((room) =>
+      room.name === "hall" ? { ...room, roomType: "platform" } : room,
+    ),
+  };
+  await run(connection, typedSpec);
+  const props = requestArguments(connection, 4) as {
+    phase: string;
+    props: { kind: string }[];
+    idleAnimations?: Record<string, { swayDegrees: number; periodSeconds: number; hinge: string }>;
+    idleScript?: string;
+  };
+  assert.equal(props.phase, "props");
+  const placedKinds = new Set(props.props.map((prop) => prop.kind));
+  assert.deepEqual(Object.keys(props.idleAnimations ?? {}).sort(), ["lamp", "sign"]);
+  assert.ok(Object.keys(props.idleAnimations ?? {}).every((kind) => placedKinds.has(kind)));
+  const hinges = Object.entries(props.idleAnimations ?? {}).map(
+    ([kind, idle]) => `${kind}:${idle.hinge}`,
+  );
+  assert.deepEqual(hinges.sort(), ["lamp:bottom", "sign:top"]);
+  assert.match(props.idleScript ?? "", /IdleSwayDegrees/);
+  assert.match(props.idleScript ?? "", /Heartbeat/);
+
+  const plain = phaseStudio();
+  await run(plain, twoRoomSpec);
+  const plainProps = requestArguments(plain, 4);
+  assert.equal(plainProps["phase"], "props");
+  assert.equal(plainProps["idleAnimations"], undefined);
+  assert.equal(plainProps["idleScript"], undefined);
+});
+
+await test("build-map.luau sets the idle attributes on animated props and adds the server Script", async () => {
+  const source = await readFile(new URL("../../luau/build-map.luau", import.meta.url), "utf8");
+  for (const fragment of [
+    "IdleSwayDegrees",
+    "IdlePeriodSeconds",
+    "IdleHinge",
+    "Enum.RunContext.Server",
+    "arguments.idleScript",
+  ]) {
+    assert.ok(source.includes(fragment), `build-map.luau has ${fragment}`);
+  }
+});

@@ -1916,6 +1916,10 @@
       "roomNames": ["ticket counter", "ticket office", "booking hall"]
     }
   },
+  "idleAnimations": {
+    "sign": { "swayDegrees": 3, "periodSeconds": 4, "hinge": "top" },
+    "lamp": { "swayDegrees": 0.6, "periodSeconds": 6, "hinge": "bottom" }
+  },
   "ambientEffects": [
     {
       "kind": "particles",

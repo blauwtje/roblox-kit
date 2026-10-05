@@ -632,3 +632,20 @@ await test("presetSchema rejects a bad material recipe or map", () => {
     assert.equal(presetSchema.safeParse(withWall(wall)).success, false, JSON.stringify(wall));
   }
 });
+
+await test("presetSchema takes idle animations per prop kind with a top or bottom hinge", () => {
+  const sign = { swayDegrees: 3, periodSeconds: 4, hinge: "top" };
+  assert.ok(presetSchema.safeParse({ ...validPreset(), idleAnimations: { sign } }).success);
+  for (const bad of [
+    { ...sign, hinge: "middle" },
+    { ...sign, swayDegrees: 0 },
+    { ...sign, periodSeconds: -1 },
+    { ...sign, extra: 1 },
+  ]) {
+    assert.equal(
+      presetSchema.safeParse({ ...validPreset(), idleAnimations: { sign: bad } }).success,
+      false,
+      JSON.stringify(bad),
+    );
+  }
+});
