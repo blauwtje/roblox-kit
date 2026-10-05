@@ -6,7 +6,8 @@
     },
     "roblox-kit": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/src/server/main.ts"]
+      "args": ["${CLAUDE_PLUGIN_ROOT:-.}/src/server/main.ts"],
+      "env": { "PROJECT_DIR": "${CLAUDE_PROJECT_DIR}" }
     }
   }
 }
