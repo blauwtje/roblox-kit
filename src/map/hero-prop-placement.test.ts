@@ -210,6 +210,37 @@ await test("a room with no set piece to replace gets a warning and no hero prop"
   assert.match(result.warnings[0] ?? "", /no track-bed set piece for hero prop train-car/);
 });
 
+await test("a hero prop too big for its room keeps the set piece and warns", async () => {
+  const sources = await fakeSources({ recorded: true });
+  // A 20-stud platform holds a track bed, but not the 40-stud train car standing in its slot.
+  const small = resolveRelations(
+    relationMapSpecSchema.parse({
+      mapId: "small",
+      seed: 1,
+      wallHeight: 16,
+      doorWidth: 10,
+      rooms: [
+        { name: "hall", x: 0, z: 0, width: 20, depth: 20, roomType: "concourse" },
+        {
+          name: "yard",
+          roomType: "platform",
+          width: 20,
+          depth: 20,
+          relation: { to: "hall", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
+        },
+      ],
+    }),
+  );
+  const smallProps = propsOf(small, base).props;
+  assert.ok(smallProps.some((prop) => prop.kind === "track-bed"));
+  const result = await heroPropsOf(small, preset, smallProps, sources);
+  assert.deepEqual(result.heroProps, []);
+  assert.deepEqual(result.props, smallProps);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0] ?? "", /"yard" keeps its track-bed set piece/);
+  assert.match(result.warnings[0] ?? "", /does not fit/);
+});
+
 await test("a style whose room types name no hero props reads nothing and changes nothing", async () => {
   const cozy = presets.get("cozy-town");
   assert.ok(cozy !== undefined);

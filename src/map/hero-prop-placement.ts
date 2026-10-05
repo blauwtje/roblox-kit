@@ -2,7 +2,8 @@ import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop
 import type { Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
-import type { PropRecord } from "./prop-placement.ts";
+import { roomBounds, type PropRecord } from "./prop-placement.ts";
+import { doorwayClearanceBoxes, type DoorwayClearanceBox } from "./size-rules.ts";
 
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 type SurfaceRole = keyof Preset["surfaces"];
@@ -41,6 +42,38 @@ function isInRoom(pivot: Vector, room: RoomSpec): boolean {
   );
 }
 
+/**
+ * Whether the hero prop's footprint, turned by the replaced piece's yaw about its pivot, stays inside the
+ * room's walls and out of every doorway clearance box. The replaced piece fit, but a hero prop is often bigger.
+ */
+function heroFits(
+  spec: MapSpec,
+  room: RoomSpec,
+  record: HeroPropRecord,
+  clearances: DoorwayClearanceBox[],
+): boolean {
+  const turn = (record.yaw * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(turn));
+  const sin = Math.abs(Math.sin(turn));
+  const halfX = (record.size.x * cos + record.size.z * sin) / 2;
+  const halfZ = (record.size.x * sin + record.size.z * cos) / 2;
+  const { x, z } = record.pivot;
+  const interior = roomBounds(spec, room);
+  const inside =
+    Math.abs(x - room.x) + halfX <= interior.halfWidth &&
+    Math.abs(z - room.z) + halfZ <= interior.halfDepth;
+  return (
+    inside &&
+    clearances.every(
+      (box) =>
+        x + halfX <= box.min.x ||
+        x - halfX >= box.max.x ||
+        z + halfZ <= box.min.z ||
+        z - halfZ >= box.max.z,
+    )
+  );
+}
+
 /** The record that stands the hero prop where the replaced piece stood: same x, z and yaw, on the same base. */
 function heroRecord(
   kind: string,
@@ -72,7 +105,7 @@ function heroRecord(
  * type lists it, and the props without the pieces they replace. Only recorded uploads are read; nothing is
  * uploaded. A hero prop whose recipe hash has no recorded asset leaves its set piece in place, with a warning
  * saying to generate and upload it from a clone of the roblox-kit repo. A room with no such set piece
- * gets a warning and no hero prop.
+ * gets a warning and no hero prop, and so does one whose hero prop would reach through a wall or into a doorway.
  */
 export async function heroPropsOf<Prop extends PlacedProp>(
   spec: MapSpec,
@@ -88,6 +121,8 @@ export async function heroPropsOf<Prop extends PlacedProp>(
   });
   if (rooms.length === 0) return { props, heroProps: [], warnings: [] };
 
+  const agent = { radius: style.sizeRules.agentRadius, height: style.sizeRules.agentHeight };
+  const clearances = doorwayClearanceBoxes(spec, agent);
   const replaced = new Set<Prop>();
   const heroProps: HeroPropRecord[] = [];
   const warnings: string[] = [];
@@ -116,8 +151,16 @@ export async function heroPropsOf<Prop extends PlacedProp>(
         );
         continue;
       }
+      const record = heroRecord(kind, assetId, recipe, piece, style);
+      if (!heroFits(spec, room, record, clearances)) {
+        const { width, depth } = recipe.size;
+        warnings.push(
+          `Room "${room.name}" keeps its ${recipe.replaces} set piece instead of hero prop ${kind}: its ${String(width)} by ${String(depth)} stud footprint does not fit inside the room clear of its doorways.`,
+        );
+        continue;
+      }
       replaced.add(piece);
-      heroProps.push(heroRecord(kind, assetId, recipe, piece, style));
+      heroProps.push(record);
     }
   }
   return { props: props.filter((prop) => !replaced.has(prop)), heroProps, warnings };
