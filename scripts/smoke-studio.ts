@@ -24,8 +24,18 @@ import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 const presets = await loadPresets();
 
-/** Server & Clients opens one Studio window per player, so it runs only on `--multiplayer`. */
-const { values: smokeOptions } = parseArgs({ options: { multiplayer: { type: "boolean" } } });
+/**
+ * Server & Clients opens one Studio window per player, so it runs only on `--multiplayer`.
+ * `--only a,b` runs only the map-tool steps whose name contains one of the comma-separated terms,
+ * plus build_map, which the others use, and the place-restored check; it skips the capability probes.
+ */
+const { values: smokeOptions } = parseArgs({
+  options: { multiplayer: { type: "boolean" }, only: { type: "string" } },
+});
+const onlyTerms = smokeOptions.only
+  ?.split(",")
+  .map((term) => term.trim())
+  .filter((term) => term !== "");
 
 const capabilitiesSchema = z.array(
   z.object({ capability: z.string(), ok: z.boolean(), detail: z.string() }),
@@ -956,6 +966,23 @@ async function probeRemoveMapLighting(
   return "lighting held while B remained and returned to the original after B";
 }
 
+/** Name of the step that builds the smoke map every later step uses; `--only` always keeps it. */
+const buildStepName = "build_map";
+
+/** The steps `--only` names plus the build step, or every step without `--only`; a term naming no step fails. */
+function selectSteps(steps: [string, () => Promise<string>][]): [string, () => Promise<string>][] {
+  if (onlyTerms === undefined) {
+    return steps;
+  }
+  const unmatched = onlyTerms.filter((term) => !steps.some(([name]) => name.includes(term)));
+  if (unmatched.length > 0) {
+    throw new Error(`--only matches no smoke step: ${unmatched.join(", ")}`);
+  }
+  return steps.filter(
+    ([name]) => name === buildStepName || onlyTerms.some((term) => name.includes(term)),
+  );
+}
+
 /** Builds the smoke map, drives the tools against it and always removes what it inserted. */
 async function probeMapTools(connection: StudioConnection): Promise<Capability[]> {
   const studioId = await selectStudio(connection, undefined);
@@ -969,7 +996,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   );
   try {
     const steps: [string, () => Promise<string>][] = [
-      ["build_map", () => probeBuildMap(connection)],
+      [buildStepName, () => probeBuildMap(connection)],
       ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
       ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
@@ -1013,7 +1040,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       "remove_map keeps lighting until the last styled map goes",
       () => probeRemoveMapLighting(connection, lightingBefore),
     ]);
-    for (const [capability, attempt] of steps) {
+    for (const [capability, attempt] of selectSteps(steps)) {
       findings.push(await probeTool(capability, attempt));
     }
   } finally {
@@ -1047,7 +1074,7 @@ try {
   await awaitEditMode(connection);
   await assertViewportVisible(connection);
   const capabilities = [
-    ...(await probeCapabilities(connection)),
+    ...(onlyTerms === undefined ? await probeCapabilities(connection) : []),
     ...(await probeMapTools(connection)),
   ];
   console.log(JSON.stringify(capabilities, null, 2));

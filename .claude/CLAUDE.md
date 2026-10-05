@@ -19,7 +19,7 @@ TypeScript runs directly on Node (>= 22.18, native type stripping); there is no 
 - `npm test`: all unit tests (`node --test`).
 - `node --test src/map/map-layout.test.ts`: one test file. Add `--test-name-pattern "<name>"` for one test.
 - `npm run lint:luau` / `npm run format:luau:check`: selene and StyLua for `luau/`; both are pinned in `rokit.toml`.
-- `npm run smoke:studio [-- --multiplayer]`: end-to-end build, check, capture and playtest against a running Studio.
+- `npm run smoke:studio [-- [--multiplayer] [--only <terms>]]`: end-to-end build, check, capture and playtest against a running Studio. `--only remove_map,lighting` runs only the steps whose name contains one of the terms, after the build_map step they use, and skips the capability probes.
 - `npm run smoke:data`: inserts the `data` skill templates and ProfileStore into the open place, runs their checks in a solo playtest and removes them. The pinned ProfileStore is downloaded from Wally once into `.roblox-kit/cache/` (git-ignored, by `scripts/profilestore-cache.ts`), also when `npm run typecheck:luau` type-checks `skills/data/templates/`.
 - `npm run smoke:networking`: inserts the `networking` skill's generated Blink modules and templates into the open place, runs the bad-data checks in a solo playtest and removes them. Rerun it before bumping Blink: the raw-buffer checks depend on the 0.18.9 wire format.
 - `npm run check:blink`: regenerates the `networking` template's Blink output with the `blink` pinned in `rokit.toml` and fails when it differs from the committed files (`blink <file> --yes`, since Blink waits on a prompt without a TTY).
