@@ -12,6 +12,11 @@ if (cozyTown === undefined) {
 }
 const recipe = cozyTown.lighting;
 
+const trainStation = presets.get("train-station");
+if (trainStation === undefined) {
+  throw new Error("The train-station preset is missing.");
+}
+
 function studioReturning(text: string, isError = false) {
   return new FakeStudioConnection([{ id: "studio-a", name: "Place A" }], {
     execute_luau: () => ({ content: [{ type: "text", text }], isError }),
@@ -129,4 +134,27 @@ await test("apply-lighting.luau saves the original once on the maps folder, rest
   assert.ok(source.includes("folder:GetAttribute(ORIGINAL_ATTRIBUTE_NAME) == nil"));
   assert.ok(saveAt > 0 && clearAt > 0);
   assert.ok(source.includes('restored = "map"'));
+});
+
+await test("sends the post-processing block of a preset that has one, and none for a preset without", async () => {
+  const withBlock = studioReturning('{"snapshotTaken":true}');
+  await applyLighting({ ...request(withBlock), recipe: trainStation.lighting });
+  const code = String(withBlock.requests[0]?.arguments["code"]);
+  for (const key of ["PostProcessing", "ColorCorrection", "SunRays", "DepthOfField", "Sky"]) {
+    assert.ok(code.includes(`"${key}":{`), key);
+  }
+  assert.equal(recipe.PostProcessing, undefined);
+  const without = studioReturning('{"snapshotTaken":true}');
+  await applyLighting(request(without));
+  assert.ok(!String(without.requests[0]?.arguments["code"]).includes('"PostProcessing":{'));
+});
+
+await test("apply-lighting.luau snapshots, restores and creates every post-processing effect beside Atmosphere and Bloom", async () => {
+  const source = await readFile(new URL("../../luau/apply-lighting.luau", import.meta.url), "utf8");
+  for (const className of ["ColorCorrectionEffect", "SunRaysEffect", "DepthOfFieldEffect", "Sky"]) {
+    assert.ok(source.includes(`className = "${className}"`), className);
+  }
+  assert.ok(source.includes("postProcessing = postProcessing"));
+  assert.ok(source.includes("snapshot.postProcessing"));
+  assert.ok(source.includes("effectOrNew(post.className)"));
 });

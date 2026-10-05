@@ -36,9 +36,14 @@ type LightingValues = {
 	ShadowSoftness: number,
 }
 
+-- Property values of one post-processing effect; a Color3 is stored as hex.
+type EffectValues = { [string]: any }
+
 type Recipe = LightingValues & {
 	Atmosphere: AtmosphereValues,
 	Bloom: BloomValues,
+	-- Keyed by the names in POST_EFFECTS; absent: the post-processing effects are left alone.
+	PostProcessing: { [string]: EffectValues }?,
 }
 
 type Snapshot = {
@@ -46,6 +51,8 @@ type Snapshot = {
 	-- The values of the Atmosphere and BloomEffect that existed before; nil when the apply created it.
 	atmosphere: AtmosphereValues?,
 	bloom: BloomValues?,
+	-- The values of the existing post-processing effects by class name; a class the apply created is absent.
+	postProcessing: { [string]: EffectValues }?,
 	-- Class names of the effects the first apply created, destroyed again on restore.
 	created: { string },
 }
@@ -63,6 +70,26 @@ type Arguments = {
 local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
 -- Attribute on the maps folder holding the place's original Lighting as JSON, in the Snapshot shape.
 local ORIGINAL_ATTRIBUTE_NAME = "RobloxKitOriginalLighting"
+
+-- The post-processing effects: the recipe key, the class under Lighting and the properties read and written.
+local POST_EFFECTS: { { key: string, className: string, properties: { string } } } = {
+	{
+		key = "ColorCorrection",
+		className = "ColorCorrectionEffect",
+		properties = { "Brightness", "Contrast", "Saturation", "TintColor" },
+	},
+	{ key = "SunRays", className = "SunRaysEffect", properties = { "Intensity", "Spread" } },
+	{
+		key = "DepthOfField",
+		className = "DepthOfFieldEffect",
+		properties = { "FarIntensity", "FocusDistance", "InFocusRadius", "NearIntensity" },
+	},
+	{
+		key = "Sky",
+		className = "Sky",
+		properties = { "StarCount", "CelestialBodiesShown", "SunAngularSize", "MoonAngularSize" },
+	},
+}
 
 local arguments: Arguments = ...
 local HttpService = game:GetService("HttpService")
@@ -146,6 +173,25 @@ local function firstEffect(className: string): Instance?
 	return nil
 end
 
+local function readEffect(effect: Instance, properties: { string }): EffectValues
+	local values: EffectValues = {}
+	for _, property in properties do
+		local value = (effect :: any)[property]
+		values[property] = if typeof(value) == "Color3" then value:ToHex() else value
+	end
+	return values
+end
+
+local function writeEffect(effect: Instance, values: EffectValues)
+	for property, value in values do
+		if typeof((effect :: any)[property]) == "Color3" then
+			(effect :: any)[property] = Color3.fromHex(value)
+		else
+			(effect :: any)[property] = value
+		end
+	end
+end
+
 local function snapshotNow(): Snapshot
 	local atmosphere = firstEffect("Atmosphere")
 	local bloom = firstEffect("BloomEffect")
@@ -156,10 +202,20 @@ local function snapshotNow(): Snapshot
 	if not bloom then
 		table.insert(created, "BloomEffect")
 	end
+	local postProcessing: { [string]: EffectValues } = {}
+	for _, post in POST_EFFECTS do
+		local effect = firstEffect(post.className)
+		if effect then
+			postProcessing[post.className] = readEffect(effect, post.properties)
+		else
+			table.insert(created, post.className)
+		end
+	end
 	return {
 		lighting = readLighting(),
 		atmosphere = if atmosphere then readAtmosphere(atmosphere :: Atmosphere) else nil,
 		bloom = if bloom then readBloom(bloom :: BloomEffect) else nil,
+		postProcessing = postProcessing,
 		created = created,
 	}
 end
@@ -175,6 +231,15 @@ local function restore(snapshot: Snapshot)
 	local bloomValues = snapshot.bloom
 	if bloom and bloomValues then
 		writeBloom(bloom :: BloomEffect, bloomValues)
+	end
+	local postValues = snapshot.postProcessing
+	if postValues then
+		for className, values in postValues do
+			local effect = firstEffect(className)
+			if effect then
+				writeEffect(effect, values)
+			end
+		end
 	end
 	for _, className in snapshot.created do
 		local effect = firstEffect(className)
@@ -253,6 +318,12 @@ if recipe then
 	writeLighting(recipe)
 	writeAtmosphere(effectOrNew("Atmosphere") :: Atmosphere, recipe.Atmosphere)
 	writeBloom(effectOrNew("BloomEffect") :: BloomEffect, recipe.Bloom)
+	local postRecipe = recipe.PostProcessing
+	if postRecipe then
+		for _, post in POST_EFFECTS do
+			writeEffect(effectOrNew(post.className), postRecipe[post.key])
+		end
+	end
 end
 
 return HttpService:JSONEncode({ snapshotTaken = snapshotTaken })

@@ -115,6 +115,30 @@
       "Intensity": 0.7,
       "Size": 32,
       "Threshold": 1.1
+    },
+    "PostProcessing": {
+      "ColorCorrection": {
+        "Brightness": 0.0,
+        "Contrast": 0.12,
+        "Saturation": 0.05,
+        "TintColor": "#e2f1ff"
+      },
+      "SunRays": {
+        "Intensity": 0.05,
+        "Spread": 0.5
+      },
+      "DepthOfField": {
+        "FarIntensity": 0.15,
+        "FocusDistance": 60,
+        "InFocusRadius": 40,
+        "NearIntensity": 0.0
+      },
+      "Sky": {
+        "StarCount": 0,
+        "CelestialBodiesShown": false,
+        "SunAngularSize": 21,
+        "MoonAngularSize": 11
+      }
     }
   },
   "lightingIntent": "cool, even panel light",

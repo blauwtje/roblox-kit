@@ -214,6 +214,14 @@ if typeof(encoded) == "string" then
   if bloom and snapshot.bloom then
     for name, value in snapshot.bloom do bloom[name] = value end
   end
+  for className, values in snapshot.postProcessing or {} do
+    local effect = Lighting:FindFirstChildOfClass(className)
+    if effect then
+      for name, value in values do
+        if typeof(effect[name]) == "Color3" then effect[name] = Color3.fromHex(value) else effect[name] = value end
+      end
+    end
+  end
   for _, className in snapshot.created do
     local effect = Lighting:FindFirstChildOfClass(className)
     if effect then effect:Destroy() end
@@ -250,6 +258,10 @@ const lightingStateLuau = `
 local Lighting = game:GetService("Lighting")
 local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
 local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
+local colorCorrection = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+local sunRays = Lighting:FindFirstChildOfClass("SunRaysEffect")
+local depthOfField = Lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+local sky = Lighting:FindFirstChildOfClass("Sky")
 return game:GetService("HttpService"):JSONEncode({
   LightingStyle = Lighting.LightingStyle.Name,
   Ambient = Lighting.Ambient:ToHex(),
@@ -261,6 +273,12 @@ return game:GetService("HttpService"):JSONEncode({
   atmosphereDensity = if atmosphere then atmosphere.Density else -1,
   atmosphereColor = if atmosphere then atmosphere.Color:ToHex() else "",
   bloomIntensity = if bloom then bloom.Intensity else -1,
+  colorCorrectionSaturation = if colorCorrection then colorCorrection.Saturation else -9,
+  colorCorrectionTint = if colorCorrection then colorCorrection.TintColor:ToHex() else "",
+  sunRaysIntensity = if sunRays then sunRays.Intensity else -1,
+  depthOfFieldFocusDistance = if depthOfField then depthOfField.FocusDistance else -1,
+  skyStarCount = if sky then sky.StarCount else -1,
+  skyCelestialBodiesShown = if sky then sky.CelestialBodiesShown else false,
 })`;
 
 const lightingStateSchema = z.object({
@@ -274,6 +292,12 @@ const lightingStateSchema = z.object({
   atmosphereDensity: z.number(),
   atmosphereColor: z.string(),
   bloomIntensity: z.number(),
+  colorCorrectionSaturation: z.number(),
+  colorCorrectionTint: z.string(),
+  sunRaysIntensity: z.number(),
+  depthOfFieldFocusDistance: z.number(),
+  skyStarCount: z.number(),
+  skyCelestialBodiesShown: z.boolean(),
 });
 
 /** Reports the place state as one line; the smoke fails unless it is the state the place started in. */
@@ -794,6 +818,32 @@ async function probeLighting(connection: StudioConnection): Promise<string> {
     hex(recipe.Atmosphere.Color),
   );
   expectClose("Bloom Intensity", lighting.bloomIntensity, recipe.Bloom.Intensity);
+  const post = recipe.PostProcessing;
+  if (post === undefined) {
+    throw new Error("The train-station preset has no PostProcessing block.");
+  }
+  expectClose(
+    "ColorCorrection Saturation",
+    lighting.colorCorrectionSaturation,
+    post.ColorCorrection.Saturation,
+  );
+  expectEqual(
+    "ColorCorrection TintColor",
+    lighting.colorCorrectionTint.toLowerCase(),
+    hex(post.ColorCorrection.TintColor),
+  );
+  expectClose("SunRays Intensity", lighting.sunRaysIntensity, post.SunRays.Intensity);
+  expectClose(
+    "DepthOfField FocusDistance",
+    lighting.depthOfFieldFocusDistance,
+    post.DepthOfField.FocusDistance,
+  );
+  expectClose("Sky StarCount", lighting.skyStarCount, post.Sky.StarCount);
+  expectEqual(
+    "Sky CelestialBodiesShown",
+    lighting.skyCelestialBodiesShown,
+    post.Sky.CelestialBodiesShown,
+  );
 
   await callRealTool(buildMapTool, smokeRelationSpec, connection);
   const rebuilt = await readMapLights(connection, studioId);

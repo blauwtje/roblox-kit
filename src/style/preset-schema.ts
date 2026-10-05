@@ -106,6 +106,41 @@ const bloom = z.strictObject({
   Threshold: z.number().nonnegative(),
 });
 
+const colorCorrection = z.strictObject({
+  Brightness: z.number().min(-1).max(1),
+  Contrast: z.number().min(-1).max(1),
+  Saturation: z.number().min(-1).max(1),
+  TintColor: hexColor,
+});
+
+const sunRays = z.strictObject({
+  Intensity: z.number().min(0).max(1),
+  Spread: z.number().min(0).max(1),
+});
+
+const depthOfField = z.strictObject({
+  FarIntensity: z.number().min(0).max(1),
+  FocusDistance: z.number().nonnegative(),
+  InFocusRadius: z.number().nonnegative(),
+  NearIntensity: z.number().min(0).max(1),
+});
+
+/** The Sky sets no textures: the stars and celestial bodies come from the engine, so no asset enters the map. */
+const sky = z.strictObject({
+  StarCount: z.number().int().min(0).max(5000),
+  CelestialBodiesShown: z.boolean(),
+  SunAngularSize: z.number().min(0).max(100),
+  MoonAngularSize: z.number().min(0).max(100),
+});
+
+/** Post-processing effects under Lighting, beside Atmosphere and Bloom. */
+const postProcessing = z.strictObject({
+  ColorCorrection: colorCorrection,
+  SunRays: sunRays,
+  DepthOfField: depthOfField,
+  Sky: sky,
+});
+
 const lighting = z.strictObject({
   LightingStyle: z.enum(["Realistic", "Soft"]),
   PrioritizeLightingQuality: z.boolean(),
@@ -119,6 +154,8 @@ const lighting = z.strictObject({
   ShadowSoftness: z.number().nonnegative(),
   Atmosphere: atmosphere,
   Bloom: bloom,
+  /** Optional so a preset without it leaves these effects alone; an override replaces the whole block. */
+  PostProcessing: postProcessing.optional(),
 });
 
 /** Fields every arrangement shares: the piece it repeats and an optional cap on how many it places. */
