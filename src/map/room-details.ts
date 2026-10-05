@@ -1,6 +1,7 @@
 import { config } from "../config.ts";
+import type { TrimProfileKind } from "../hero-props/prop-recipes.ts";
 import type { Preset } from "../style/preset-schema.ts";
-import type { PartRecord } from "./map-layout.ts";
+import type { PartRecord, Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 
 type Side = RoomSpec["doors"][number]["side"];
@@ -15,10 +16,27 @@ export type DetailSurfaces = Pick<Preset["surfaces"], "trim" | "accent">;
 export interface DetailPart extends Omit<PartRecord, "kind" | "role"> {
   kind: "trim" | "stripe" | "pillar" | "arch";
   role: "trim" | "accent";
+  /** The profile mesh that stands in for this box when its asset is recorded; the box is the fallback. */
+  profile?: TrimProfile;
   canCollide: false;
   canTouch: false;
   canQuery: false;
 }
+
+/**
+ * How a profile mesh sits on a trim run: `yaw` turns its x axis (out of the wall) to face the room, `roll` turns
+ * it about that axis (180 turns the cornice over, -90 stands a jamb up), `size` is the mesh's box in its own
+ * frame (x out of the wall, y the profile's height or width, z along the run).
+ */
+export interface TrimProfile {
+  kind: TrimProfileKind;
+  yaw: number;
+  roll: number;
+  size: Vector;
+}
+
+/** The yaw that turns a mesh's x axis from the wall of `side` toward the room, its z along the wall. */
+const yawOfSide: Record<Side, number> = { west: 0, east: 180, north: 270, south: 90 };
 
 /**
  * Sizes of the details, in studs, until they move to `config` (kept here because this task edits no other file).
@@ -59,6 +77,8 @@ interface Band {
   depth: number;
   height: number;
   centerHeight: number;
+  /** The profile mesh of the band, with its roll; the stripe has none. */
+  profile?: { kind: TrimProfileKind; roll: number };
 }
 
 /** Room settings win over map settings, which win over the config defaults: the rule `layoutMap` uses. */
@@ -87,7 +107,7 @@ function wallLabel(wall: PartRecord): { side: Side; label: string } {
 }
 
 function decorativePart(
-  fields: Pick<DetailPart, "name" | "room" | "kind" | "role" | "position" | "size">,
+  fields: Pick<DetailPart, "name" | "room" | "kind" | "role" | "position" | "size" | "profile">,
   surfaces: DetailSurfaces,
 ): DetailPart {
   const surface = surfaces[fields.role];
@@ -142,6 +162,7 @@ function bandParts(
       depth: detailDimensions.trimDepthStuds,
       height: detailDimensions.trimHeightStuds,
       centerHeight: detailDimensions.trimHeightStuds / 2,
+      profile: { kind: "ogee", roll: 0 },
     },
     {
       name: "crown",
@@ -150,6 +171,7 @@ function bandParts(
       depth: detailDimensions.trimDepthStuds,
       height: detailDimensions.trimHeightStuds,
       centerHeight: wallHeight - detailDimensions.trimHeightStuds / 2,
+      profile: { kind: "quarter-round", roll: 180 },
     },
     {
       name: "stripe",
@@ -183,6 +205,16 @@ function bandParts(
               band.centerHeight,
             ),
             size: wallSizeOf(runsAlongX, end - start, band.height, band.depth),
+            ...(band.profile === undefined
+              ? {}
+              : {
+                  profile: {
+                    kind: band.profile.kind,
+                    yaw: yawOfSide[side],
+                    roll: band.profile.roll,
+                    size: { x: band.depth, y: band.height, z: end - start },
+                  },
+                }),
           },
           surfaces,
         ),
@@ -281,6 +313,7 @@ function archParts(
     length: archJambWidthStuds,
     height: measure.wallHeight,
     centerHeight: measure.wallHeight / 2,
+    roll: -90,
   }));
   const lintel = {
     piece: "lintel",
@@ -288,6 +321,7 @@ function archParts(
     length: measure.doorWidth - 2 * archLipStuds,
     height: archLintelHeightStuds,
     centerHeight: measure.wallHeight - archLintelHeightStuds / 2,
+    roll: 0,
   };
   return [...jambs, lintel].map((piece) =>
     decorativePart(
@@ -298,6 +332,16 @@ function archParts(
         role: "trim",
         position: placeOnWall(room, runsAlongX, piece.along, across, piece.centerHeight),
         size: wallSizeOf(runsAlongX, piece.length, piece.height, archDepthStuds),
+        profile: {
+          kind: "bead",
+          yaw: yawOfSide[door.side],
+          roll: piece.roll,
+          // A jamb stands up: its profile width is the jamb's width and its run is the wall height.
+          size:
+            piece.roll === 0
+              ? { x: archDepthStuds, y: piece.height, z: piece.length }
+              : { x: archDepthStuds, y: piece.length, z: piece.height },
+        },
       },
       surfaces,
     ),

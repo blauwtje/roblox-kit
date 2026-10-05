@@ -46,8 +46,11 @@ type HeroPropRecord = {
 	size: Vector,
 	-- Hex color and material name of each surface role a MeshPart may be named after.
 	surfaces: { [string]: { color: string, material: string } },
-	-- The set piece built instead when the asset fails to load.
-	fallback: PropRecord,
+	-- The set piece built instead when the asset fails to load; a trim mesh has `fallbackPart` (its box) instead.
+	fallback: PropRecord?,
+	fallbackPart: PartRecord?,
+	-- Degrees about the mesh's own x axis, applied after the yaw: 180 turns a cornice over, -90 stands a jamb up.
+	roll: number?,
 	-- "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, not evenly to `size.x`.
 	fit: string?,
 }
@@ -492,7 +495,11 @@ local function addHeroProps(
 		end)
 		if not loaded then
 			table.insert(failures, { kind = record.kind, assetId = record.assetId, error = tostring(heroOrError) })
-			table.insert(proceduralModels, addProp(model, generators, record.fallback, countByKind))
+			if record.fallback then
+				table.insert(proceduralModels, addProp(model, generators, record.fallback, countByKind))
+			elseif record.fallbackPart then
+				newPart(record.fallbackPart).Parent = model
+			end
 			continue
 		end
 		local hero = heroOrError :: Model
@@ -518,7 +525,11 @@ local function addHeroProps(
 		end
 		local center = hero:GetBoundingBox()
 		hero.WorldPivot = CFrame.new(center.Position)
-		hero:PivotTo(CFrame.new(toVector3(record.pivot)) * CFrame.Angles(0, math.rad(record.yaw), 0))
+		hero:PivotTo(
+			CFrame.new(toVector3(record.pivot))
+				* CFrame.Angles(0, math.rad(record.yaw), 0)
+				* CFrame.Angles(math.rad(record.roll or 0), 0, 0)
+		)
 		local count = (heroCountByKind[record.kind] or 0) + 1
 		heroCountByKind[record.kind] = count
 		hero.Name = `{record.kind}-hero-{count}`

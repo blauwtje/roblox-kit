@@ -263,9 +263,101 @@ export const propRecipes: Readonly<Record<string, HeroPropRecipe>> = Object.free
   ),
 );
 
-/** The recipe of `kind` for `preset`: its own hero prop, else a prop kind's recipe; undefined when neither has it. */
+/** The profile meshes of the trim runs: skirting (ogee), cornice (quarter round, turned over) and door frames (bead). */
+export const trimProfileKinds = ["ogee", "bead", "quarter-round"] as const;
+export type TrimProfileKind = (typeof trimProfileKinds)[number];
+
+/** Each profile's box in studs: how far it stands out of the wall (x), its height or width (y) and the run it is extruded along (z). */
+export const trimProfileSizes: Readonly<
+  Record<TrimProfileKind, { width: number; height: number; depth: number }>
+> = Object.freeze({
+  ogee: { width: 0.3, height: 0.5, depth: 1 },
+  bead: { width: 0.6, height: 1, depth: 1 },
+  "quarter-round": { width: 0.3, height: 0.5, depth: 1 },
+});
+
+const roundPoint = (x: number, y: number) => ({
+  x: Math.round(x * 1e4) / 1e4,
+  y: Math.round(y * 1e4) / 1e4,
+});
+
+/** Points of an arc of an ellipse about (cx, cy) with radii (rx, ry), from degree `from` to degree `to`. */
+function arc(
+  center: { x: number; y: number },
+  radius: { x: number; y: number },
+  from: number,
+  to: number,
+) {
+  const steps = 6;
+  return Array.from({ length: steps + 1 }, (_, step) => {
+    const turn = ((from + ((to - from) * step) / steps) * Math.PI) / 180;
+    return roundPoint(center.x + radius.x * Math.cos(turn), center.y + radius.y * Math.sin(turn));
+  });
+}
+
+/** The polygon of each profile, x across from the wall (the wall face at the lowest x) and y up, centered on its box. */
+function profilePointsOf(kind: TrimProfileKind) {
+  switch (kind) {
+    case "ogee":
+      return [
+        [-0.15, -0.25],
+        [0.15, -0.25],
+        [0.15, -0.1],
+        [0.13, -0.02],
+        [0.08, 0.04],
+        [0.04, 0.09],
+        [0.03, 0.15],
+        [0.0, 0.21],
+        [-0.06, 0.25],
+        [-0.15, 0.25],
+      ].map(([x, y]) => roundPoint(x ?? 0, y ?? 0));
+    case "bead":
+      return [
+        roundPoint(-0.3, -0.5),
+        ...arc({ x: -0.2, y: 0 }, { x: 0.5, y: 0.5 }, -90, 90),
+        roundPoint(-0.3, 0.5),
+      ];
+    case "quarter-round":
+      return [roundPoint(-0.15, -0.25), ...arc({ x: -0.15, y: -0.25 }, { x: 0.3, y: 0.5 }, 0, 90)];
+  }
+}
+
+/** The recipe key of a trim profile mesh: `trim-<profile>`. */
+export function trimRecipeKind(kind: TrimProfileKind): string {
+  return `trim-${kind}`;
+}
+
+/** One Blender recipe per trim profile, keyed `trim-<profile>`: the profile extruded one stud along z, scaled along each run at build. */
+export const trimRecipes: Readonly<Record<string, HeroPropRecipe>> = Object.freeze(
+  Object.fromEntries(
+    trimProfileKinds.map((kind): [string, HeroPropRecipe] => {
+      const size = trimProfileSizes[kind];
+      return [
+        trimRecipeKind(kind),
+        {
+          description: `The ${kind} trim profile, one stud long, as one mesh.`,
+          replaces: "trim",
+          size,
+          triangleBudget: 200,
+          operations: [
+            {
+              op: "profile",
+              phase: "structure",
+              role: "trim",
+              center: { x: 0, y: size.height / 2, z: 0 },
+              points: profilePointsOf(kind),
+              depth: size.depth,
+            },
+          ],
+        },
+      ];
+    }),
+  ),
+);
+
+/** The recipe of `kind` for `preset`: its own hero prop, else a prop kind's or trim profile's recipe; undefined when none has it. */
 export function heroRecipeOf(preset: Preset, kind: string): HeroPropRecipe | undefined {
-  return preset.heroProps?.[kind] ?? propRecipes[kind];
+  return preset.heroProps?.[kind] ?? propRecipes[kind] ?? trimRecipes[kind];
 }
 
 /** The prop-kind recipe keys a preset can place: one per kind in its prop kit. */

@@ -13,7 +13,7 @@ import { layoutMap } from "../src/map/map-layout.ts";
 import { relationMapSpecSchema } from "../src/map/map-spec.ts";
 import type { PropRecord } from "../src/map/prop-placement.ts";
 import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
-import { heroPropsOf } from "../src/map/hero-prop-placement.ts";
+import { heroPropsOf, trimMeshesOf } from "../src/map/hero-prop-placement.ts";
 import { buildRoomDetails } from "../src/map/room-details.ts";
 import { resolveRelations } from "../src/map/relation-solver.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
@@ -396,7 +396,8 @@ async function styledSmokeMap() {
     { name: "train-station", base: preset, style: preset },
     propsOf(smokeMapSpec, preset).props,
   );
-  return { layout, details, props, heroProps };
+  const trim = await trimMeshesOf(details, { base: preset, style: preset });
+  return { layout, details, props, heroProps, trim };
 }
 
 /** Name ending of the fixture part build_map hangs at each ceiling light. */
@@ -626,8 +627,50 @@ async function probeHeroProps(connection: StudioConnection): Promise<string> {
   const built = z
     .array(z.string())
     .parse(JSON.parse(await executeLuau(connection, studioId, heroKindsLuau)));
-  expectEqual("hero Models in Studio", built, heroProps.map((hero) => hero.kind).sort());
-  return `${String(built.length)} hero props loaded: ${built.join(", ")}`;
+  const heroKinds = built.filter((kind) => !kind.startsWith("trim-"));
+  expectEqual("hero Models in Studio", heroKinds, heroProps.map((hero) => hero.kind).sort());
+  return `${String(heroKinds.length)} hero props loaded: ${heroKinds.join(", ")}`;
+}
+
+/** The names of the baseboard, crown and arch boxes under the built map. */
+const trimBoxesLuau = `
+local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
+local names = {}
+for _, child in model:GetChildren() do
+  if child:IsA("BasePart") and (child.Name:find("-baseboard-", 1, true) or child.Name:find("-crown-", 1, true) or child.Name:find("-arch-", 1, true)) then
+    table.insert(names, child.Name)
+  end
+end
+table.sort(names)
+return game:GetService("HttpService"):JSONEncode(names)`;
+
+/**
+ * Proves each profiled trim run is its recorded mesh Model (named after the profile) and the box otherwise: the
+ * boxes in Studio are exactly those no mesh replaced, and one trim Model stands per replaced box. Until the
+ * profile meshes are uploaded no asset is recorded, so every run is a box.
+ */
+async function probeProfileTrim(connection: StudioConnection): Promise<string> {
+  const { details, trim } = await styledSmokeMap();
+  const studioId = await selectStudio(connection, undefined);
+  const boxes = z
+    .array(z.string())
+    .parse(JSON.parse(await executeLuau(connection, studioId, trimBoxesLuau)));
+  const expectedBoxes = trim.details
+    .filter((detail) => detail.profile !== undefined)
+    .map((detail) => detail.name)
+    .sort();
+  expectEqual("trim boxes in Studio", boxes, expectedBoxes);
+  const kinds = z
+    .array(z.string())
+    .parse(JSON.parse(await executeLuau(connection, studioId, heroKindsLuau)))
+    .filter((kind) => kind.startsWith("trim-"));
+  expectEqual("trim mesh Models in Studio", kinds, trim.trimMeshes.map((mesh) => mesh.kind).sort());
+  expectEqual(
+    "every profiled run is a box or a mesh",
+    boxes.length + kinds.length,
+    details.filter((detail) => detail.profile !== undefined).length,
+  );
+  return `${String(kinds.length)} profile meshes and ${String(boxes.length)} fallback boxes`;
 }
 
 /** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */
@@ -1123,6 +1166,7 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
       ["build_map palette colors and MaterialVariant", () => probePaintedMap(connection)],
       ["build_map ceilings, generators and generated props", () => probeMapDecor(connection)],
       ["build_map hero props", () => probeHeroProps(connection)],
+      ["build_map profile trim", () => probeProfileTrim(connection)],
       ["build_map lights and lighting recipe", () => probeLighting(connection)],
       ["check_map", () => probeCheckMap(connection)],
       ["check_map names a model blocking a walk", () => probeBlockingModel(connection)],

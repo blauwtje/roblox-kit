@@ -13,7 +13,12 @@ import type { Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
 import type { HeroPropSources } from "../hero-props/hero-prop-asset.ts";
-import { heroPropsOf, type HeroPropRecord } from "./hero-prop-placement.ts";
+import {
+  heroPropsOf,
+  trimMeshesOf,
+  type HeroPropRecord,
+  type TrimMeshRecord,
+} from "./hero-prop-placement.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
 import { relationMapSpecSchema, type MapSpec, type TerrainFill } from "./map-spec.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
@@ -178,6 +183,8 @@ interface BuildContext {
   generators: Record<string, string>;
   /** The hero props the props phase loads from their assets, beside the set pieces left in `props`. */
   heroProps: HeroPropRecord[];
+  /** The profile meshes that replace trim boxes, loaded like hero props with the box as their fallback. */
+  trimMeshes: TrimMeshRecord[];
   /** Every material name of the build, checked by the shell phase before anything is built. */
   materials: string[];
 }
@@ -202,7 +209,11 @@ function phaseArguments(
     },
     openings: { parts: phase.parts, variants: build.variants },
     surfaces: { parts: phase.parts, variants: build.variants },
-    props: { props: phase.parts, generators: build.generators, heroProps: build.heroProps },
+    props: {
+      props: phase.parts,
+      generators: build.generators,
+      heroProps: [...build.heroProps, ...build.trimMeshes],
+    },
     lighting: {
       lights: phase.parts,
       ceilingTag: config.ceilingTag,
@@ -320,6 +331,11 @@ async function buildMap(
           heroSources,
         );
   const { props, heroProps } = heroes;
+  const trim =
+    style === undefined || spec.style === undefined
+      ? { details, trimMeshes: [] }
+      : await trimMeshesOf(details, { base: presetNamed(spec.style.preset), style }, heroSources);
+  const { trimMeshes } = trim;
   const warnings = [...placed.warnings, ...heroes.warnings];
   const heroSurfaces = heroProps.flatMap((hero) => Object.values(hero.surfaces));
   // A hero prop whose asset fails to load builds its fallback set piece, so its kind needs a generator too.
@@ -332,6 +348,7 @@ async function buildMap(
     variants,
     generators,
     heroProps,
+    trimMeshes,
     materials: materialsOf(
       [...layout.parts, ...details, ...heroSurfaces],
       layout.terrainFills,
@@ -339,7 +356,7 @@ async function buildMap(
     ),
   };
   const studioId = await selectStudio(context.studio, input.studioId);
-  const phases = groupBuildPhases({ parts: layout.parts, details, props, lights });
+  const phases = groupBuildPhases({ parts: layout.parts, details: trim.details, props, lights });
   let partCount = 0;
   for (const [index, phase] of phases.entries()) {
     try {
@@ -354,6 +371,12 @@ async function buildMap(
       partCount = built.partCount;
       for (const failure of built.heroLoadFailures ?? []) {
         const fallback = heroProps.find((hero) => hero.assetId === failure.assetId)?.fallback.kind;
+        if (fallback === undefined && trimMeshes.some((mesh) => mesh.assetId === failure.assetId)) {
+          warnings.push(
+            `Trim mesh ${failure.kind} (asset ${failure.assetId}) failed to load: ${failure.error}; its trim box is built instead.`,
+          );
+          continue;
+        }
         warnings.push(
           `Hero prop ${failure.kind} (asset ${failure.assetId}) failed to load: ${failure.error}; its ${fallback ?? "set piece"} set piece is built instead.`,
         );
@@ -386,7 +409,8 @@ async function buildMap(
     partCount,
     phases: phases.map((phase) => ({
       name: phase.name,
-      partCount: phase.parts.length + (phase.name === "props" ? heroProps.length : 0),
+      partCount:
+        phase.parts.length + (phase.name === "props" ? heroProps.length + trimMeshes.length : 0),
     })),
     bounds,
     zones: zonesOf([...layout.parts, ...details]),

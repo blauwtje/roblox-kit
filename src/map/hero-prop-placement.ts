@@ -1,8 +1,14 @@
 import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
-import { propRecipeKind, propRecipes } from "../hero-props/prop-recipes.ts";
+import {
+  propRecipeKind,
+  propRecipes,
+  trimRecipeKind,
+  type TrimProfileKind,
+} from "../hero-props/prop-recipes.ts";
 import { heroParts, type Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
+import type { DetailPart } from "./room-details.ts";
 import { roomBounds, type PropRecord } from "./prop-placement.ts";
 import { doorwayClearanceBoxes, type DoorwayClearanceBox } from "./size-rules.ts";
 
@@ -233,4 +239,60 @@ async function propMeshesOf<Prop extends PlacedProp>(
     else heroProps.push(stretchedRecord(assetId, recipe, prop, preset.style));
   }
   return { props: kept, heroProps };
+}
+
+/** A profile mesh that replaces one trim box: its recorded asset placed like the box, with the box as its fallback. */
+export interface TrimMeshRecord {
+  kind: string;
+  assetId: string;
+  pivot: Vector;
+  yaw: number;
+  roll: number;
+  size: Vector;
+  surfaces: Record<string, { color: string; material: string }>;
+  fit: "stretch";
+  fallbackPart: DetailPart;
+}
+
+/**
+ * Each detail with a profile whose recipe has a recorded asset as a mesh stretched along its run, and the details
+ * left as boxes: the others, and every one when its profile has no recorded upload (nothing is uploaded here).
+ */
+export async function trimMeshesOf(
+  details: DetailPart[],
+  preset: { base: Preset; style: Preset },
+  sources: HeroPropSources = {},
+): Promise<{ details: DetailPart[]; trimMeshes: TrimMeshRecord[] }> {
+  const assetIds = new Map<TrimProfileKind, string | undefined>();
+  const kept: DetailPart[] = [];
+  const trimMeshes: TrimMeshRecord[] = [];
+  const { color, material } = preset.style.surfaces.trim;
+  for (const detail of details) {
+    const { profile } = detail;
+    if (profile === undefined) {
+      kept.push(detail);
+      continue;
+    }
+    if (!assetIds.has(profile.kind)) {
+      const recorded = await recordedHeroAsset(preset.base, trimRecipeKind(profile.kind), sources);
+      assetIds.set(profile.kind, recorded.assetId);
+    }
+    const assetId = assetIds.get(profile.kind);
+    if (assetId === undefined) {
+      kept.push(detail);
+      continue;
+    }
+    trimMeshes.push({
+      kind: trimRecipeKind(profile.kind),
+      assetId,
+      pivot: detail.position,
+      yaw: profile.yaw,
+      roll: profile.roll,
+      size: profile.size,
+      surfaces: { trim: { color, material } },
+      fit: "stretch",
+      fallbackPart: detail,
+    });
+  }
+  return { details: kept, trimMeshes };
 }

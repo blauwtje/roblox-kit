@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
+import { heroRecipeHash } from "../hero-props/hero-prop-asset.ts";
+import { loadPresets } from "../style/load-preset.ts";
+import { trimMeshesOf } from "./hero-prop-placement.ts";
 import { layoutMap } from "./map-layout.ts";
 import type { PartRecord } from "./map-layout.ts";
 import { mapSpecSchema } from "./map-spec.ts";
@@ -178,4 +185,55 @@ await test("a wall part whose name does not carry its side is rejected", () => {
     part.kind === "wall" ? { ...part, name: `${part.room}-panel` } : part,
   );
   assert.throws(() => buildRoomDetails(spec, renamed, surfaces), /its side is unknown/);
+});
+
+await test("baseboards, crowns and arch pieces carry the profile mesh that stands in for their box", () => {
+  const details = detailsOf(doorRoom);
+  const profileOf = (name: string) => named(details, name).profile;
+  assert.equal(profileOf("hall-baseboard-north-1")?.kind, "ogee");
+  assert.equal(profileOf("hall-crown-north-1")?.kind, "quarter-round");
+  assert.equal(profileOf("hall-crown-north-1")?.roll, 180);
+  assert.equal(profileOf("hall-arch-1-lintel")?.kind, "bead");
+  // A jamb stands up: the mesh's run is the wall height and its width the jamb's.
+  assert.deepEqual(profileOf("hall-arch-1-left")?.size, {
+    x: detailDimensions.archDepthStuds,
+    y: detailDimensions.archJambWidthStuds,
+    z: 12,
+  });
+  assert.equal(profileOf("hall-arch-1-left")?.roll, -90);
+  // Each wall's mesh faces the room: north walls turn the mesh's x axis south (+Z).
+  assert.equal(profileOf("hall-baseboard-north-1")?.yaw, 270);
+  assert.equal(profileOf("hall-baseboard-west-1")?.yaw, 0);
+  assert.equal(
+    details
+      .filter((detail) => detail.kind === "stripe" || detail.kind === "pillar")
+      .some((detail) => detail.profile !== undefined),
+    false,
+    "stripes and pillars stay plain boxes",
+  );
+});
+
+await test("a profile with a recorded asset becomes a mesh with its box as the fallback; without one the box stays", async () => {
+  const preset = (await loadPresets()).get("train-station");
+  assert.ok(preset);
+  const details = detailsOf(doorRoom);
+  const unrecorded = await trimMeshesOf(details, { base: preset, style: preset });
+  assert.deepEqual(unrecorded.trimMeshes, []);
+  assert.equal(unrecorded.details.length, details.length);
+
+  const hash = await heroRecipeHash(preset, "trim-ogee");
+  const directory = await mkdtemp(join(tmpdir(), "trim-mesh-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  await writeFile(assetsFile, JSON.stringify({ [hash]: { kind: "trim-ogee", assetId: "555" } }));
+  const result = await trimMeshesOf(details, { base: preset, style: preset }, { assetsFile });
+  const baseboards = details.filter((detail) => detail.name.includes("-baseboard-"));
+  assert.equal(result.trimMeshes.length, baseboards.length);
+  assert.equal(result.details.length, details.length - baseboards.length);
+  for (const mesh of result.trimMeshes) {
+    assert.equal(mesh.kind, "trim-ogee");
+    assert.equal(mesh.assetId, "555");
+    assert.equal(mesh.fit, "stretch");
+    assert.deepEqual(mesh.pivot, mesh.fallbackPart.position);
+    assert.deepEqual(Object.keys(mesh.surfaces), ["trim"]);
+  }
 });
