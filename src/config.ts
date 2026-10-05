@@ -103,6 +103,12 @@ export const config = Object.freeze({
   maxImagesPerCall: 8,
   /** Milliseconds one blind place check of `npm run eval:studio` (a headless `claude -p` reading two images) may take. */
   placeCheckTimeoutMs: 180_000,
+  /** The headless reviewer backend: the environment variable that overrides it, and the default. Only `claude` (`claude -p`) is built; another backend is a new entry in `reviewerBackends` in `src/shared/ask-headless-reviewer.ts`. */
+  reviewerBackendEnv: "ROBLOX_KIT_REVIEWER_BACKEND",
+  reviewerBackend: "claude",
+  /** Optional environment variables naming the reviewer's model and effort; each is passed to the backend's CLI only when set, so no model or effort is chosen here. */
+  reviewerModelEnv: "ROBLOX_KIT_REVIEWER_MODEL",
+  reviewerEffortEnv: "ROBLOX_KIT_REVIEWER_EFFORT",
   /** Fresh reviewers that each score one room of `npm run eval:studio`; each axis takes their median. */
   qualityReviewersPerRoom: 3,
   /** Milliseconds one reference-scored reviewer (a headless `claude -p` reading every reference and capture) may take. */

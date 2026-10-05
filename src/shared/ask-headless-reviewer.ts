@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { config } from "../config.ts";
 
 const run = promisify(execFile);
 
@@ -34,6 +35,52 @@ function answerJsonSchema(schema: z.ZodType): string {
   return JSON.stringify(jsonSchema);
 }
 
+/** The program and arguments that run a reviewer backend; the brief goes in on stdin. */
+export interface ReviewerCommand {
+  command: string;
+  args: string[];
+}
+
+type Environment = Record<string, string | undefined>;
+
+/** The `claude -p` backend. `--model` and `--effort` are listed by `claude --help` and are added only when set. */
+function claudeCommand(env: Environment, jsonSchema: string): ReviewerCommand {
+  const args = [
+    "-p",
+    "--tools",
+    "Read",
+    "--allowedTools",
+    "Read",
+    "--strict-mcp-config",
+    "--setting-sources",
+    "",
+    "--no-session-persistence",
+    "--output-format",
+    "json",
+    "--json-schema",
+    jsonSchema,
+  ];
+  const model = env[config.reviewerModelEnv];
+  if (model) args.push("--model", model);
+  const effort = env[config.reviewerEffortEnv];
+  if (effort) args.push("--effort", effort);
+  return { command: "claude", args };
+}
+
+const reviewerBackends: Record<string, (env: Environment, jsonSchema: string) => ReviewerCommand> =
+  { claude: claudeCommand };
+
+/** The command of the backend named by `config.reviewerBackendEnv`, else `config.reviewerBackend`. Throws for an unknown backend. */
+export function reviewerCommand(env: Environment, jsonSchema: string): ReviewerCommand {
+  const name = env[config.reviewerBackendEnv] || config.reviewerBackend;
+  const build = Object.hasOwn(reviewerBackends, name) ? reviewerBackends[name] : undefined;
+  if (!build) {
+    const known = Object.keys(reviewerBackends).join(", ");
+    throw new Error(`Unknown reviewer backend "${name}"; built: ${known}.`);
+  }
+  return build(env, jsonSchema);
+}
+
 /**
  * Asks a fresh headless Claude Code session, which can only read, to answer `brief` about `images`. The
  * images are copied into an empty temporary folder under their given names, so neither the repository nor
@@ -49,25 +96,12 @@ export async function askHeadlessReviewer<Schema extends z.ZodType>(
       request.images.map((image) => copyFile(image.path, join(folder, image.name))),
     );
     // The brief goes in on stdin: `-p` with no prompt argument reads it from there.
-    const pending = run(
-      "claude",
-      [
-        "-p",
-        "--tools",
-        "Read",
-        "--allowedTools",
-        "Read",
-        "--strict-mcp-config",
-        "--setting-sources",
-        "",
-        "--no-session-persistence",
-        "--output-format",
-        "json",
-        "--json-schema",
-        answerJsonSchema(request.schema),
-      ],
-      { cwd: folder, timeout: request.timeoutMs, maxBuffer: replyBufferBytes },
-    );
+    const { command, args } = reviewerCommand(process.env, answerJsonSchema(request.schema));
+    const pending = run(command, args, {
+      cwd: folder,
+      timeout: request.timeoutMs,
+      maxBuffer: replyBufferBytes,
+    });
     pending.child.stdin?.end(request.brief);
     const { stdout } = await pending;
     const reply = z
