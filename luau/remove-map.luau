@@ -8,10 +8,13 @@ type Arguments = {
 	roles: { string },
 }
 
+-- build-map.luau stores vectors as `{ x, y, z }` objects, not arrays.
+type Vector = { x: number, y: number, z: number }
+
 type TerrainFill = {
 	material: string,
-	center: { number },
-	size: { number }?,
+	center: Vector,
+	size: Vector?,
 	radius: number?,
 }
 
@@ -30,8 +33,8 @@ if not folder or not model or not model:IsA("Model") then
 	error(`Map "{arguments.mapId}" is not under Workspace.{arguments.mapsFolderName}; nothing was removed.`, 0)
 end
 
-local function toVector3(coordinates: { number }): Vector3
-	return Vector3.new(coordinates[1], coordinates[2], coordinates[3])
+local function toVector3(vector: Vector): Vector3
+	return Vector3.new(vector.x, vector.y, vector.z)
 end
 
 local encodedFills = model:GetAttribute(TERRAIN_ATTRIBUTE_NAME)
