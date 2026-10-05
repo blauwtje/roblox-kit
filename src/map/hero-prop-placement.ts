@@ -1,4 +1,5 @@
 import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
+import { propRecipeKind, propRecipes } from "../hero-props/prop-recipes.ts";
 import { heroParts, type Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
@@ -16,6 +17,7 @@ type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, strin
  * `pivot` is the center of its box, `size` the recipe's width, height and depth in studs (x, y, z), `yaw`
  * the replaced piece's turn about Y, and `surfaces` the color and material of each role a MeshPart is named after.
  * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load.
+ * `fit` "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, in place of scaling it evenly to `size.x`.
  */
 export interface HeroPropRecord {
   kind: string;
@@ -25,6 +27,7 @@ export interface HeroPropRecord {
   size: Vector;
   surfaces: Record<string, { color: string; material: string }>;
   fallback: PlacedProp;
+  fit?: "stretch";
 }
 
 /** The preset, the style resolved from it, and the preset's name, which names the generated folders. */
@@ -74,6 +77,44 @@ function heroFits(
   );
 }
 
+/** The color and material of each surface role the recipe's parts are named after. */
+function recipeSurfaces(recipe: HeroPropRecipe, style: Preset): HeroPropRecord["surfaces"] {
+  const surfaces: HeroPropRecord["surfaces"] = {};
+  for (const role of new Set<SurfaceRole>(
+    heroParts(recipe.operations).map((part) => part.shape.role),
+  )) {
+    const { color, material } = style.surfaces[role];
+    surfaces[role] = { color, material };
+  }
+  return surfaces;
+}
+
+/**
+ * The record that puts a prop kind's mesh in the piece's own box, stretched to it on each axis. The piece's box
+ * is in its own frame (before its yaw); when its long side runs the other way from the recipe's width, the mesh
+ * turns a further 90 degrees and takes the box with x and z swapped, so it fills the same footprint.
+ */
+function stretchedRecord(
+  assetId: string,
+  recipe: HeroPropRecipe,
+  piece: PlacedProp,
+  style: Preset,
+): HeroPropRecord {
+  const { width, depth } = recipe.size;
+  const turned = width >= depth !== piece.size.x >= piece.size.z;
+  const { x, y, z } = piece.size;
+  return {
+    kind: piece.kind,
+    assetId,
+    pivot: piece.pivot,
+    yaw: ((piece.yaw ?? 0) + (turned ? 90 : 0)) % 360,
+    size: turned ? { x: z, y, z: x } : { x, y, z },
+    surfaces: recipeSurfaces(recipe, style),
+    fallback: piece,
+    fit: "stretch",
+  };
+}
+
 /** The record that stands the hero prop where the replaced piece stood: same x, z and yaw, on the same base. */
 function heroRecord(
   kind: string,
@@ -83,13 +124,7 @@ function heroRecord(
   style: Preset,
 ): HeroPropRecord {
   const { width, height, depth } = recipe.size;
-  const surfaces: HeroPropRecord["surfaces"] = {};
-  for (const role of new Set<SurfaceRole>(
-    heroParts(recipe.operations).map((part) => part.shape.role),
-  )) {
-    const { color, material } = style.surfaces[role];
-    surfaces[role] = { color, material };
-  }
+  const surfaces = recipeSurfaces(recipe, style);
   const base = piece.pivot.y - piece.size.y / 2;
   return {
     kind,
@@ -108,6 +143,8 @@ function heroRecord(
  * uploaded. A hero prop whose recipe hash has no recorded asset leaves its set piece in place, with a warning
  * saying to generate and upload it from a clone of the roblox-kit repo. A room with no such set piece
  * gets a warning and no hero prop, and so does one whose hero prop would reach through a wall or into a doorway.
+ * Then every remaining prop whose kind's `prop-<kind>` recipe has a recorded asset becomes that mesh, stretched to
+ * the prop's box; a kind with no recorded asset keeps its Luau model, with no warning.
  */
 export async function heroPropsOf<Prop extends PlacedProp>(
   spec: MapSpec,
@@ -121,7 +158,6 @@ export async function heroPropsOf<Prop extends PlacedProp>(
       room.roomType === undefined ? undefined : style.roomTypes?.[room.roomType]?.heroProps;
     return kinds === undefined ? [] : [{ room, kinds }];
   });
-  if (rooms.length === 0) return { props, heroProps: [], warnings: [] };
 
   const agent = { radius: style.sizeRules.agentRadius, height: style.sizeRules.agentHeight };
   const clearances = doorwayClearanceBoxes(spec, agent);
@@ -165,5 +201,36 @@ export async function heroPropsOf<Prop extends PlacedProp>(
       heroProps.push(record);
     }
   }
-  return { props: props.filter((prop) => !replaced.has(prop)), heroProps, warnings };
+  const meshes = await propMeshesOf(
+    preset,
+    props.filter((prop) => !replaced.has(prop)),
+    sources,
+  );
+  return { props: meshes.props, heroProps: [...heroProps, ...meshes.heroProps], warnings };
+}
+
+/** Each prop whose kind's recipe has a recorded asset as its stretched mesh; the others stay Luau models. */
+async function propMeshesOf<Prop extends PlacedProp>(
+  preset: HeroPreset,
+  props: Prop[],
+  sources: HeroPropSources,
+): Promise<{ props: Prop[]; heroProps: HeroPropRecord[] }> {
+  const assetIds = new Map<string, string | undefined>();
+  const kept: Prop[] = [];
+  const heroProps: HeroPropRecord[] = [];
+  for (const prop of props) {
+    const kind = propRecipeKind(prop.kind);
+    const recipe = propRecipes[kind];
+    if (recipe === undefined) {
+      kept.push(prop);
+      continue;
+    }
+    if (!assetIds.has(kind)) {
+      assetIds.set(kind, (await recordedHeroAsset(preset.base, kind, sources)).assetId);
+    }
+    const assetId = assetIds.get(kind);
+    if (assetId === undefined) kept.push(prop);
+    else heroProps.push(stretchedRecord(assetId, recipe, prop, preset.style));
+  }
+  return { props: kept, heroProps };
 }

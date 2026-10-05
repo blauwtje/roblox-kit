@@ -48,6 +48,8 @@ type HeroPropRecord = {
 	surfaces: { [string]: { color: string, material: string } },
 	-- The set piece built instead when the asset fails to load.
 	fallback: PropRecord,
+	-- "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, not evenly to `size.x`.
+	fit: string?,
 }
 
 type HeroLoadFailure = { kind: string, assetId: string, error: string }
@@ -441,7 +443,26 @@ local function paintHeroPart(part: MeshPart, record: HeroPropRecord)
 	part.Material = materialNamed(surface.material)
 end
 
--- The hero props, each its asset loaded into a Model named "<kind>-hero-<n>", scaled so its width is `size.x`,
+-- Scales a loaded asset to `record.size` on each axis about its bounding-box center: each part's size and its
+-- offset from that center; the asset's parts are assumed square to its box, as the GLB importer leaves them.
+local function stretchHero(hero: Model, extents: Vector3, record: HeroPropRecord)
+	if extents.Y <= 0 or extents.Z <= 0 then
+		error(`Hero prop {record.kind} (asset {record.assetId}) has no height or depth to stretch.`, 0)
+	end
+	local center = hero:GetBoundingBox()
+	local factor = Vector3.new(record.size.x / extents.X, record.size.y / extents.Y, record.size.z / extents.Z)
+	for _, descendant in hero:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			local offset = center:PointToObjectSpace(descendant.Position) * factor
+			local rotation = descendant.CFrame - descendant.Position
+			descendant.Size = descendant.Size * factor
+			descendant.CFrame = CFrame.new(center:PointToWorldSpace(offset)) * rotation
+		end
+	end
+end
+
+-- The hero props, each its asset loaded into a Model named "<kind>-hero-<n>", scaled so its width is `size.x`
+-- (or to `size` on each axis when its fit is "stretch"),
 -- centered on its pivot and turned by its yaw; every part is anchored and neither collides, touches nor is queried.
 -- An asset that fails to load builds its fallback set piece instead, added to `proceduralModels`; returns those failures.
 local function addHeroProps(
@@ -479,7 +500,11 @@ local function addHeroProps(
 		if extents.X <= 0 then
 			error(`Hero prop {record.kind} (asset {record.assetId}) has no width to scale.`, 0)
 		end
-		hero:ScaleTo(hero:GetScale() * record.size.x / extents.X)
+		if record.fit == "stretch" then
+			stretchHero(hero, extents, record)
+		else
+			hero:ScaleTo(hero:GetScale() * record.size.x / extents.X)
+		end
 		for _, descendant in hero:GetDescendants() do
 			if descendant:IsA("BasePart") then
 				descendant.Anchored = true

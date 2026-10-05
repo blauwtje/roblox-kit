@@ -259,3 +259,59 @@ await test("a style whose room types name no hero props reads nothing and change
   });
   assert.deepEqual(result, { props: [], heroProps: [], warnings: [] });
 });
+
+/** The train station with no room types, so only the prop-kind meshes can replace a prop. */
+const plainPreset = { name: "train-station", base, style: { ...base, roomTypes: undefined } };
+const turnedBench = {
+  kind: "bench" as const,
+  pivot: { x: 5, y: 1.5, z: 7 },
+  size: { x: 2.5, y: 3, z: 6 },
+  seed: 4,
+};
+const lamp = {
+  kind: "lamp" as const,
+  pivot: { x: 9, y: 4.5, z: 1 },
+  size: { x: 1.5, y: 9, z: 1.5 },
+  seed: 5,
+};
+
+await test("a prop kind with a recorded mesh becomes that mesh, stretched to the prop's own box", async () => {
+  const benchHash = await heroRecipeHash(base, "prop-bench");
+  const directory = await mkdtemp(join(tmpdir(), "prop-mesh-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  await writeFile(
+    assetsFile,
+    JSON.stringify({ [benchHash]: { kind: "prop-bench", assetId: "777" } }),
+  );
+  try {
+    const result = await heroPropsOf(spec, plainPreset, [turnedBench, lamp], { assetsFile });
+    assert.deepEqual(result.props, [lamp]);
+    assert.deepEqual(result.warnings, []);
+    const [mesh] = result.heroProps;
+    assert.equal(result.heroProps.length, 1);
+    assert.ok(mesh !== undefined);
+    assert.equal(mesh.kind, "bench");
+    assert.equal(mesh.assetId, "777");
+    assert.equal(mesh.fit, "stretch");
+    assert.deepEqual(mesh.pivot, turnedBench.pivot);
+    // The bench recipe is wide along x; the prop's long side runs along z, so the mesh turns and swaps x and z.
+    assert.equal(mesh.yaw, 90);
+    assert.deepEqual(mesh.size, { x: 6, y: 3, z: 2.5 });
+    assert.deepEqual(mesh.fallback, turnedBench);
+    assert.ok(Object.keys(mesh.surfaces).length > 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+await test("a prop kind with no recorded mesh keeps its Luau model, with no warning", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "prop-mesh-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  await writeFile(assetsFile, "{}");
+  try {
+    const result = await heroPropsOf(spec, plainPreset, [turnedBench, lamp], { assetsFile });
+    assert.deepEqual(result, { props: [turnedBench, lamp], heroProps: [], warnings: [] });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

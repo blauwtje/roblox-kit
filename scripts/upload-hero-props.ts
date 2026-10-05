@@ -1,8 +1,10 @@
 import { heroPropAsset } from "../src/hero-props/hero-prop-asset.ts";
+import { propRecipeKindsOf } from "../src/hero-props/prop-recipes.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
 
 /**
- * `node scripts/upload-hero-props.ts <preset>` uploads every hero prop of the preset whose checks passed and
+ * `node scripts/upload-hero-props.ts <preset>` uploads every hero prop of the preset, and every `prop-<kind>` mesh of its
+ * prop kit, whose checks passed and
  * whose recipe hash has no recorded asset, through the same `heroPropAsset` that build_map uses, and prints
  * `kind -> asset id` per hero prop. It exits 1 when the key or creator is missing or an upload fails.
  */
@@ -15,7 +17,7 @@ if (presetName === undefined || extra.length > 0) {
 try {
   const preset = (await loadPresets()).get(presetName);
   if (preset === undefined) throw new Error(`No preset named "${presetName}"`);
-  for (const kind of Object.keys(preset.heroProps ?? {})) {
+  for (const kind of [...Object.keys(preset.heroProps ?? {}), ...propRecipeKindsOf(preset)]) {
     const asset = await heroPropAsset(presetName, preset, kind);
     switch (asset.status) {
       case "recorded":

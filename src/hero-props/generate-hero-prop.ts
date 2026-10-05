@@ -7,6 +7,7 @@ import { loadPresets } from "../style/load-preset.ts";
 import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
 import { blenderPath } from "./blender-path.ts";
+import { heroRecipeOf } from "./prop-recipes.ts";
 import { recipeHash } from "./recipe-hash.ts";
 
 const execFileAsync = promisify(execFile);
@@ -63,7 +64,7 @@ export async function generateHeroProp(
 ): Promise<GeneratedHeroProp> {
   const preset = (await loadPresets()).get(presetName);
   if (preset === undefined) throw new Error(`No preset named "${presetName}"`);
-  const recipe = preset.heroProps?.[kind];
+  const recipe = heroRecipeOf(preset, kind);
   if (recipe === undefined) throw new Error(`Preset "${presetName}" has no hero prop "${kind}"`);
 
   const roleColors: Record<string, string> = {};
