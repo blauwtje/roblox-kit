@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import {
+  gateOf as gateResultOf,
   judgeFindingSchema,
   judgeRound,
+  type GateInput,
   type JudgeFinding,
   type JudgeRoundInput,
   type LoggedRound,
@@ -199,4 +201,86 @@ await test("stopReason is pass before round-limit before repeat, else null", () 
   const limit = inputOf({ round: config.maxJudgeRounds, findings: [finding()] });
   assert.equal(judgeRound(limit, [logged(1), logged(2)], date).result.stopReason, "round-limit");
   assert.equal(judgeRound(inputOf({ findings: [finding()] }), [], date).result.stopReason, null);
+});
+
+const goodStats = {
+  flatColorShare: 0.3,
+  luminanceHistogram: [0.1, 0.2, 0.2, 0.2, 0.1, 0.1, 0.05, 0.05],
+  edgeDensity: 0.05,
+};
+
+function gateOf(overrides: Partial<GateInput> = {}): GateInput {
+  return {
+    checkPassed: true,
+    counts: { overlapping: 0, floating: 0 },
+    sceneStats: [],
+    budget: { maxDrawCalls: config.maxDrawCalls, maxTriangles: config.maxTriangles },
+    images: [{ imageId: "hall:a", stats: goodStats }],
+    ...overrides,
+  };
+}
+
+await test("a passing gate leaves the round to the reviewers", () => {
+  const { result } = judgeRound(inputOf({ gate: gateOf(), findings: [finding()] }), [], date);
+  assert.deepEqual(result.gate, { passed: true, codeScore: 100 });
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0]?.type, "palette");
+});
+
+await test("a failing gate ends the round on its blockers and reads no reviewer answer", () => {
+  const blank = { ...goodStats, flatColorShare: 0.97, edgeDensity: 0 };
+  const dark = { ...goodStats, luminanceHistogram: [1, 0, 0, 0, 0, 0, 0, 0] };
+  const mismatch = { clues: "", genre: "airport", room: "Gate", furnished: "furnished" } as const;
+  const { result, rejected } = judgeRound(
+    inputOf({
+      gate: gateOf({
+        checkPassed: false,
+        counts: { overlapping: 4, floating: 0 },
+        images: [
+          { imageId: "hall:a", stats: blank },
+          { imageId: "hall:b", stats: dark },
+        ],
+      }),
+      findings: [finding(), finding({ evidence: { imageId: "hall:a" } })],
+      placeChecks: [{ zone: "hall", answer: mismatch }],
+      qualityAnswers: [{ zone: "unknown", answers: [answer(1)] }],
+    }),
+    [],
+    date,
+  );
+  assert.equal(result.gate?.passed, false);
+  assert.deepEqual(rejected, []);
+  assert.deepEqual(result.scores, []);
+  assert.ok(result.findings.every((found) => found.severity === "blocker"));
+  assert.deepEqual(
+    result.findings.map((found) => `${found.cites}@${found.evidence.imageId}`),
+    [
+      "check_map passed@hall:a",
+      "code score@hall:a",
+      "flat color share@hall:a",
+      "edge density@hall:a",
+      "luminance histogram@hall:b",
+    ],
+  );
+  assert.equal(result.stopReason, null);
+});
+
+await test("a failing gate stops at the round limit like any blocker", () => {
+  const failing = inputOf({
+    round: config.maxJudgeRounds,
+    gate: gateOf({ checkPassed: false }),
+  });
+  assert.equal(judgeRound(failing, [], date).result.stopReason, "round-limit");
+});
+
+await test("the gate fails a code score under the minimum, and a bright capture", () => {
+  const sceneStats = [{ zone: "hall", drawCalls: config.maxDrawCalls * 3, triangles: 1 }];
+  const bright = { ...goodStats, luminanceHistogram: [0, 0, 0, 0, 0, 0, 0.005, 0.995] };
+  const gate = gateOf({ sceneStats, images: [{ imageId: "hall:a", stats: bright }] });
+  const result = gateResultOf(gate);
+  assert.equal(result.codeScore, 80);
+  assert.deepEqual(
+    result.findings.map((found) => found.cites),
+    ["luminance histogram"],
+  );
 });

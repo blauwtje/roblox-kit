@@ -111,6 +111,12 @@ export const config = Object.freeze({
   maxJudgeRounds: 3,
   /** Where `judge_round` appends one line per round, under the project folder. */
   judgeLogFile: ".roblox-kit/judge-log.jsonl",
+  /** The code score (`codeScoreOf`) under which the deterministic gate fails a round before any reviewer runs. */
+  gateMinCodeScore: 80,
+  /** Gate limits on a capture, measured on the first 40 captures of each folder under eval/captures, eval/anchors and eval/references: the flat-color share peaked at 0.81, the darkest or brightest luminance bin at 0.96 and the lowest edge density was 0.001. Only a degenerate capture crosses them. */
+  gateMaxFlatColorShare: 0.9,
+  gateMaxExtremeLuminanceShare: 0.99,
+  gateMinEdgeDensity: 0.0002,
   /** The score every axis median of a room must reach to pass the quality review, on the 1-10 scale. */
   visualPassScore: 7,
   calibrationReferenceMeanFloor: 6,

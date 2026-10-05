@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { config } from "../config.ts";
 import { placeMatches, type PlaceAnswer } from "./blind-place-check.ts";
+import { codeScoreOf, type CodeScoreInput, type ImageStats } from "./code-score.ts";
 import {
   axisEvidence,
   axisMedians,
@@ -51,6 +52,20 @@ export type RoundFinding = JudgeFinding & {
   reachesPassScore?: boolean;
 };
 
+/** What the deterministic gate reads: a `check_map` result, as `codeScoreOf` takes it, and the statistics of each capture. */
+export interface GateInput extends CodeScoreInput {
+  /** `check_map`'s `passed`. */
+  checkPassed: boolean;
+  images: { imageId: string; stats: ImageStats }[];
+}
+
+export interface GateResult {
+  passed: boolean;
+  codeScore: number;
+  /** One blocker finding per failed check; empty when the gate passed. */
+  findings: RoundFinding[];
+}
+
 export type StopReason = "pass" | "round-limit" | "repeat" | null;
 
 export interface JudgeRoundInput {
@@ -67,6 +82,8 @@ export interface JudgeRoundInput {
   placeChecks: { zone: string; answer: PlaceAnswer }[];
   /** Each room's quality answers, one per reviewer, by zone name. */
   qualityAnswers: { zone: string; answers: QualityAnswer[] }[];
+  /** The deterministic gate's input; when the gate fails, the round ends on its findings and reads none of the reviewers' answers above. */
+  gate?: GateInput;
   /** The names a room type accepts besides its own, by room type. */
   acceptedNames: Record<string, string[]>;
 }
@@ -93,6 +110,8 @@ export interface RoundResult {
   scores: RoundScore[];
   findings: RoundFinding[];
   stopReason: StopReason;
+  /** Set only when the round ran the gate. */
+  gate?: { passed: boolean; codeScore: number };
 }
 
 /** The finding type each quality axis maps to; the type list has no axis of its own for the last three. */
@@ -104,6 +123,104 @@ const axisFindingType: Record<QualityAxis, JudgeFinding["type"]> = {
   focalHierarchy: "readability",
   negativeSpace: "placement",
 };
+
+function gateFinding(
+  type: JudgeFinding["type"],
+  cites: string,
+  imageId: string,
+  visible: string,
+  reasoning: string,
+): RoundFinding {
+  return {
+    type,
+    severity: "blocker",
+    cites,
+    evidence: { imageId, visible },
+    reasoning,
+    verdict: `The deterministic gate failed: ${reasoning}`,
+    repeat: false,
+  };
+}
+
+/** The luminance share of the darkest and of the brightest bin, whichever is larger, with its name. */
+function extremeLuminance(histogram: number[]): { share: number; name: string } {
+  const dark = histogram[0] ?? 0;
+  const bright = histogram[histogram.length - 1] ?? 0;
+  return dark >= bright ? { share: dark, name: "dark" } : { share: bright, name: "bright" };
+}
+
+/**
+ * The deterministic gate that runs before any reviewer: `check_map` must have passed, the code score must reach
+ * `config.gateMinCodeScore`, and no capture may be mostly one color, mostly black or white, or without edges.
+ * `imageId` of a check_map finding is the first image, since the check is of the whole map.
+ */
+export function gateOf(input: GateInput): GateResult {
+  const findings: RoundFinding[] = [];
+  const mapImageId = input.images[0]?.imageId ?? "map";
+  if (!input.checkPassed) {
+    const issues = Object.entries(input.counts)
+      .filter(([, count]) => count > 0)
+      .map(([kind, count]) => `${String(count)} ${kind}`);
+    findings.push(
+      gateFinding(
+        "placement",
+        "check_map passed",
+        mapImageId,
+        `check_map reported ${issues.join(", ") || "a failure"}.`,
+        "check_map did not pass.",
+      ),
+    );
+  }
+  const codeScore = codeScoreOf(input);
+  if (codeScore < config.gateMinCodeScore) {
+    findings.push(
+      gateFinding(
+        "placement",
+        "code score",
+        mapImageId,
+        `The code score is ${String(codeScore)}.`,
+        `The code score ${String(codeScore)} is below ${String(config.gateMinCodeScore)}.`,
+      ),
+    );
+  }
+  for (const { imageId, stats } of input.images) {
+    const extreme = extremeLuminance(stats.luminanceHistogram);
+    if (stats.flatColorShare > config.gateMaxFlatColorShare) {
+      findings.push(
+        gateFinding(
+          "readability",
+          "flat color share",
+          imageId,
+          `${String(Math.round(stats.flatColorShare * 100))}% of the image is one color.`,
+          `The capture is mostly one color (${stats.flatColorShare.toFixed(2)} over ${String(config.gateMaxFlatColorShare)}).`,
+        ),
+      );
+    }
+    if (extreme.share > config.gateMaxExtremeLuminanceShare) {
+      findings.push(
+        gateFinding(
+          "lighting",
+          "luminance histogram",
+          imageId,
+          `${String(Math.round(extreme.share * 100))}% of the image is in the ${extreme.name}est luminance bin.`,
+          `The capture is almost all ${extreme.name} (${extreme.share.toFixed(2)} over ${String(config.gateMaxExtremeLuminanceShare)}).`,
+        ),
+      );
+    }
+    if (stats.edgeDensity < config.gateMinEdgeDensity) {
+      findings.push(
+        gateFinding(
+          "readability",
+          "edge density",
+          imageId,
+          `Edge density is ${stats.edgeDensity.toFixed(4)}.`,
+          `The capture has almost no edges (${stats.edgeDensity.toFixed(4)} under ${String(config.gateMinEdgeDensity)}).`,
+        ),
+      );
+    }
+  }
+  return { passed: findings.length === 0, codeScore, findings };
+}
 
 /**
  * The earlier rounds of this loop among the logged lines: the latest `round - 1` lines of `mapId` whose
@@ -172,7 +289,8 @@ function axisFinding(
 }
 
 /**
- * Judges one round: rejects the judge's findings that show nothing, adds the findings of the place checks
+ * Judges one round: runs the gate when `input.gate` is set and, when it fails, returns its findings alone with
+ * the reviewers' answers unread; otherwise rejects the judge's findings that show nothing, adds the findings of the place checks
  * and of the quality medians, marks repeats against `loggedLines` and decides whether the loop stops.
  * Returns the logged round and the rejected findings.
  */
@@ -182,9 +300,14 @@ export function judgeRound(
   date: string,
 ): { result: RoundResult; rejected: JudgeFinding[] } {
   const { spec } = input;
-  const accepted: RoundFinding[] = [];
+  const gate = input.gate === undefined ? undefined : gateOf(input.gate);
+  const gateFailed = gate !== undefined && !gate.passed;
+  const accepted: RoundFinding[] = gateFailed ? [...gate.findings] : [];
   const rejected: JudgeFinding[] = [];
-  for (const finding of input.findings) {
+  const reviewed = gateFailed
+    ? { ...input, findings: [], placeChecks: [], qualityAnswers: [] }
+    : input;
+  for (const finding of reviewed.findings) {
     if (finding.evidence.visible === undefined || finding.evidence.visible.trim() === "") {
       rejected.push(finding);
     } else {
@@ -193,7 +316,7 @@ export function judgeRound(
   }
 
   const genre = spec.style?.preset;
-  for (const check of input.placeChecks) {
+  for (const check of reviewed.placeChecks) {
     const roomIndex = spec.rooms.findIndex((room) => room.name === check.zone);
     const roomType = spec.rooms[roomIndex]?.roomType;
     if (genre === undefined || roomType === undefined) {
@@ -213,7 +336,7 @@ export function judgeRound(
   }
 
   const scores: RoundScore[] = [];
-  for (const review of input.qualityAnswers) {
+  for (const review of reviewed.qualityAnswers) {
     if (genre === undefined) {
       throw new Error(`Zone ${review.zone} was scored, but the spec sets no style preset to cite.`);
     }
@@ -259,6 +382,7 @@ export function judgeRound(
       scores,
       findings,
       stopReason,
+      ...(gate === undefined ? {} : { gate: { passed: gate.passed, codeScore: gate.codeScore } }),
     },
     rejected,
   };

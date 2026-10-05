@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
-import { codeScoreOf, type CodeScoreInput } from "./code-score.ts";
+import { codeScoreOf, imageStatsOf, LUMINANCE_BINS, type CodeScoreInput } from "./code-score.ts";
 
 const budget = { maxDrawCalls: config.maxDrawCalls, maxTriangles: config.maxTriangles };
 const cleanCounts = { overlapping: 0, floating: 0, unreachable: 0, sizeRule: 0 };
@@ -56,4 +56,38 @@ await test("the worst case scores 0 and the score is a whole number", () => {
 await test("the budget of the spec sets the limits", () => {
   const sceneStats = [{ zone: "a", drawCalls: 600, triangles: 1 }];
   assert.equal(scoreOf({ sceneStats, budget: { maxDrawCalls: 400, maxTriangles: 10 } }), 90);
+});
+
+function imageOf(width: number, height: number, colorAt: (x: number, y: number) => number[]) {
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const [red = 0, green = 0, blue = 0] = colorAt(x, y);
+      data.set([red, green, blue, 255], (y * width + x) * 4);
+    }
+  }
+  return { width, height, data };
+}
+
+await test("a one-color image is all flat color, one luminance bin and no edges", () => {
+  const stats = imageStatsOf(imageOf(16, 16, () => [10, 10, 10]));
+  assert.equal(stats.flatColorShare, 1);
+  assert.equal(stats.luminanceHistogram[0], 1);
+  assert.equal(stats.edgeDensity, 0);
+});
+
+await test("a black and white checkerboard splits the histogram and has edges at every pixel but the last", () => {
+  const stats = imageStatsOf(
+    imageOf(8, 8, (x, y) => ((x + y) % 2 === 0 ? [0, 0, 0] : [255, 255, 255])),
+  );
+  assert.equal(stats.flatColorShare, 0.5);
+  assert.equal(stats.luminanceHistogram[0], 0.5);
+  assert.equal(stats.luminanceHistogram[LUMINANCE_BINS - 1], 0.5);
+  assert.equal(stats.edgeDensity, 63 / 64);
+});
+
+await test("a smooth gradient is not flat color and has no edges", () => {
+  const stats = imageStatsOf(imageOf(256, 4, (x) => [x, x, x]));
+  assert.ok(stats.flatColorShare < 0.1);
+  assert.equal(stats.edgeDensity, 0);
 });
