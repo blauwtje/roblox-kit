@@ -1,12 +1,17 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import { config } from "../config.ts";
+import { checkGlbParts, readGlbParts, type GlbChecks } from "./glb-structure.ts";
 import { readHeroAssets, recordHeroAsset } from "./hero-asset-store.ts";
 import type { OpenCloudCredentials } from "./open-cloud-credentials.ts";
 
 const glbFileName = "model.glb";
-const reviewFileName = "review.json";
+/**
+ * The checks file beside a generated GLB. It keeps the name and the `hash` and `passed` fields of the
+ * render review it replaced, so `hero-prop-asset.ts` and existing generated folders read it unchanged.
+ */
+export const checksFileName = "review.json";
 
 /** Where a call goes and how it waits; a test injects a fake `fetchFn` and a zero interval. */
 export interface OpenCloudTransport {
@@ -106,12 +111,29 @@ export async function uploadGlb(
   return assetId;
 }
 
-const reviewSchema = z.object({ hash: z.string(), passed: z.boolean() });
+const checksSchema = z.object({ hash: z.string(), passed: z.boolean() });
+
+/** The checks file's content: the recipe hash and the GLB's deterministic checks. */
+export type HeroPropChecks = { hash: string } & GlbChecks;
+
+/**
+ * Runs the deterministic checks on the generated `model.glb` in `directory` (floating parts and inverted
+ * normals, with `config.heroPropContactToleranceStuds`) and writes them with `hash` as the checks file.
+ */
+export async function writeHeroPropChecks(directory: URL, hash: string): Promise<HeroPropChecks> {
+  const glb = new Uint8Array(await readFile(new URL(glbFileName, directory)));
+  const checks = {
+    hash,
+    ...checkGlbParts(readGlbParts(glb), config.heroPropContactToleranceStuds),
+  };
+  await writeFile(new URL(checksFileName, directory), JSON.stringify(checks, null, 2));
+  return checks;
+}
 
 /**
  * The asset id of the hero prop with recipe hash `hash` whose generated folder is `directory`. An already
- * recorded hash returns its id without a call; otherwise the folder's `review.json` must be a pass for
- * that hash before `model.glb` is uploaded, and the new id is recorded in `hero-assets.json`.
+ * recorded hash returns its id without a call; otherwise the folder's checks file must be a pass for that
+ * hash before `model.glb` is uploaded, and the new id is recorded in `hero-assets.json`.
  */
 export async function uploadReviewedHeroProp(
   kind: string,
@@ -123,11 +145,11 @@ export async function uploadReviewedHeroProp(
 ): Promise<string> {
   const recorded = (await readHeroAssets(assetsFile))[hash];
   if (recorded !== undefined) return recorded.assetId;
-  const review = reviewSchema.parse(
-    JSON.parse(await readFile(new URL(reviewFileName, directory), "utf8")),
+  const checks = checksSchema.parse(
+    JSON.parse(await readFile(new URL(checksFileName, directory), "utf8")),
   );
-  if (!review.passed || review.hash !== hash) {
-    throw new Error(`Refusing to upload ${kind} ${hash}: it has no passed review.`);
+  if (!checks.passed || checks.hash !== hash) {
+    throw new Error(`Refusing to upload ${kind} ${hash}: it has no passed checks.`);
   }
   const glb = new Uint8Array(await readFile(new URL(glbFileName, directory)));
   const assetId = await uploadGlb(glb, `${kind}-${hash}`, credentials, transport);

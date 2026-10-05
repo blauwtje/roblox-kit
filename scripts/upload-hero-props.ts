@@ -2,7 +2,7 @@ import { heroPropAsset } from "../src/hero-props/hero-prop-asset.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
 
 /**
- * `node scripts/upload-hero-props.ts <preset>` uploads every hero prop of the preset whose review passed and
+ * `node scripts/upload-hero-props.ts <preset>` uploads every hero prop of the preset whose checks passed and
  * whose recipe hash has no recorded asset, through the same `heroPropAsset` that build_map uses, and prints
  * `kind -> asset id` per hero prop. It exits 1 when the key or creator is missing or an upload fails.
  */
@@ -25,7 +25,7 @@ try {
         console.log(`${kind} -> ${asset.assetId}`);
         break;
       case "unreviewed":
-        console.log(`${kind}: recipe ${asset.hash} has no passed review; not uploaded`);
+        console.log(`${kind}: recipe ${asset.hash} has no passed checks; not uploaded`);
         break;
       case "no-credentials":
         console.error(`${kind}: not uploaded: ${asset.missing}`);

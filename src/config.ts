@@ -136,12 +136,10 @@ export const config = Object.freeze({
   wallyClientVersion: "0.3.2",
   /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
   heroPropSizeToleranceStuds: 0.1,
-  /** Milliseconds one hero-prop render reviewer (a headless `claude -p` reading three renders) may take. */
-  heroPropReviewTimeoutMs: 180_000,
-  /** Distinct recipe hashes of one hero-prop kind that may be reviewed; a further revision is refused. */
-  maxHeroPropRounds: 3,
+  /** How far apart two parts' bounding boxes, or a part's bottom and the floor, may be and still touch, in studs. */
+  heroPropContactToleranceStuds: 0.02,
 
-  /** Open Cloud Assets API that a reviewed hero-prop GLB is uploaded to, and the operations it is polled at. */
+  /** Open Cloud Assets API that a checked hero-prop GLB is uploaded to, and the operations it is polled at. */
   openCloudAssetsUrl: "https://apis.roblox.com/assets/v1/assets",
   openCloudOperationsUrl: "https://apis.roblox.com/assets/v1/operations/",
   /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator: a user id or a group id. */

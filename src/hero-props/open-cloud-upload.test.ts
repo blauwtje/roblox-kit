@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { readHeroAssets } from "./hero-asset-store.ts";
-import { uploadGlb, uploadReviewedHeroProp } from "./open-cloud-upload.ts";
+import { checksFileName, uploadGlb, uploadReviewedHeroProp } from "./open-cloud-upload.ts";
 
 const credentials = { apiKey: "test-key", creator: { userId: "42" } };
 const glb = new Uint8Array([0x67, 0x6c, 0x54, 0x46]);
@@ -125,7 +125,7 @@ async function generatedFolder(review: { hash: string; passed: boolean }): Promi
 }> {
   const root = await mkdtemp(join(tmpdir(), "hero-upload-"));
   await writeFile(join(root, "model.glb"), glb);
-  await writeFile(join(root, "review.json"), JSON.stringify(review));
+  await writeFile(join(root, checksFileName), JSON.stringify(review));
   return {
     directory: pathToFileURL(`${root}/`),
     assetsFile: pathToFileURL(join(root, "hero-assets.json")),
@@ -160,7 +160,7 @@ await test("uploadReviewedHeroProp uploads a passed GLB once and records hash to
   assert.equal(calls.length, 1);
 });
 
-await test("uploadReviewedHeroProp refuses a failed or mismatched review without a call", async () => {
+await test("uploadReviewedHeroProp refuses failed or mismatched checks without a call", async () => {
   for (const review of [
     { hash: "abc123", passed: false },
     { hash: "other", passed: true },
@@ -176,7 +176,7 @@ await test("uploadReviewedHeroProp refuses a failed or mismatched review without
         { fetchFn },
         assetsFile,
       ),
-      /no passed review/,
+      /no passed checks/,
     );
     assert.equal(calls.length, 0);
     assert.deepEqual(await readHeroAssets(assetsFile), {});
