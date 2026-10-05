@@ -7,10 +7,13 @@ One object per role, named after it, joins that role's parts and carries a mater
 A part is built in this order: its shape (box, cylinder, lathe, profile or sweep), its `bevel`, its `cuts`
 (boxes subtracted from it) and its `array` (copies at a fixed step). Each role's object is shaded smooth with
 weighted normals, so the bevels catch light while the large faces stay flat.
-Each role object is UV unwrapped and its material, a procedural one of noise, edge wear and ambient occlusion
-over the role's color, is baked with Cycles to a color, a normal and an occlusion-roughness-metalness map
+Each role object is UV unwrapped and its material, a procedural one of noise and edge wear over the role's
+color, is baked with Cycles to a color, a normal and an occlusion-roughness-metalness map
 (green roughness, blue metalness, as glTF packs them), then replaced by a material reading those maps, so the
 GLB carries the maps and Roblox loads them as a SurfaceAppearance (probe-glb-textures.ts found that it does).
+A Cycles ambient occlusion bake, taken with every role object and a temporary ground plane under the prop in the
+scene, is multiplied into the color map, so creases and the contact with the ground are dark (the plane is
+removed before export).
 The parts and the bake have no randomness (a fixed sample count), so the recipe alone fixes the mesh. Recipe axes are x across, y up, z along
 the depth; Blender is Z up and the glTF exporter turns it into Y up, so recipe (x, y, z) is Blender (x, -z, y).
 """
@@ -32,6 +35,10 @@ BAKE_SAMPLES = 16
 NOISE_SCALE = 1.0
 WEAR_RADIUS = 0.15
 OCCLUSION_DISTANCE = 0.5
+# The share of the occlusion bake that darkens the color map (1 would paint creases black).
+OCCLUSION_STRENGTH = 0.8
+# Studs the temporary ground plane reaches past the prop on every side.
+GROUND_MARGIN = 2.0
 
 # Turns a cylinder's default Blender Z axis (the recipe's y axis) onto the recipe axis.
 CYLINDER_AXIS_ROTATIONS = {
@@ -266,7 +273,7 @@ class MaterialGraph:
 
 
 def procedural_material(role, hex_color):
-    """Noise, edge wear and occlusion over `hex_color`; returns the material and the sockets its bakes read."""
+    """Noise and edge wear over `hex_color`; returns the material and the sockets its bakes read."""
     material = bpy.data.materials.new(role)
     graph = MaterialGraph(material)
     noise = graph.node("ShaderNodeTexNoise", noise_dimensions="3D")
@@ -295,9 +302,6 @@ def procedural_material(role, hex_color):
     graph.tree.links.new(fine_noise.outputs["Fac"], noise_mask.inputs["Value"])
     wear = graph.math("MULTIPLY", edge_mask.outputs["Result"], noise_mask.outputs["Result"])
 
-    occlusion = graph.node("ShaderNodeAmbientOcclusion", samples=8)
-    occlusion.inputs["Distance"].default_value = OCCLUSION_DISTANCE
-
     base = graph.node("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY")
     base.inputs["Factor"].default_value = 1.0
     base.inputs["A"].default_value = role_color(hex_color)
@@ -310,11 +314,6 @@ def procedural_material(role, hex_color):
     worn.inputs["B"].default_value = [min(1.0, channel * 1.8 + 0.05) for channel in role_color(hex_color)[:3]] + [1.0]
     graph.link(wear, worn, "Factor")
     graph.link(base.outputs["Result"], worn, "A")
-    shaded = graph.node("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY")
-    shaded.inputs["Factor"].default_value = 0.8
-    graph.link(worn.outputs["Result"], shaded, "A")
-    graph.link(occlusion.outputs["Color"], shaded, "B")
-
     rough = graph.math("MULTIPLY_ADD", fine_noise.outputs["Fac"], 0.25, 0.6)
     roughness = graph.math("SUBTRACT", rough, graph.math("MULTIPLY", wear, 0.3))
     metalness = graph.math("MULTIPLY", wear, 0.6)
@@ -325,7 +324,7 @@ def procedural_material(role, hex_color):
     graph.link(fine_noise.outputs["Fac"], bump, "Height")
 
     principled = graph.node("ShaderNodeBsdfPrincipled")
-    graph.link(shaded.outputs["Result"], principled, "Base Color")
+    graph.link(worn.outputs["Result"], principled, "Base Color")
     graph.link(roughness, principled, "Roughness")
     graph.link(metalness, principled, "Metallic")
     graph.link(bump.outputs["Normal"], principled, "Normal")
@@ -367,9 +366,36 @@ def unwrap(role_object):
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def bake_occlusion(role_object):
+    """Bakes `role_object`'s ambient occlusion, as the other role objects and the ground plane shadow it.
+
+    The object must be the unwrapped, selected and active one.
+    """
+    image = bake_image(f"{role_object.name}-occlusion", "Non-Color")
+    material = bpy.data.materials.new(f"{role_object.name}-occlusion")
+    graph = MaterialGraph(material)
+    graph.node("ShaderNodeOutputMaterial")
+    role_object.data.materials.clear()
+    role_object.data.materials.append(material)
+    target = graph.node("ShaderNodeTexImage", image=image)
+    graph.tree.nodes.active = target
+    bpy.ops.object.bake(type="AO", margin=4)
+    bpy.data.materials.remove(material)
+    return image
+
+
+def darken_color_map(color, occlusion):
+    """Multiplies the occlusion bake into the color map's RGB, weakened to `OCCLUSION_STRENGTH`."""
+    pixels = pixels_of(color).copy()
+    shade = 1.0 - OCCLUSION_STRENGTH * (1.0 - pixels_of(occlusion)[:, :1])
+    pixels[:, :3] *= shade
+    color.pixels.foreach_set(pixels.reshape(-1))
+
+
 def baked_material(role, hex_color, role_object):
     """Unwraps `role_object`, bakes its procedural material to maps and returns a material reading them."""
     unwrap(role_object)
+    occlusion = bake_occlusion(role_object)
     procedural, graph, output, principled, emission = procedural_material(role, hex_color)
     role_object.data.materials.clear()
     role_object.data.materials.append(procedural)
@@ -381,6 +407,7 @@ def baked_material(role, hex_color, role_object):
     bake_map(graph, output, principled, normal, "NORMAL", normal_space="TANGENT")
     bake_map(graph, output, principled, roughness, "ROUGHNESS")
     bake_map(graph, output, emission, metalness, "EMIT")
+    darken_color_map(color, occlusion)
     packed = pixels_of(color).copy()
     packed[:, 0] = 1.0
     packed[:, 1] = pixels_of(roughness)[:, 0]
@@ -389,7 +416,7 @@ def baked_material(role, hex_color, role_object):
     occlusion_roughness_metalness = bake_image(f"{role}-orm", "Non-Color")
     occlusion_roughness_metalness.pixels.foreach_set(packed.reshape(-1))
     bpy.data.materials.remove(procedural)
-    for spent in (roughness, metalness):
+    for spent in (roughness, metalness, occlusion):
         bpy.data.images.remove(spent)
 
     material = bpy.data.materials.new(role)
@@ -436,6 +463,31 @@ def bake_role_materials(role_objects, colors):
         role_object.data.materials.append(material)
 
 
+def add_ground(role_objects):
+    """Adds a plane under the lowest point of the prop, so the occlusion bake darkens where the prop meets the floor."""
+    corners = [role_object.matrix_world @ Vector(corner) for role_object in role_objects.values() for corner in role_object.bound_box]
+    low = Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners)))
+    high = Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
+    data = bpy.data.meshes.new("ground")
+    mesh = bmesh.new()
+    for x in (low.x - GROUND_MARGIN, high.x + GROUND_MARGIN):
+        for y in (low.y - GROUND_MARGIN, high.y + GROUND_MARGIN):
+            mesh.verts.new((x, y, low.z))
+    mesh.verts.ensure_lookup_table()
+    mesh.faces.new([mesh.verts[index] for index in (0, 1, 3, 2)])
+    mesh.to_mesh(data)
+    mesh.free()
+    ground = bpy.data.objects.new("ground", data)
+    bpy.context.scene.collection.objects.link(ground)
+    return ground
+
+
+def remove_object(spent):
+    data = spent.data
+    bpy.data.objects.remove(spent)
+    bpy.data.meshes.remove(data)
+
+
 def main():
     input_path, output_path = sys.argv[sys.argv.index("--") + 1 :]
     with open(input_path) as handle:
@@ -450,11 +502,15 @@ def main():
     scene.cycles.samples = BAKE_SAMPLES
     scene.cycles.use_denoising = False
     scene.cycles.seed = 0
+    scene.world = bpy.data.worlds.new("world")
+    scene.world.light_settings.distance = OCCLUSION_DISTANCE
     role_objects = {
         role: add_role_object(role, parts_by_role[role], recipe["roles"][role])
         for role in sorted(parts_by_role)
     }
+    ground = add_ground(role_objects)
     bake_role_materials(role_objects, recipe["roles"])
+    remove_object(ground)
     bpy.ops.export_scene.gltf(filepath=output_path, export_format="GLB", export_yup=True)
 
 
