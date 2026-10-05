@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { config } from "../src/config.ts";
@@ -20,6 +21,7 @@ import type { ToolDefinition } from "../src/server/tool-definition.ts";
 import { selectStudio, type StudioConnection } from "../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
 import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
+import { acquireStudioLock } from "../src/studio/studio-lock.ts";
 import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 const presets = await loadPresets();
@@ -1066,6 +1068,9 @@ async function probeMapTools(connection: StudioConnection): Promise<Capability[]
   return findings;
 }
 
+const releaseStudioLock = await acquireStudioLock({
+  lockFile: fileURLToPath(new URL(`../${config.studioLockFile}`, import.meta.url)),
+});
 const connection = new StudioMcpClient({
   clientInfo: { name: `${config.serverName}-smoke`, version: config.serverVersion },
   timeoutMs: config.upstreamTimeoutMs,
@@ -1084,4 +1089,5 @@ try {
   process.exitCode = 1;
 } finally {
   await connection.close();
+  await releaseStudioLock();
 }

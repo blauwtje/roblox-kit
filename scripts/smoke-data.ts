@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { config } from "../src/config.ts";
 import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
+import { acquireStudioLock } from "../src/studio/studio-lock.ts";
 import { type StudioConnection } from "../src/studio/studio-connection.ts";
 import { createRunInPlaytestTool } from "../src/playtest/run-in-playtest-tool.ts";
 import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
@@ -155,6 +157,9 @@ async function runSmoke(connection: StudioConnection, studioId: string): Promise
   });
 }
 
+const releaseStudioLock = await acquireStudioLock({
+  lockFile: fileURLToPath(new URL(`../${config.studioLockFile}`, import.meta.url)),
+});
 const connection = new StudioMcpClient({
   clientInfo: { name: `${config.serverName}-smoke-data`, version: config.serverVersion },
   timeoutMs: config.upstreamTimeoutMs,
@@ -178,4 +183,5 @@ try {
   process.exitCode = 1;
 } finally {
   await connection.close();
+  await releaseStudioLock();
 }

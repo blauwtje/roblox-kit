@@ -16,6 +16,11 @@ export const config = Object.freeze({
   /** How long a smoke script waits for Studio to report Edit mode, re-asked every studioEditModePollIntervalMs: a playtest that just stopped takes a few seconds to leave Play mode. */
   studioEditModeTimeoutMs: 30_000,
   studioEditModePollIntervalMs: 500,
+  /** Lock file, under the repository root, that smoke scripts sharing one Studio take in turn; it holds the holder's pid and start time. */
+  studioLockFile: ".roblox-kit/studio.lock",
+  /** The longest one smoke run may hold Studio: an older lock counts as stale, and a waiting smoke gives up after as long. */
+  smokeTimeoutMs: 600_000,
+  studioLockPollIntervalMs: 1000,
   /** Characters of text `execute_luau` returns before Studio cuts it; the smoke probe fails if Studio changes this. */
   executeLuauMaxResultChars: 100_000,
   /** What Studio appends to an `execute_luau` result it cut. */
