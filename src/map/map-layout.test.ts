@@ -433,3 +433,32 @@ await test("joined rooms need the same door width, and a door must fit the share
   });
   assert.throws(() => solveRoomGraph(wide), /No layout fits/);
 });
+
+await test("a flush spawn pad is thin, rests on the floor top and takes the floor's color, material and role", () => {
+  const surfaces = {
+    floor: { color: "#112233", material: "Slate" },
+    wall: { color: "#445566" },
+    accent: { color: "#d9a441", material: "Neon" },
+  };
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces, { flushSpawn: true });
+  const spawn = partNamed(parts, "start-spawn");
+  const floor = partNamed(parts, "start-floor");
+  assert.equal(spawn.kind, "spawn");
+  assert.equal(spawn.role, "floor");
+  assert.equal(spawn.color, floor.color);
+  assert.equal(spawn.material, floor.material);
+  assert.equal(spawn.size.y, config.flushSpawnThicknessStuds);
+  const padBottom = spawn.position.y - spawn.size.y / 2;
+  assert.ok(
+    Math.abs(padBottom - (floor.position.y + floor.size.y / 2)) < 1e-9,
+    "the pad bottom sits on the floor top",
+  );
+  assert.ok(Math.abs(padBottom - config.floorLiftStuds) < 1e-9);
+});
+
+await test("without flushSpawn the pad stays raised in the accent surface", () => {
+  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), undefined, {
+    flushSpawn: false,
+  });
+  assert.deepEqual(partNamed(parts, "start-spawn").position, { x: 0, y: 0.5, z: 0 });
+});

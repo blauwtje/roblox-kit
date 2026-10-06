@@ -507,6 +507,8 @@ export const presetSchema = z
     }),
     /** Surfaces are plain by design (no texture or textured material), so check_map reports no untextured issue. */
     flatSurfaces: z.boolean().optional(),
+    /** Lays a spawn room's pad flush with the floor, in the floor's color and material; absent keeps the raised accent pad. */
+    flushSpawn: z.boolean().optional(),
     lighting,
     /**
      * Terrain materials drawn with a surface role's MaterialVariant, keyed by material name (`Concrete` to `wall`).

@@ -46,6 +46,7 @@ export const config = Object.freeze({
    * z-fight; kept below overlapToleranceStuds so walls and props standing on y = 0 still count as touching it.
    */
   floorLiftStuds: 0.04,
+  flushSpawnThicknessStuds: 0.2,
   defaultDoorWidthStuds: 10,
   /** Seed of a map spec that sets none. */
   defaultSeed: 1,

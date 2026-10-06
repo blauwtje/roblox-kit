@@ -381,6 +381,7 @@ export function propsOf(
     seed,
     doorwayClearanceBoxes(spec, agent),
     style.propRules,
+    style.heroProps,
   );
   const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
   return {
@@ -412,7 +413,10 @@ async function buildMap(
   rejectUnknownRoomTypes(spec, style);
   // A style is the switch for the decor: ceilings, trim details, floor tile patterns and props come with a
   // preset, never without. Ceilings get no tile pattern, so capture_zones' cutaway still opens every room.
-  const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
+  const layout = layoutMap(spec, style?.surfaces, {
+    ceilings: style !== undefined,
+    flushSpawn: style?.flushSpawn,
+  });
   const details: DetailPart[] =
     style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces, ["floor"]);
   const facades = style === undefined ? [] : buildFacades(spec, layout.parts, style.surfaces);

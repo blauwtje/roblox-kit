@@ -61,6 +61,8 @@ const defaultCeilingColor = "#d6d6d6";
 export interface LayoutOptions {
   /** Adds one ceiling part per room, to be tagged `config.ceilingTag` when built; absent adds none. */
   ceilings?: boolean;
+  /** Lays the spawn pad as a thin pad in the floor's color and material, resting on the floor top; absent keeps the raised accent pad. */
+  flushSpawn?: boolean;
 }
 
 export interface MapLayout {
@@ -227,6 +229,19 @@ function spawnPart(room: RoomSpec, style: RoomStyle): PartRecord {
     position: { x: room.x, y: style.wallThickness / 2, z: room.z },
     size: { x: style.doorWidth, y: style.wallThickness, z: style.doorWidth },
     material: style.spawnMaterial,
+  };
+}
+
+/** A thin pad resting on the floor top, in the floor's color, material and role, so it reads as part of the floor. */
+function flushSpawnPart(room: RoomSpec, style: RoomStyle): PartRecord {
+  const thickness = config.flushSpawnThicknessStuds;
+  return {
+    ...spawnPart(room, style),
+    role: "floor",
+    color: style.floorColor,
+    position: { x: room.x, y: config.floorLiftStuds + thickness / 2, z: room.z },
+    size: { x: style.doorWidth, y: thickness, z: style.doorWidth },
+    material: style.floorMaterial,
   };
 }
 
@@ -491,7 +506,7 @@ export function layoutMap(
     assertRoomFits(room, style);
     parts.push(floorPart(room, style), ...wallParts(room, style));
     if (room.spawn) {
-      parts.push(spawnPart(room, style));
+      parts.push(options.flushSpawn ? flushSpawnPart(room, style) : spawnPart(room, style));
     }
     if (options.ceilings) {
       parts.push(ceilingPart(room, style));
