@@ -74,6 +74,7 @@ type Variant = {
 	baseMaterial: string,
 	studsPerTile: number,
 	maps: VariantMaps?,
+	materialPattern: string?,
 }
 
 type LightRecord = {
@@ -271,8 +272,10 @@ local function variantFor(role: string, variant: Variant): MaterialVariant
 	materialVariant.NormalMap = if maps then maps.normal else ""
 	materialVariant.RoughnessMap = if maps then maps.roughness else ""
 	materialVariant.MetalnessMap = if maps then maps.metalness else ""
-	-- Organic breaks the visible repeat of a tiled texture on long walls and floors.
-	materialVariant.MaterialPattern = if maps then Enum.MaterialPattern.Organic else Enum.MaterialPattern.Regular
+	-- The preset picks the pattern; Organic breaks the repeat of a tiled texture, so it is never forced.
+	materialVariant.MaterialPattern = if variant.materialPattern == "Organic"
+		then Enum.MaterialPattern.Organic
+		else Enum.MaterialPattern.Regular
 	materialVariant.Parent = MaterialService
 	variantByRole[role] = materialVariant
 	return materialVariant
