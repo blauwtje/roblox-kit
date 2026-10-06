@@ -42,6 +42,33 @@ export interface RemoveLightingRequest {
 }
 
 /**
+ * The recipe with the post-processing effects that do nothing left out, so Studio never creates them:
+ * SunRays at zero Intensity, DepthOfField at zero Near and Far intensity, and a neutral ColorCorrection.
+ * Bloom and Atmosphere stay, since `apply-lighting.luau` always writes them.
+ */
+export function withoutZeroStrengthEffects(recipe: Preset["lighting"]): Preset["lighting"] {
+  const postProcessing = recipe.PostProcessing;
+  if (postProcessing === undefined) return recipe;
+  const { ColorCorrection, SunRays, DepthOfField, ...rest } = postProcessing;
+  const neutralCorrection =
+    ColorCorrection.Brightness === 0 &&
+    ColorCorrection.Contrast === 0 &&
+    ColorCorrection.Saturation === 0 &&
+    ColorCorrection.TintColor.toLowerCase() === "#ffffff";
+  const flat = SunRays.Intensity === 0;
+  const sharp = DepthOfField.FarIntensity === 0 && DepthOfField.NearIntensity === 0;
+  return {
+    ...recipe,
+    PostProcessing: {
+      ...rest,
+      ...(neutralCorrection ? {} : { ColorCorrection }),
+      ...(flat ? {} : { SunRays }),
+      ...(sharp ? {} : { DepthOfField }),
+    } as typeof postProcessing,
+  };
+}
+
+/**
  * Applies a style's lighting recipe to Lighting in the open place. The first apply stores the
  * previous values on the map Model (and, once, on the maps folder as the place's original lighting); later applies restore that snapshot before writing the recipe.
  * Without a recipe it only restores the stored snapshot.
@@ -79,7 +106,7 @@ export function applyLighting(
     arguments: {
       mapId: request.mapId,
       mapsFolderName: request.mapsFolderName,
-      recipe: request.recipe,
+      recipe: request.recipe && withoutZeroStrengthEffects(request.recipe),
     },
     resultSchema: appliedLightingSchema,
   });

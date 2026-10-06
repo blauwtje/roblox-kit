@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
-import { applyLighting } from "./apply-lighting.ts";
+import { applyLighting, withoutZeroStrengthEffects } from "./apply-lighting.ts";
 
 const presets = await loadPresets();
 const cozyTown = presets.get("cozy-town");
@@ -157,4 +157,39 @@ await test("apply-lighting.luau snapshots, restores and creates every post-proce
   assert.ok(source.includes("postProcessing = postProcessing"));
   assert.ok(source.includes("snapshot.postProcessing"));
   assert.ok(source.includes("effectOrNew(post.className)"));
+});
+
+await test("leaves out post effects with zero strength and keeps the others", async () => {
+  const stationRecipe = trainStation.lighting;
+  const postProcessing = stationRecipe.PostProcessing;
+  assert.ok(postProcessing);
+  const zeroed = {
+    ...stationRecipe,
+    PostProcessing: {
+      ...postProcessing,
+      ColorCorrection: { Brightness: 0, Contrast: 0, Saturation: 0, TintColor: "#FFFFFF" },
+      SunRays: { ...postProcessing.SunRays, Intensity: 0 },
+      DepthOfField: { ...postProcessing.DepthOfField, FarIntensity: 0, NearIntensity: 0 },
+    },
+  };
+  const flat = withoutZeroStrengthEffects(zeroed);
+  assert.deepEqual(Object.keys(flat.PostProcessing ?? {}), ["Sky"]);
+
+  const live = withoutZeroStrengthEffects({
+    ...stationRecipe,
+    PostProcessing: {
+      ...postProcessing,
+      SunRays: { ...postProcessing.SunRays, Intensity: 0.2 },
+      DepthOfField: { ...postProcessing.DepthOfField, FarIntensity: 0, NearIntensity: 0.1 },
+    },
+  });
+  assert.ok("SunRays" in (live.PostProcessing ?? {}));
+  assert.ok("DepthOfField" in (live.PostProcessing ?? {}));
+
+  const studio = studioReturning('{"snapshotTaken":true}');
+  await applyLighting({
+    ...request(studio),
+    recipe: zeroed,
+  });
+  assert.ok(!String(studio.requests[0]?.arguments["code"]).includes('"SunRays":{'));
 });

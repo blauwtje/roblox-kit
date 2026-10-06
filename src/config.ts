@@ -66,6 +66,8 @@ export const config = Object.freeze({
   lightFixtureSizeStuds: 1,
   /** Most lights one room keeps; a guessed start to tune later, and the latest placed lights over it are dropped. */
   maxLocalLightsPerRoom: 5,
+  /** Most particles alive at once across one map (each emitter's rate times its lifetime, summed); a guessed start for mobile, and rates over it are scaled down together. */
+  maxAliveParticlesPerMap: 400,
   /** Height above the floor of the focal light over a spawn pad. */
   focalLightHeightStuds: 6,
 

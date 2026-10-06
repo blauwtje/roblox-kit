@@ -1,3 +1,4 @@
+import { config } from "../config.ts";
 import type { AmbientEffect, SpriteName } from "../style/preset-schema.ts";
 import type { PartRecord, Vector } from "./map-layout.ts";
 import type { MapSpec } from "./map-spec.ts";
@@ -21,9 +22,32 @@ export type AmbientEffectRecord = AmbientEffect & {
 /**
  * The ambient effects of the style in each room whose type the effect names (every room when it names none):
  * particles at the floor's center, beams across the floor from west to east, both `heightStuds` above the floor
- * top. Each carries its sprite's texture from `textures` when one is recorded.
+ * top. Each carries its sprite's texture from `textures` when one is recorded. Particle rates are scaled down together
+ * when the map's alive particles would pass `config.maxAliveParticlesPerMap`.
  */
 export function ambientEffectsOf(
+  spec: MapSpec,
+  parts: PartRecord[],
+  effects: AmbientEffect[],
+  textures: Partial<Record<SpriteName, string>>,
+): AmbientEffectRecord[] {
+  return capAliveParticles(placeAmbientEffects(spec, parts, effects, textures));
+}
+
+/** Scales every particle rate by one factor when the map's alive particles (rate times lifetime, summed) pass `config.maxAliveParticlesPerMap`. */
+function capAliveParticles(records: AmbientEffectRecord[]): AmbientEffectRecord[] {
+  let alive = 0;
+  for (const record of records) {
+    if (record.kind === "particles") alive += record.rate * record.lifetimeSeconds;
+  }
+  if (alive <= config.maxAliveParticlesPerMap) return records;
+  const scale = config.maxAliveParticlesPerMap / alive;
+  return records.map((record) =>
+    record.kind === "particles" ? { ...record, rate: record.rate * scale } : record,
+  );
+}
+
+function placeAmbientEffects(
   spec: MapSpec,
   parts: PartRecord[],
   effects: AmbientEffect[],

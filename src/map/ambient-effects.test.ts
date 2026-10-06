@@ -13,6 +13,7 @@ import {
   spriteSizePixels,
 } from "../lighting/ambient-sprites.ts";
 import { spriteNames, type AmbientEffect } from "../style/preset-schema.ts";
+import { config } from "../config.ts";
 import { ambientEffectsOf, missingSpriteWarnings } from "./ambient-effects.ts";
 import { layoutMap } from "./map-layout.ts";
 import { mapSpecSchema } from "./map-spec.ts";
@@ -56,6 +57,27 @@ await test("particles go in every room and a typed beam only in rooms of its typ
   assert.equal(shaft.position.x, floor.position.x - (floor.size.x / 2 - 2));
   assert.equal(shaft.endPosition?.x, floor.position.x + (floor.size.x / 2 - 2));
   assert.ok(records.every((record) => record.texture === undefined));
+});
+
+await test("scales particle rates together when the alive particles pass the map cap", () => {
+  const dense: AmbientEffect[] = effects.map((effect) =>
+    effect.kind === "particles" ? { ...effect, rate: 100, lifetimeSeconds: 10 } : effect,
+  );
+  const records = ambientEffectsOf(spec, layout.parts, dense, {});
+  let alive = 0;
+  for (const record of records) {
+    if (record.kind === "particles") alive += record.rate * record.lifetimeSeconds;
+  }
+  assert.ok(Math.abs(alive - config.maxAliveParticlesPerMap) < 1e-9);
+  const rates = records.flatMap((record) => (record.kind === "particles" ? [record.rate] : []));
+  assert.equal(new Set(rates).size, 1);
+  assert.ok(rates[0] !== undefined && rates[0] < 100);
+});
+
+await test("keeps particle rates under the cap as they are", () => {
+  const records = ambientEffectsOf(spec, layout.parts, effects, {});
+  const dust = records.find((record) => record.kind === "particles");
+  assert.equal(dust?.kind === "particles" ? dust.rate : undefined, 4);
 });
 
 await test("a recorded sprite gives its emitters a texture and no warning", () => {
