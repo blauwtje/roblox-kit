@@ -5,11 +5,13 @@ import {
   cornerReachStuds,
   doorwayFootprint,
   isPropKind,
+  oppositeSide,
   overlaps,
   propDimensions,
   propKinds,
   propSize,
   roomBounds,
+  yawFacing,
 } from "./prop-placement.ts";
 import type { Footprint, RoomBounds } from "./prop-placement.ts";
 import type { SetPiecePlacement, SetPieceRecord } from "./set-piece-placement.ts";
@@ -38,14 +40,6 @@ interface RoomFrame {
   interior: RoomBounds;
 }
 
-// The yaw and side tables repeat those of set-piece-placement.ts, which does not export them.
-const yawFacing: Record<Side, number> = { north: 0, west: 90, south: 180, east: 270 };
-const oppositeSide: Record<Side, Side> = {
-  north: "south",
-  south: "north",
-  east: "west",
-  west: "east",
-};
 const sideOrder: Side[] = ["north", "south", "east", "west"];
 
 /** How far past the room center a track bed lies for it to count as against a long wall. */

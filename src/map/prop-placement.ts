@@ -35,6 +35,8 @@ export interface PropRecord {
   kind: PropKind;
   pivot: Vector;
   size: Vector;
+  /** Degrees about Y that turn the prop's -Z front toward the room; absent means 0. */
+  yaw?: number;
   /** The generator's `Seed` attribute. */
   seed: number;
 }
@@ -107,6 +109,16 @@ export const propDimensions = Object.freeze({
 });
 
 const sides: Side[] = ["north", "south", "east", "west"];
+
+/** The yaw that turns a piece's -Z face toward each side of the room. */
+export const yawFacing: Record<Side, number> = { north: 0, west: 90, south: 180, east: 270 };
+
+export const oppositeSide: Record<Side, Side> = {
+  north: "south",
+  south: "north",
+  east: "west",
+  west: "east",
+};
 
 /** A rectangle on the floor plane, in coordinates relative to the room center. */
 export interface Footprint {
@@ -276,7 +288,7 @@ function roomProps(
       const side = pickFrom(sides, random);
       const runsAlongX = side === "north" || side === "south";
       const wallHalfSpan = runsAlongX ? bounds.halfWidth : bounds.halfDepth;
-      const reach = wallHalfSpan - (runsAlongX ? size.x : size.z) / 2;
+      const reach = wallHalfSpan - size.x / 2;
       const along = (random() * 2 - 1) * reach;
       const footprint = footprintAgainst(bounds, side, along, size);
       const blocked = reserved.some((taken) =>
@@ -284,7 +296,6 @@ function roomProps(
       );
       if (reach > 0 && !blocked) {
         reserved.push(footprint);
-        const worldSize = runsAlongX ? size : { x: size.z, y: size.y, z: size.x };
         props.push({
           kind,
           pivot: {
@@ -292,7 +303,8 @@ function roomProps(
             y: size.y / 2,
             z: room.z + (footprint.minZ + footprint.maxZ) / 2,
           },
-          size: worldSize,
+          size,
+          yaw: yawFacing[oppositeSide[side]],
           seed: propSeed,
         });
         break;

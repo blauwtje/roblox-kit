@@ -4,7 +4,7 @@ import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import { propDimensions, roomBounds, type PropRecord, type RoomBounds } from "./prop-placement.ts";
 import { findPropIssues } from "./prop-rules.ts";
 
-/** A planned prop; set pieces and arrangement pieces carry a `yaw` in degrees, kit props none. */
+/** A planned prop; kit props, set pieces and arrangement pieces carry a `yaw` in degrees. */
 export type PlannedProp = PropRecord & { yaw?: number };
 
 export const lookIssueKinds = ["scale", "gap", "walkway", "doorway", "facing", "density"] as const;

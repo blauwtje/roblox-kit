@@ -14,7 +14,6 @@ import { relationMapSpecSchema } from "../src/map/map-spec.ts";
 import { ambientEffectsOf } from "../src/map/ambient-effects.ts";
 import { solidVoxelCount, terrainChunks } from "../src/map/terrain-heightmap.ts";
 import type { PropRecord } from "../src/map/prop-placement.ts";
-import type { SetPieceRecord } from "../src/map/set-piece-placement.ts";
 import { heroPropsOf, trimMeshesOf } from "../src/map/hero-prop-placement.ts";
 import { buildFacades } from "../src/map/facade-grammar.ts";
 import { buildRoomDetails } from "../src/map/room-details.ts";
@@ -681,30 +680,24 @@ async function readMapDecor(connection: StudioConnection) {
   return mapDecorSchema.parse(JSON.parse(await executeLuau(connection, studioId, mapDecorLuau)));
 }
 
-/** Proves each set piece in Studio faces its `yaw` and carries its sign's `Label` and `AccentColor`. */
-function expectSetPiecesTurnedAndLabeled(
-  props: (PropRecord | SetPieceRecord)[],
+/** Proves each prop in Studio faces its `yaw` and carries its sign's `Label` and `AccentColor`, if any. */
+function expectPropsTurnedAndLabeled(
+  props: (PropRecord & { attributes?: Record<string, string> })[],
   names: string[],
   built: z.output<typeof mapDecorSchema>["proceduralModels"],
 ) {
   const builtByName = new Map(built.map((model) => [model.name, model]));
-  let setPieceCount = 0;
   for (const [index, prop] of props.entries()) {
-    if (!("yaw" in prop)) {
-      continue;
-    }
-    setPieceCount += 1;
     const name = names[index] ?? "";
     const model = builtByName.get(name);
-    expectEqual(`${name} yaw`, ((model?.yaw ?? NaN) + 360) % 360, prop.yaw);
-    expectEqual(`${name} Label`, model?.label, prop.attributes["Label"]);
+    expectEqual(`${name} yaw`, ((model?.yaw ?? NaN) + 360) % 360, prop.yaw ?? 0);
+    expectEqual(`${name} Label`, model?.label, prop.attributes?.["Label"]);
     expectEqual(
       `${name} AccentColor`,
       model?.accent,
-      prop.attributes["AccentColor"]?.replace("#", "").toLowerCase(),
+      prop.attributes?.["AccentColor"]?.replace("#", "").toLowerCase(),
     );
   }
-  expectEqual("the smoke map has set pieces", setPieceCount > 0, true);
   expectEqual(
     "the smoke map has a sign per typed room door",
     built.some((model) => model.name.startsWith("sign-") && model.label !== undefined),
@@ -781,7 +774,7 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
     );
     expectEqual(`${model.name} generated parts`, model.generatedParts > 0, true);
   }
-  expectSetPiecesTurnedAndLabeled(props, expectedNames, decor.proceduralModels);
+  expectPropsTurnedAndLabeled(props, expectedNames, decor.proceduralModels);
   return `${String(ceilings.length)} ceilings and ${String(fixtures.length)} fixtures tagged, ${String(decor.generators.length)} generators, ${String(decor.proceduralModels.length)} props generated`;
 }
 

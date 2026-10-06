@@ -3,10 +3,12 @@ import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import {
   cornerReachStuds,
+  oppositeSide,
   propDimensions,
   propKinds,
   propSize,
   roomBounds,
+  yawFacing,
 } from "./prop-placement.ts";
 import type { PropKind, PropRecord, RoomBounds } from "./prop-placement.ts";
 import type { Preset } from "../style/preset-schema.ts";
@@ -34,16 +36,6 @@ export interface SetPiecePlacement {
 
 /** A set piece that does not fit its room: the room keeps its other pieces and this one is skipped. */
 class SetPieceMisfit extends Error {}
-
-/** The yaw that turns a piece's -Z face toward each side of the room. */
-const yawFacing: Record<Side, number> = { north: 0, west: 90, south: 180, east: 270 };
-
-const oppositeSide: Record<Side, Side> = {
-  north: "south",
-  south: "north",
-  east: "west",
-  west: "east",
-};
 
 const sideOrder: Side[] = ["north", "south", "east", "west"];
 
