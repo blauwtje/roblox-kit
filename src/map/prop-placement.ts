@@ -39,8 +39,31 @@ export interface PropRecord {
   seed: number;
 }
 
+/** A length rounded to hundredths of a stud, so anchored heights carry no float noise. */
+function roundStuds(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+const { character, propAnchors } = config;
+const counterTopStuds = roundStuds(character.heightStuds * propAnchors.counterTopRatio);
+
+/** A height that is `ratio` of the rig. */
+function ofCharacter(ratio: number): number {
+  return roundStuds(character.heightStuds * ratio);
+}
+
+/** A height that reaches `riseStuds` above the rig's eyes. */
+function aboveEye(riseStuds: number): number {
+  return roundStuds(character.eyeHeightStuds + riseStuds);
+}
+
+/** Width of a pillar in a wall of the given height. */
+export function pillarWidth(wallHeight: number): number {
+  return roundStuds(wallHeight * config.pillarWidthToWallHeightRatio);
+}
+
 /**
- * Sizes and spacing of the props, in studs, until they move to `config` (kept here because this task edits no other file).
+ * Sizes and spacing of the props, in studs. Heights derive from the R15 anchors in `config.character` and `config.propAnchors`.
  * Sizes are for a footprint along a north or south wall: x runs along the wall, z away from it.
  */
 export const propDimensions = Object.freeze({
@@ -55,24 +78,32 @@ export const propDimensions = Object.freeze({
   roomSeedStride: 7919,
   /** Tries to find a free spot for one prop before it is dropped. */
   attemptsPerProp: 12,
-  bench: { x: 6, y: 3, z: 2.5 },
-  lamp: { x: 1.5, y: 9, z: 1.5 },
-  pillar: { x: 1.5, z: 1.5 },
-  stairs: { x: 6, y: 3, z: 4 },
-  rail: { x: 8, y: 3, z: 0.5 },
-  "track-bed": { x: 16, y: 1, z: 5 },
-  "platform-edge": { x: 16, y: 0.5, z: 2 },
-  counter: { x: 8, y: 3.5, z: 2.5 },
-  sign: { x: 8, y: 2.5, z: 0.4 },
-  "lab-bench": { x: 7, y: 3.2, z: 2.5 },
-  "cell-bars": { x: 8, y: 9, z: 0.5 },
-  "control-console": { x: 6, y: 3.5, z: 3.5 },
-  "crate-stack": { x: 4, y: 4, z: 2.5 },
-  fireplace: { x: 6, y: 5, z: 2 },
-  "departure-board": { x: 12, y: 10, z: 1 },
-  clock: { x: 5, y: 11, z: 1.2 },
-  "ticket-counter": { x: 14, y: 8, z: 3 },
-  "ticket-machine": { x: 3, y: 6, z: 2 },
+  bench: { x: 6, y: propAnchors.seatHeightStuds + propAnchors.backrestRiseStuds, z: 2.5 },
+  lamp: { x: 1.5, y: ofCharacter(propAnchors.lampHeightRatio), z: 1.5 },
+  /** The pillar's height is its wall's, so only its width at the default wall height is listed. */
+  pillar: {
+    x: pillarWidth(config.defaultWallHeightStuds),
+    z: pillarWidth(config.defaultWallHeightStuds),
+  },
+  stairs: { x: 6, y: propAnchors.stairsRiseStuds, z: 4 },
+  rail: { x: 8, y: propAnchors.railHeightStuds, z: 0.5 },
+  "track-bed": { x: 16, y: propAnchors.trackBedHeightStuds, z: 5 },
+  "platform-edge": { x: 16, y: propAnchors.platformEdgeHeightStuds, z: 2 },
+  counter: { x: 8, y: counterTopStuds, z: 2.5 },
+  sign: { x: 8, y: propAnchors.signHeightStuds, z: 0.4 },
+  "lab-bench": { x: 7, y: roundStuds(counterTopStuds + propAnchors.labBenchTopRiseStuds), z: 2.5 },
+  "cell-bars": { x: 8, y: ofCharacter(propAnchors.cellBarsHeightRatio), z: 0.5 },
+  "control-console": {
+    x: 6,
+    y: roundStuds(counterTopStuds + propAnchors.consoleTopRiseStuds),
+    z: 3.5,
+  },
+  "crate-stack": { x: 4, y: ofCharacter(propAnchors.crateStackHeightRatio), z: 2.5 },
+  fireplace: { x: 6, y: ofCharacter(propAnchors.fireplaceHeightRatio), z: 2 },
+  "departure-board": { x: 12, y: aboveEye(propAnchors.departureBoardAboveEyeStuds), z: 1 },
+  clock: { x: 5, y: aboveEye(propAnchors.clockAboveEyeStuds), z: 1.2 },
+  "ticket-counter": { x: 14, y: aboveEye(propAnchors.ticketCounterAboveEyeStuds), z: 3 },
+  "ticket-machine": { x: 3, y: aboveEye(propAnchors.ticketMachineAboveEyeStuds), z: 2 },
 });
 
 const sides: Side[] = ["north", "south", "east", "west"];
@@ -108,7 +139,8 @@ export function isPropKind(name: string): name is PropKind {
 /** Size of a prop along a north or south wall; the lamp and pillar are capped by, or as tall as, the wall. */
 export function propSize(kind: PropKind, wallHeight: number): Vector {
   if (kind === "pillar") {
-    return { ...propDimensions.pillar, y: wallHeight };
+    const width = pillarWidth(wallHeight);
+    return { x: width, y: wallHeight, z: width };
   }
   const size = propDimensions[kind];
   return { ...size, y: Math.min(size.y, wallHeight) };

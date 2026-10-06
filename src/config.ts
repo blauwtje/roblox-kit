@@ -99,6 +99,36 @@ export const config = Object.freeze({
     /** A surface or slot color within this OKLab distance of a palette color counts as that palette color. */
     paletteMatchDistance: 0.04,
   },
+  /** The measured R15 rig in studs; prop heights are anchored to it (`propDimensions` in `src/map/prop-placement.ts`). */
+  character: { heightStuds: 5.46, eyeHeightStuds: 4.87, shoulderHeightStuds: 3.95 },
+  /**
+   * Where each prop kind meets the character, in studs unless a name ends in `Ratio` (a share of `character.heightStuds`).
+   * A bench seat sits at `seatHeightStuds` with a back rising `backrestRiseStuds` above it; counters, lab benches and rails stand at
+   * about 0.55 of the rig (the counter top) plus the `*TopRiseStuds` of their work surface; signs and boards hang their face at eye
+   * height, so their box reaches `*AboveEyeStuds` over the eyes; a lamp, cell bars and crates are `*Ratio` of the rig.
+   */
+  propAnchors: {
+    seatHeightStuds: 1.8,
+    backrestRiseStuds: 1.2,
+    counterTopRatio: 0.55,
+    labBenchTopRiseStuds: 0.2,
+    consoleTopRiseStuds: 0.5,
+    railHeightStuds: 3,
+    stairsRiseStuds: 3,
+    signHeightStuds: 2.5,
+    departureBoardAboveEyeStuds: 5,
+    clockAboveEyeStuds: 6,
+    ticketCounterAboveEyeStuds: 3,
+    ticketMachineAboveEyeStuds: 1,
+    lampHeightRatio: 1.65,
+    cellBarsHeightRatio: 1.65,
+    crateStackHeightRatio: 0.75,
+    fireplaceHeightRatio: 0.9,
+    trackBedHeightStuds: 1,
+    platformEdgeHeightStuds: 0.5,
+  },
+  /** A pillar's width as a share of its wall height, so a tall hall gets stouter pillars. */
+  pillarWidthToWallHeightRatio: 0.125,
   /** Full check reports kept in memory; the oldest is dropped past this. */
   maxCheckReports: 50,
 

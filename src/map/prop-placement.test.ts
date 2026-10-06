@@ -4,7 +4,8 @@ import { test } from "node:test";
 import { loadPresets } from "../style/load-preset.ts";
 import { mapSpecSchema } from "./map-spec.ts";
 import type { MapSpec } from "./map-spec.ts";
-import { placeProps, propKinds } from "./prop-placement.ts";
+import { config } from "../config.ts";
+import { pillarWidth, placeProps, propDimensions, propKinds, propSize } from "./prop-placement.ts";
 import type { PropRecord } from "./prop-placement.ts";
 
 const kit = ["bench", "lamp", "pillar", "stairs", "rail"];
@@ -168,4 +169,21 @@ await test("the set-piece kinds are placed inside the room like any other prop",
     assert.ok(Math.abs(prop.pivot.x) + prop.size.x / 2 <= 39, `${prop.kind} x`);
     assert.ok(Math.abs(prop.pivot.z) + prop.size.z / 2 <= 39, `${prop.kind} z`);
   }
+});
+
+await test("prop heights follow the R15 anchors", () => {
+  const rig = config.character.heightStuds;
+  assert.equal(propDimensions.counter.y, Math.round(rig * 0.55 * 100) / 100);
+  assert.equal(propDimensions.bench.y, 1.8 + 1.2);
+  assert.equal(propDimensions.rail.y, config.propAnchors.railHeightStuds);
+  for (const kind of ["sign", "departure-board", "clock"] as const) {
+    assert.ok(propDimensions[kind].y >= config.character.eyeHeightStuds * 0.5, kind);
+  }
+  assert.ok(propDimensions["departure-board"].y > config.character.eyeHeightStuds);
+});
+
+await test("a pillar's width follows its wall height", () => {
+  assert.equal(pillarWidth(config.defaultWallHeightStuds), propDimensions.pillar.x);
+  assert.equal(pillarWidth(24), 2 * pillarWidth(12));
+  assert.deepEqual(propSize("pillar", 24), { x: 3, y: 24, z: 3 });
 });
