@@ -226,6 +226,14 @@ function wallSlots(
   });
 }
 
+function isLongAxisX({ interior }: RoomFrame): boolean {
+  return interior.halfWidth >= interior.halfDepth;
+}
+
+function longWallsOf(frame: RoomFrame): Side[] {
+  return isLongAxisX(frame) ? ["north", "south"] : ["west", "east"];
+}
+
 function lengthSlots(
   frame: RoomFrame,
   size: PieceSize,
@@ -234,9 +242,8 @@ function lengthSlots(
   trackWall: Side | undefined,
 ): Slot[] {
   const { interior } = frame;
-  const longAxisIsX = interior.halfWidth >= interior.halfDepth;
-  const longWalls: Side[] = longAxisIsX ? ["north", "south"] : ["west", "east"];
-  const wall = longWalls.find((side) => side !== trackWall) ?? "north";
+  const longAxisIsX = isLongAxisX(frame);
+  const wall = longWallsOf(frame).find((side) => side !== trackWall) ?? "north";
   const across = inset === undefined ? 0 : offCenter(frame, wall, inset, size.z);
   const longHalf = longAxisIsX ? interior.halfWidth : interior.halfDepth;
   const facing = oppositeSide[wall];
@@ -254,13 +261,9 @@ function pairedOffsets(span: number, spacing: number): number[] {
   return Array.from({ length: evenCount }, (_, index) => (index - (evenCount - 1) / 2) * spacing);
 }
 
-function longWallsOf({ interior }: RoomFrame): Side[] {
-  return interior.halfWidth >= interior.halfDepth ? ["north", "south"] : ["west", "east"];
-}
-
 function colonnadeSlots(frame: RoomFrame, size: PieceSize, spacing: number, inset: number): Slot[] {
   const { interior } = frame;
-  const longAxisIsX = interior.halfWidth >= interior.halfDepth;
+  const longAxisIsX = isLongAxisX(frame);
   const longHalf = longAxisIsX ? interior.halfWidth : interior.halfDepth;
   const alongOffsets = pairedOffsets(2 * longHalf - 2 * cornerReachStuds, spacing);
   return longWallsOf(frame).flatMap((side) => {
@@ -404,11 +407,12 @@ function arrangementsOfRoom(
 
 /**
  * The pieces a typed room's room type arranges to fill the floor its set pieces leave: `grid`, `rows`,
- * `along-walls`, `along-length`, `colonnade` and `bank` slots whose count grows with the room's floor. A slot is dropped when it
- * would leave the room or overlap a corner pillar, a doorway strip, a door's lane to the room center, a spawn
- * pad, a set piece or an earlier piece; an arrangement that places nothing adds one warning. Rooms without a
- * type or without arrangements get none, and an arranged piece with no generator throws. Each piece gets its
- * own seed from its room's random stream, so the same spec and seed give the same layout.
+ * `along-walls`, `along-length` and `colonnade` slots whose count grows with the room's floor, and `bank`,
+ * whose count is fixed. A slot is dropped when it would leave the room or overlap a corner pillar, a doorway
+ * strip, a door's lane to the room center, a spawn pad, a set piece or an earlier piece, except that a bank
+ * drops all of its pieces when any slot fails; an arrangement that places nothing adds one warning. Rooms
+ * without a type or without arrangements get none, and an arranged piece with no generator throws. Each piece
+ * gets its own seed from its room's random stream, so the same spec and seed give the same layout.
  */
 export function placeArrangements(
   spec: MapSpec,
