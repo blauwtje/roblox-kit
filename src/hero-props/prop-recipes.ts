@@ -11,6 +11,17 @@ const propRecipePrefix = "prop-";
 /** Triangles each prop-kind mesh may hold: a prop repeats in a room, so it stays well under a hero's budget. */
 const propTriangleBudget = 2000;
 
+/** Widest bevel of any shape, in studs. */
+const maxBevel = 0.1;
+
+/** A shape's bevel is its smallest dimension over this, so thin posts and boards keep their shape. */
+const bevelDivisor = 8;
+
+/** The bevel of a shape whose smallest dimension is `smallest` studs: `min(maxBevel, smallest / bevelDivisor)`. */
+function bevelOf(smallest: number): number {
+  return Math.min(maxBevel, smallest / bevelDivisor);
+}
+
 /** Height a pillar's recipe is built at; the build stretches it to the wall it stands against. */
 const pillarRecipeHeight = 12;
 
@@ -27,6 +38,7 @@ function box(
     role,
     center: { x: at.x ?? 0, y: at.bottom + size.height / 2, z: at.z ?? 0 },
     size,
+    bevel: bevelOf(Math.min(size.width, size.height, size.depth)),
   };
 }
 
@@ -46,6 +58,7 @@ function post(
     length,
     axis: "y",
     segments: 12,
+    bevel: bevelOf(Math.min(radius * 2, length)),
   };
 }
 
@@ -228,7 +241,7 @@ function operationsOf(kind: PropKind): Operation[] {
       ];
     case "ticket-machine":
       return [
-        box("blockout", "wall", { bottom: 0 }, { width: w, height: h, depth: d - 0.2 }),
+        box("blockout", "wall", { bottom: 0, z: -0.1 }, { width: w, height: h, depth: d - 0.2 }),
         box(
           "form",
           "accent",
