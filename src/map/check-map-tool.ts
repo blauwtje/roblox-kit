@@ -17,7 +17,14 @@ import {
   relationMapSpecSchema,
   type PerformanceBudget,
 } from "./map-spec.ts";
-import { findPropIssues, propRecordSchema } from "./prop-rules.ts";
+import {
+  findBevelIssues,
+  findLightIssues,
+  findPropIssues,
+  findSurfaceIssues,
+  mapRecordsSchema,
+} from "./prop-rules.ts";
+import { resolveRelations } from "./relation-solver.ts";
 import { doorwayClearanceBoxes, findSizeRuleIssues } from "./size-rules.ts";
 import { zoneShot } from "./zone-cameras.ts";
 
@@ -35,6 +42,9 @@ const issueCountsSchema = luauCountsSchema.extend({
   sizeRule: z.number().int(),
   scale: z.number().int(),
   rotation: z.number().int(),
+  untextured: z.number().int(),
+  unlit: z.number().int(),
+  unbevelled: z.number().int(),
 });
 
 const checkMapInput = z.strictObject({
@@ -106,17 +116,17 @@ const mapZonesSchema = z.strictObject({
   zones: z.array(z.strictObject({ name: z.string(), min: vectorSchema, max: vectorSchema })),
 });
 
-/** The props of the map with what the scale and rotation rules need, read in Studio. */
-async function readProps(connection: StudioConnection, studioId: string, mapId: string) {
+/** The props, flat parts, lights and hero MeshParts of the map with what the quality and prop rules need, read in Studio. */
+async function readMapRecords(connection: StudioConnection, studioId: string, mapId: string) {
   const read = await runLuauFile({
     connection,
     studioId,
     fileName: "read-props.luau",
     datamodelType: "Edit",
     arguments: { mapId, mapsFolderName: config.mapsFolderName },
-    resultSchema: z.strictObject({ props: z.array(propRecordSchema) }),
+    resultSchema: mapRecordsSchema,
   });
-  return read.props;
+  return read;
 }
 
 /** Draw calls and triangles per zone camera: the cameras are framed here, the counts read in Studio. */
@@ -210,7 +220,8 @@ export function createCheckMapTool(
       `It also reports placement issues for each prop (at its declared size about its pivot) that has no floor part under its center and four footprint corners, overlaps a wall part, or stands inside a doorway's clearance box (the opening's width, the wall's thickness plus an agent radius on each face, and the agent's height; needs the spec, else only the floor and wall rules apply); the detail names the rule. ` +
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles): withinBudget is false and warnings name each zone over a limit, without failing passed; warnings also name any model outside the map that stands between a spawn and a target it cannot reach; issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
-      `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box.`,
+      `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box. ` +
+      `With a preset it also reports untextured issues (a part whose two longest sides both exceed ${String(config.maxUntexturedSurfaceStuds)} studs and that has no texture, material variant or textured material) and unbevelled issues (a hero prop MeshPart whose recipe shape has no bevel), and with the spec too unlit issues (a room with no light inside its footprint).`,
     inputSchema: checkMapInput,
     outputSchema: checkMapOutput,
     annotations: {
@@ -249,11 +260,19 @@ export function createCheckMapTool(
         },
         resultSchema: checkedMapSchema,
       });
-      // Prop rules live in the preset; without one no prop is read.
-      const propIssues =
+      // Prop and quality rules apply to a styled map; without a preset nothing is read. The light rule also needs the spec's rooms.
+      const records =
         preset === undefined
+          ? undefined
+          : await readMapRecords(context.studio, studioId, input.mapId);
+      const propIssues =
+        preset === undefined || records === undefined ? [] : findPropIssues(records.props, preset);
+      const untexturedIssues = records === undefined ? [] : findSurfaceIssues(records.surfaces);
+      const unlitIssues =
+        records === undefined || input.spec === undefined
           ? []
-          : findPropIssues(await readProps(context.studio, studioId, input.mapId), preset);
+          : findLightIssues(resolveRelations(input.spec).rooms, records.lights);
+      const unbevelledIssues = records === undefined ? [] : findBevelIssues(records.heroParts);
       const scaleIssues = propIssues.filter((issue) => issue.kind === "scale");
       const rotationIssues = propIssues.filter((issue) => issue.kind === "rotation");
       const sceneStats = await sampleSceneStats(context.studio, studioId, input.mapId);
@@ -267,12 +286,18 @@ export function createCheckMapTool(
         ...sizeRuleIssues.slice(0, config.maxIssuesPerKind),
         ...scaleIssues.slice(0, config.maxIssuesPerKind),
         ...rotationIssues.slice(0, config.maxIssuesPerKind),
+        ...untexturedIssues.slice(0, config.maxIssuesPerKind),
+        ...unlitIssues.slice(0, config.maxIssuesPerKind),
+        ...unbevelledIssues.slice(0, config.maxIssuesPerKind),
       ];
       const counts = {
         ...checked.counts,
         sizeRule: sizeRuleIssues.length,
         scale: scaleIssues.length,
         rotation: rotationIssues.length,
+        untextured: untexturedIssues.length,
+        unlit: unlitIssues.length,
+        unbevelled: unbevelledIssues.length,
       };
       const report = reports.add(input.mapId, issues);
       const uri = checkReportUri(report.reportId);
@@ -283,7 +308,10 @@ export function createCheckMapTool(
         counts.placement +
         counts.sizeRule +
         counts.scale +
-        counts.rotation;
+        counts.rotation +
+        counts.untextured +
+        counts.unlit +
+        counts.unbevelled;
       const inlineIssues = issues.slice(0, config.maxInlineIssues);
       return toolResult(
         {

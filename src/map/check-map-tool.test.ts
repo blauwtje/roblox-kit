@@ -48,7 +48,11 @@ const samplesReply = JSON.stringify({
 });
 
 /** Answers the check with `text`, and the zone read and the stats sampling that follow it with fixed replies. */
-function studioReturning(text: string, isError = false, propsReply = '{"props":[]}') {
+function recordsReply(overrides: object = {}): string {
+  return JSON.stringify({ props: [], surfaces: [], lights: [], heroParts: [], ...overrides });
+}
+
+function studioReturning(text: string, isError = false, propsReply = recordsReply()) {
   return new FakeStudioConnection(studios, {
     execute_luau: (request) => {
       const code = String(request.arguments["code"]);
@@ -131,6 +135,9 @@ await test("issues are listed inline up to a cap and all of them are stored unde
     sizeRule: 0,
     scale: 0,
     rotation: 0,
+    untextured: 0,
+    unlit: 0,
+    unbevelled: 0,
   });
   assert.equal(structured.issues.length, 20);
   assert.equal(structured.issuesOmitted, 6);
@@ -380,7 +387,13 @@ await test("a preset with a spec adds sizeRule issues to the counts and the repo
       { name: "b", x: 60, z: 0, width: 30, depth: 30, doors: [{ side: "west", offset: 0 }] },
     ],
   };
-  const { reports, run } = setup(studioReturning(checkedMap()));
+  const lit = recordsReply({
+    lights: [
+      { path: partPath("a-light"), position: { x: 0, y: 8, z: 0 } },
+      { path: partPath("b-light"), position: { x: 60, y: 8, z: 0 } },
+    ],
+  });
+  const { reports, run } = setup(studioReturning(checkedMap(), false, lit));
   const styled = (await run({ mapId: "arena", preset: "horror-facility", spec }))
     .structuredContent as { passed: boolean; counts: { sizeRule: number }; issues: CheckIssue[] };
   assert.equal(styled.passed, false);
@@ -402,8 +415,78 @@ await test("a preset with a spec adds sizeRule issues to the counts and the repo
       sizeRule: 0,
       scale: 0,
       rotation: 0,
+      untextured: 0,
+      unlit: 0,
+      unbevelled: 0,
     });
   }
+});
+
+await test("with a preset, quality rules report an untextured flat surface, an unlit room and an unbevelled hero part", async () => {
+  const spec = {
+    mapId: "arena",
+    rooms: [
+      { name: "a", x: 0, z: 0, width: 30, depth: 30, doors: [{ side: "east", offset: 0 }] },
+      { name: "b", x: 60, z: 0, width: 30, depth: 30, doors: [{ side: "west", offset: 0 }] },
+    ],
+  };
+  const side = config.maxUntexturedSurfaceStuds + 4;
+  const flat = (name: string, textured: boolean, y: number) => ({
+    path: partPath(name),
+    size: { x: side, y: 1, z: side },
+    position: { x: 0, y, z: 0 },
+    textured,
+  });
+  const reply = recordsReply({
+    surfaces: [
+      flat("a-floor", false, 0),
+      flat("a-ceiling", true, 12),
+      { ...flat("a-trim", false, 1), size: { x: side, y: 1, z: 2 } },
+    ],
+    lights: [{ path: partPath("a-light"), position: { x: 1, y: 8, z: 1 } }],
+    heroParts: [
+      {
+        path: partPath("train-car-hero-1.wall"),
+        kind: "train-car",
+        position: { x: 1, y: 2, z: 3 },
+        bevel: 0,
+      },
+      {
+        path: partPath("train-car-hero-1.trim"),
+        kind: "train-car",
+        position: { x: 1, y: 2, z: 3 },
+        bevel: 0.1,
+      },
+    ],
+  });
+  const { reports, tool, run } = setup(studioReturning(checkedMap(), false, reply));
+  const result = await run({ mapId: "arena", preset: "horror-facility", spec });
+  const structured = tool.outputSchema.parse(result.structuredContent);
+  assert.equal(structured.passed, false);
+  assert.deepEqual(
+    structured.issues
+      .filter((issue) => issue.kind !== "sizeRule")
+      .map((issue) => [issue.kind, issue.parts]),
+    [
+      ["untextured", [partPath("a-floor")]],
+      ["unlit", []],
+      ["unbevelled", [partPath("train-car-hero-1.wall")]],
+    ],
+  );
+  assert.match(structured.issues.find((issue) => issue.kind === "unlit")?.detail ?? "", /Room "b"/);
+  assert.equal(structured.counts.untextured, 1);
+  assert.equal(structured.counts.unlit, 1);
+  assert.equal(structured.counts.unbevelled, 1);
+  assert.equal(reports.get(structured.reportId)?.issues.length, 5);
+
+  // Without the spec the rooms are unknown, so only the surface and bevel rules apply.
+  const withoutSpec = tool.outputSchema.parse(
+    (await run({ mapId: "arena", preset: "horror-facility" })).structuredContent,
+  );
+  assert.deepEqual(
+    withoutSpec.issues.map((issue) => issue.kind),
+    ["untextured", "unbevelled"],
+  );
 });
 
 await test("with a preset, props out of scale or off the grid become scale and rotation issues naming their part path", async () => {
@@ -412,7 +495,7 @@ await test("with a preset, props out of scale or off the grid become scale and r
     { ...bench, path: partPath("bench-1"), size: { x: 6, y: 3, z: 2 }, yaw: 90 },
     { ...bench, path: partPath("bench-2"), size: { x: 6, y: 9, z: 2 }, yaw: 30 },
   ];
-  const studio = studioReturning(checkedMap(), false, JSON.stringify({ props }));
+  const studio = studioReturning(checkedMap(), false, recordsReply({ props }));
   const { reports, run } = setup(studio);
   const result = await run({ mapId: "arena", preset: "train-station" });
   const structured = result.structuredContent as {

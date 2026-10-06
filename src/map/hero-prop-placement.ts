@@ -23,6 +23,7 @@ type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, strin
  * `pivot` is the center of its box, `size` the recipe's width, height and depth in studs (x, y, z), `yaw`
  * the replaced piece's turn about Y, and `surfaces` the color and material of each role a MeshPart is named after.
  * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load.
+ * `bevels` is the bevel in studs of each role's mesh (the smallest of its shapes, 0 when a shape has none), which `build-map.luau` sets on the MeshPart for `check_map`.
  * `fit` "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, in place of scaling it evenly to `size.x`.
  */
 export interface HeroPropRecord {
@@ -32,6 +33,7 @@ export interface HeroPropRecord {
   yaw: number;
   size: Vector;
   surfaces: Record<string, { color: string; material: string }>;
+  bevels: Record<string, number>;
   fallback: PlacedProp;
   fit?: "stretch";
 }
@@ -95,6 +97,15 @@ function recipeSurfaces(recipe: HeroPropRecipe, style: Preset): HeroPropRecord["
   return surfaces;
 }
 
+/** The bevel of each role's mesh: the smallest `bevel` among its shapes, 0 when any shape has none. */
+function recipeBevels(recipe: HeroPropRecipe): HeroPropRecord["bevels"] {
+  const bevels: HeroPropRecord["bevels"] = {};
+  for (const { shape } of heroParts(recipe.operations)) {
+    bevels[shape.role] = Math.min(bevels[shape.role] ?? Infinity, shape.bevel ?? 0);
+  }
+  return bevels;
+}
+
 /**
  * The record that puts a prop kind's mesh in the piece's own box, stretched to it on each axis. The piece's box
  * is in its own frame (before its yaw); when its long side runs the other way from the recipe's width, the mesh
@@ -116,6 +127,7 @@ function stretchedRecord(
     yaw: ((piece.yaw ?? 0) + (turned ? 90 : 0)) % 360,
     size: turned ? { x: z, y, z: x } : { x, y, z },
     surfaces: recipeSurfaces(recipe, style),
+    bevels: recipeBevels(recipe),
     fallback: piece,
     fit: "stretch",
   };
@@ -139,6 +151,7 @@ function heroRecord(
     yaw: piece.yaw ?? 0,
     size: { x: width, y: height, z: depth },
     surfaces,
+    bevels: recipeBevels(recipe),
     fallback: piece,
   };
 }

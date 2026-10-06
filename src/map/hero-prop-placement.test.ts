@@ -151,6 +151,16 @@ await test("a recorded asset takes the replaced set piece's slot, standing on it
         { color: base.surfaces[role].color, material: base.surfaces[role].material },
       ]),
     ),
+    bevels: Object.fromEntries(
+      [...new Set(heroParts(recipe.operations).map((part) => part.shape.role))].map((role) => [
+        role,
+        Math.min(
+          ...heroParts(recipe.operations)
+            .filter((part) => part.shape.role === role)
+            .map((part) => part.shape.bevel ?? 0),
+        ),
+      ]),
+    ),
     fallback: {
       kind: "track-bed",
       pivot: trackBed.pivot,

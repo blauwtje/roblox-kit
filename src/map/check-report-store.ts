@@ -12,6 +12,9 @@ export const checkIssueSchema = z.strictObject({
     "scale",
     "rotation",
     "placement",
+    "untextured",
+    "unlit",
+    "unbevelled",
   ]),
   /** Full names of the parts involved, such as `Workspace.RobloxKitMaps.arena.start-floor`. */
   parts: z.array(z.string()),

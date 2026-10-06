@@ -80,6 +80,8 @@ export const config = Object.freeze({
   maxInlineIssues: 20,
   /** Issues check_map keeps per kind in the full report; counts stay exact. */
   maxIssuesPerKind: 100,
+  /** A flat part whose two longest sides both exceed this and that has no texture or textured material is an `untextured` issue. */
+  maxUntexturedSurfaceStuds: 16,
   /** Full check reports kept in memory; the oldest is dropped past this. */
   maxCheckReports: 50,
 

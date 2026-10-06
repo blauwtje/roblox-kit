@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { config } from "../config.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { CheckIssue } from "./check-report-store.ts";
+import type { RoomSpec } from "./map-spec.ts";
 
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 
@@ -21,6 +23,39 @@ export const propRecordSchema = z.strictObject({
 });
 
 export type PropRecord = z.infer<typeof propRecordSchema>;
+
+/** One part directly under the map Model as `read-props.luau` reports it, with whether it shows a texture. */
+export const surfaceRecordSchema = z.strictObject({
+  path: z.string().min(1),
+  size: vectorSchema,
+  position: vectorSchema,
+  /** True when the part has a SurfaceAppearance, Texture or Decal, a material variant or a textured material. */
+  textured: z.boolean(),
+});
+
+/** One light of the map: where its Attachment or part stands, in studs. */
+export const lightRecordSchema = z.strictObject({
+  path: z.string().min(1),
+  position: vectorSchema,
+});
+
+/** One MeshPart of a hero prop with the bevel in studs `build-map.luau` set from the recipe; 0 is no bevel. */
+export const heroPartRecordSchema = z.strictObject({
+  path: z.string().min(1),
+  kind: z.string().min(1),
+  position: vectorSchema,
+  bevel: z.number().min(0),
+});
+
+/** Everything `read-props.luau` reports about one built map. */
+export const mapRecordsSchema = z.strictObject({
+  props: z.array(propRecordSchema),
+  surfaces: z.array(surfaceRecordSchema),
+  lights: z.array(lightRecordSchema),
+  heroParts: z.array(heroPartRecordSchema),
+});
+
+export type MapRecords = z.infer<typeof mapRecordsSchema>;
 
 /** A yaw within this many degrees of a multiple of 90 is on the grid; it absorbs float error, not a turn. */
 const GRID_TOLERANCE_DEGREES = 0.5;
@@ -91,4 +126,58 @@ export function findPropIssues(props: PropRecord[], preset: Preset): CheckIssue[
     }
   }
   return issues;
+}
+
+/** A flat part (its two longest sides both over `config.maxUntexturedSurfaceStuds`) with no texture is one issue. */
+export function findSurfaceIssues(surfaces: MapRecords["surfaces"]): CheckIssue[] {
+  const issues: CheckIssue[] = [];
+  const limit = config.maxUntexturedSurfaceStuds;
+  for (const surface of surfaces) {
+    const [, second = 0, longest = 0] = [surface.size.x, surface.size.y, surface.size.z].sort(
+      (a, b) => a - b,
+    );
+    if (surface.textured || second <= limit) {
+      continue;
+    }
+    issues.push({
+      kind: "untextured",
+      parts: [surface.path],
+      position: surface.position,
+      detail: `A ${String(longest)} by ${String(second)} stud surface has no texture, texture-bearing material or material variant; the limit is ${String(limit)} studs on both sides.`,
+    });
+  }
+  return issues;
+}
+
+/** One issue per room with no light inside its footprint. */
+export function findLightIssues(rooms: RoomSpec[], lights: MapRecords["lights"]): CheckIssue[] {
+  const issues: CheckIssue[] = [];
+  for (const room of rooms) {
+    const lit = lights.some(
+      (light) =>
+        Math.abs(light.position.x - room.x) <= room.width / 2 &&
+        Math.abs(light.position.z - room.z) <= room.depth / 2,
+    );
+    if (!lit) {
+      issues.push({
+        kind: "unlit",
+        parts: [],
+        position: { x: room.x, y: 0, z: room.z },
+        detail: `Room "${room.name}" has no light source inside its footprint.`,
+      });
+    }
+  }
+  return issues;
+}
+
+/** One issue per hero MeshPart whose surface role has a shape with no bevel in its recipe. */
+export function findBevelIssues(heroParts: MapRecords["heroParts"]): CheckIssue[] {
+  return heroParts
+    .filter((part) => part.bevel <= 0)
+    .map((part) => ({
+      kind: "unbevelled" as const,
+      parts: [part.path],
+      position: part.position,
+      detail: `A ${part.kind} MeshPart has a shape with no bevel in its recipe, so its edges catch no light.`,
+    }));
 }

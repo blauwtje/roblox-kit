@@ -54,6 +54,8 @@ type HeroPropRecord = {
 	fallbackPart: PartRecord?,
 	-- Degrees about the mesh's own x axis, applied after the yaw: 180 turns a cornice over, -90 stands a jamb up.
 	roll: number?,
+	-- Studs of bevel of each surface role's mesh; the smallest of its shapes, 0 for a shape with none. Absent: no bevel rule.
+	bevels: { [string]: number }?,
 	-- "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, not evenly to `size.x`.
 	fit: string?,
 }
@@ -177,6 +179,8 @@ local SNAPSHOT_ATTRIBUTE_NAME = "RobloxKitLightingSnapshot"
 local FIXTURE_TOLERANCE_STUDS = 0.001
 -- Attribute naming a hero Model's kind; check-map.luau finds hero Models by it.
 local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
+-- Attribute on a hero MeshPart holding its bevel in studs; read-props.luau reports it.
+local BEVEL_ATTRIBUTE_NAME = "RobloxKitBevel"
 -- Name of the server Script that runs the idle sway; idle-animation.luau reads the three attributes below.
 local IDLE_SCRIPT_NAME = "RobloxKitIdleAnimation"
 
@@ -544,6 +548,9 @@ local function paintHeroPart(part: MeshPart, record: HeroPropRecord)
 		part.Color = Color3.fromHex(surface.color)
 	end
 	part.Material = materialNamed(surface.material)
+	if record.bevels then
+		part:SetAttribute(BEVEL_ATTRIBUTE_NAME, record.bevels[part.Name] or 0)
+	end
 end
 
 -- Scales a loaded asset to `record.size` on each axis about its bounding-box center: each part's size and its
