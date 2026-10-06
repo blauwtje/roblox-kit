@@ -269,6 +269,19 @@ const arrangement = z.discriminatedUnion("shape", [
     ...arrangementBase,
     inset: z.number().nonnegative().optional(),
   }),
+  /** One line along each long wall, `inset` studs from it, a pair every `spacing` studs about the long-axis center; door gaps stay open. */
+  z.strictObject({
+    shape: z.literal("colonnade"),
+    ...arrangementBase,
+    inset: z.number().nonnegative(),
+  }),
+  /** `count` pieces abutting side by side, centered on the first doorless short wall, else the first doorless long wall, facing into the room; all or none. */
+  z.strictObject({
+    shape: z.literal("bank"),
+    piece: arrangementBase.piece,
+    count: z.number().int().positive(),
+    inset: z.number().nonnegative(),
+  }),
 ]);
 
 /** A closed numeric range; `min` may equal `max`. */

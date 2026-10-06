@@ -51,6 +51,21 @@ const roomTypes = {
     signLabel: "Cramped",
     arrangements: [{ shape: "grid" as const, piece: "pillar", spacing: 400 }],
   },
+  colonnaded: {
+    setPieces: [],
+    signLabel: "Colonnaded",
+    arrangements: [{ shape: "colonnade" as const, piece: "pillar", spacing: 14, inset: 3 }],
+  },
+  banked: {
+    setPieces: [],
+    signLabel: "Banked",
+    arrangements: [{ shape: "bank" as const, piece: "ticket-machine", count: 4, inset: 1 }],
+  },
+  overbanked: {
+    setPieces: [],
+    signLabel: "Overbanked",
+    arrangements: [{ shape: "bank" as const, piece: "ticket-machine", count: 40, inset: 1 }],
+  },
   bare: { setPieces: [], signLabel: "Bare" },
 };
 
@@ -198,4 +213,98 @@ await test("an arranged piece with no generator throws", () => {
     },
   };
   assert.throws(() => placeArrangements(spec, broken, [], seed), /"throne".*no generator/);
+});
+
+await test("a colonnade is one line along each long wall in pairs about the center, with no pillar in a door gap", () => {
+  const closed = arrange(specOf(room("hall", "colonnaded", 100, 40))).pieces;
+  assert.ok(closed.length >= 8, "the colonnade is placed");
+  for (const wallSign of [-1, 1]) {
+    const line = closed.filter((piece) => Math.sign(piece.pivot.z) === wallSign);
+    assert.equal(line.length % 2, 0, "an even count per line");
+    assert.equal(new Set(line.map((piece) => piece.pivot.z)).size, 1, "one line per wall");
+    assert.ok(
+      line.every((piece) => piece.pivot.x !== 0),
+      "no pillar on the center line",
+    );
+    for (const piece of line) {
+      assert.ok(
+        line.some((other) => Math.abs(other.pivot.x + piece.pivot.x) < 1e-9),
+        `pillar at x ${String(piece.pivot.x)} has a mirror`,
+      );
+    }
+  }
+  assert.equal(closed.filter((piece) => piece.pivot.z < 0).length, closed.length / 2);
+  const gapped = arrange(
+    specOf(room("hall", "colonnaded", 100, 40, { doors: [{ side: "south", offset: 21 }] })),
+  ).pieces;
+  const south = gapped.filter((piece) => piece.pivot.z > 0);
+  assert.ok(gapped.length > south.length && south.length > 0 && south.length < gapped.length / 2);
+  assert.ok(
+    south.every((piece) => Math.abs(piece.pivot.x - 21) > 3 + piece.size.x / 2),
+    "clear of the south door lane",
+  );
+});
+
+await test("a colonnade runs along the long axis of a deep room too", () => {
+  const { pieces } = arrange(specOf(room("hall", "colonnaded", 40, 100)));
+  assert.ok(pieces.length >= 8);
+  assert.ok(pieces.every((piece) => Math.abs(piece.pivot.x) > 10 && piece.pivot.z !== 0));
+});
+
+await test("a bank abuts its pieces, centered on the first doorless short wall and facing into the room", () => {
+  const spec = specOf(room("hall", "banked", 100, 40));
+  const bank = arrange(spec).pieces;
+  assert.equal(bank.length, 4);
+  assert.ok(
+    bank.every((piece) => piece.yaw === 90 && piece.pivot.x > 0),
+    "east wall, facing west",
+  );
+  const sorted = bank.toSorted((first, second) => first.pivot.z - second.pivot.z);
+  for (const [index, piece] of sorted.entries()) {
+    const next = sorted[index + 1];
+    if (next !== undefined) {
+      const gap = footprint(next)[2] - footprint(piece)[3];
+      assert.ok(Math.abs(gap) < 1e-6, `pieces ${String(index)} and ${String(index + 1)} abut`);
+    }
+  }
+  const first = sorted[0];
+  const last = sorted[3];
+  assert.ok(first !== undefined && last !== undefined);
+  const center = (footprint(first)[2] + footprint(last)[3]) / 2;
+  assert.ok(Math.abs(center) < 1e-6, "centered on the wall");
+});
+
+await test("a bank skips a short wall with a door, and falls back to a doorless long wall", () => {
+  const westOnly = specOf(
+    room("hall", "banked", 100, 40, { doors: [{ side: "east", offset: 0 }] }),
+  );
+  const west = arrange(westOnly).pieces;
+  assert.ok(west.length === 4 && west.every((piece) => piece.pivot.x < 0 && piece.yaw === 270));
+  const longWall = specOf(
+    room("hall", "banked", 100, 40, {
+      doors: [
+        { side: "east", offset: 0 },
+        { side: "west", offset: 0 },
+        { side: "south", offset: 0 },
+      ],
+    }),
+  );
+  const north = arrange(longWall).pieces;
+  assert.ok(north.length === 4 && north.every((piece) => piece.pivot.z < 0 && piece.yaw === 180));
+});
+
+await test("a bank places all of its pieces or none, and warns when it places none", () => {
+  const tooMany = arrange(specOf(room("hall", "overbanked", 100, 40)));
+  assert.equal(tooMany.pieces.length, 0);
+  assert.equal(tooMany.warnings.length, 1);
+  const walled = specOf(
+    room("hall", "banked", 100, 40, {
+      doors: ["north", "south", "east", "west"].map((side) => ({ side, offset: 0 })),
+    }),
+  );
+  assert.equal(arrange(walled).pieces.length, 0);
+  const blocked = specOf(
+    room("hall", "banked", 100, 40, { doors: [{ side: "south", offset: 0 }], spawn: true }),
+  );
+  assert.equal(arrange(blocked).pieces.length, 4, "a spawn pad off the wall leaves the bank");
 });

@@ -247,6 +247,50 @@ function lengthSlots(
 
 type PieceSize = SetPieceRecord["size"];
 
+/** Like `centeredOffsets` but with an even count, so no offset sits on the center line. */
+function pairedOffsets(span: number, spacing: number): number[] {
+  const count = Math.floor(span / spacing);
+  const evenCount = count - (count % 2);
+  return Array.from({ length: evenCount }, (_, index) => (index - (evenCount - 1) / 2) * spacing);
+}
+
+function longWallsOf({ interior }: RoomFrame): Side[] {
+  return interior.halfWidth >= interior.halfDepth ? ["north", "south"] : ["west", "east"];
+}
+
+function colonnadeSlots(frame: RoomFrame, size: PieceSize, spacing: number, inset: number): Slot[] {
+  const { interior } = frame;
+  const longAxisIsX = interior.halfWidth >= interior.halfDepth;
+  const longHalf = longAxisIsX ? interior.halfWidth : interior.halfDepth;
+  const alongOffsets = pairedOffsets(2 * longHalf - 2 * cornerReachStuds, spacing);
+  return longWallsOf(frame).flatMap((side) => {
+    const across = offCenter(frame, side, inset, size.z);
+    const facing = oppositeSide[side];
+    return alongOffsets.map((along) =>
+      longAxisIsX ? { x: along, z: across, facing } : { x: across, z: along, facing },
+    );
+  });
+}
+
+function bankSlots(frame: RoomFrame, size: PieceSize, count: number, inset: number): Slot[] {
+  const { room } = frame;
+  const doorless = (side: Side): boolean => !room.doors.some((door) => door.side === side);
+  const longWalls = longWallsOf(frame);
+  const shortWalls = sideOrder.filter((side) => !longWalls.includes(side));
+  const wall = [...shortWalls, ...longWalls].find(doorless);
+  if (wall === undefined) {
+    return [];
+  }
+  const across = offCenter(frame, wall, inset, size.z);
+  const facing = oppositeSide[wall];
+  return Array.from({ length: count }, (_, index) => {
+    const along = (index - (count - 1) / 2) * size.x;
+    return isHorizontalWall(wall)
+      ? { x: along, z: across, facing }
+      : { x: across, z: along, facing };
+  });
+}
+
 function slotsOf(
   frame: RoomFrame,
   arrangement: Arrangement,
@@ -262,6 +306,10 @@ function slotsOf(
       return wallSlots(frame, size, arrangement.spacing, arrangement.walls, arrangement.inset);
     case "along-length":
       return lengthSlots(frame, size, arrangement.spacing, arrangement.inset, trackWall);
+    case "colonnade":
+      return colonnadeSlots(frame, size, arrangement.spacing, arrangement.inset);
+    case "bank":
+      return bankSlots(frame, size, arrangement.count, arrangement.inset);
   }
 }
 
@@ -292,12 +340,12 @@ function placeArrangement(
     );
   }
   const size = propSize(arrangement.piece, interior.wallHeight);
-  const longWalls: Side[] =
-    interior.halfWidth >= interior.halfDepth ? ["north", "south"] : ["west", "east"];
-  const trackWall = trackWallOf(frame, roomPieces, longWalls);
+  const trackWall = trackWallOf(frame, roomPieces, longWallsOf(frame));
+  const cap = "max" in arrangement ? (arrangement.max ?? Infinity) : Infinity;
+  const blockedBefore = blocked.length;
   const pieces: SetPieceRecord[] = [];
   for (const slot of slotsOf(frame, arrangement, size, trackWall)) {
-    if (pieces.length >= (arrangement.max ?? Infinity)) {
+    if (pieces.length >= cap) {
       break;
     }
     const piece: SetPieceRecord = {
@@ -313,6 +361,10 @@ function placeArrangement(
       pieces.push(piece);
       blocked.push(footprint);
     }
+  }
+  if (arrangement.shape === "bank" && pieces.length < arrangement.count) {
+    blocked.length = blockedBefore;
+    return [];
   }
   return pieces;
 }
@@ -352,7 +404,7 @@ function arrangementsOfRoom(
 
 /**
  * The pieces a typed room's room type arranges to fill the floor its set pieces leave: `grid`, `rows`,
- * `along-walls` and `along-length` slots whose count grows with the room's floor. A slot is dropped when it
+ * `along-walls`, `along-length`, `colonnade` and `bank` slots whose count grows with the room's floor. A slot is dropped when it
  * would leave the room or overlap a corner pillar, a doorway strip, a door's lane to the room center, a spawn
  * pad, a set piece or an earlier piece; an arrangement that places nothing adds one warning. Rooms without a
  * type or without arrangements get none, and an arranged piece with no generator throws. Each piece gets its
