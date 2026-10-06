@@ -3,7 +3,7 @@ import { z } from "zod";
 import { config } from "../config.ts";
 import { applyLighting } from "../lighting/apply-lighting.ts";
 import { placeLights } from "../lighting/light-placement.ts";
-import type { FixtureBox } from "../lighting/light-placement.ts";
+import type { FixtureBox, FixtureGlow } from "../lighting/light-placement.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolContext, ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
@@ -14,7 +14,7 @@ import { resolveStyle } from "../style/resolve-style.ts";
 import { lintPalette, paletteIssueKinds } from "../style/palette-lint.ts";
 import { findLookIssues, lookIssueKinds } from "./look-lint.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
-import type { HeroPropSources } from "../hero-props/hero-prop-asset.ts";
+import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import {
   declaredTrimOf,
   heroPropsOf,
@@ -202,16 +202,70 @@ interface LightRecord {
   color: string;
 }
 
-/** The lights the style's light roles and fixtures place, each tied to the floor part of its zone's room. */
+/**
+ * A declared pendant mesh hung at a pendant fixture's centre, as `build-map.luau` loads it: kept at its modelled
+ * size, tagged `ceilingTag` so a cutaway hides it with the ceilings. The fixture's Part is then its Neon glow ball.
+ */
+interface PendantMeshRecord {
+  kind: "pendant";
+  assetId: string;
+  pivot: Vector;
+  yaw: number;
+  size: Vector;
+  surfaces: Record<string, never>;
+  fit: "none";
+  anchor: "bottom" | "center";
+  part?: string;
+  ceilingTag: string;
+}
+
+/** The recorded pendant mesh the preset declares (`fixture:pendant`) and its glow ball; absent when none is declared or uploaded. */
+async function pendantMeshOf(preset: Preset, sources: HeroPropSources) {
+  for (const [meshKind, { targets }] of Object.entries(preset.meshes ?? {})) {
+    const target = targets.find((candidate) => candidate.replaces === "fixture:pendant");
+    if (target === undefined) continue;
+    const { assetId } = await recordedHeroAsset(preset, meshKind, sources);
+    return assetId === undefined ? undefined : { assetId, target };
+  }
+  return undefined;
+}
+
+/** The pendant meshes of the lights whose fixture carries a glow ball, one per fixture. */
+function pendantMeshRecordsOf(
+  lights: LightRecord[],
+  mesh: NonNullable<Awaited<ReturnType<typeof pendantMeshOf>>>,
+): PendantMeshRecord[] {
+  return lights.flatMap((light) =>
+    light.fixture?.glow === undefined
+      ? []
+      : [
+          {
+            kind: "pendant" as const,
+            assetId: mesh.assetId,
+            pivot: light.fixture.position,
+            yaw: mesh.target.yaw ?? 0,
+            size: light.fixture.size,
+            surfaces: {},
+            fit: "none" as const,
+            anchor: mesh.target.anchor ?? "center",
+            ...(mesh.target.part === undefined ? {} : { part: mesh.target.part }),
+            ceilingTag: config.ceilingTag,
+          },
+        ],
+  );
+}
+
+/** The lights the style's light roles and fixtures place, each tied to the floor part of its zone's room; `glow` turns each pendant's Part into a Neon ball. */
 function lightRecordsOf(
   spec: MapSpec,
   parts: PartRecord[],
   style: Preset | undefined,
+  glow?: FixtureGlow,
 ): LightRecord[] {
   if (style === undefined) {
     return [];
   }
-  return placeLights(spec, style.lightRoles, style.lightFixtures).map((placement) => {
+  return placeLights(spec, style.lightRoles, style.lightFixtures, glow).map((placement) => {
     const floor = parts.find((part) => part.kind === "floor" && part.room === placement.zone);
     if (floor === undefined) {
       throw new Error(
@@ -248,6 +302,8 @@ interface BuildContext {
   heroProps: HeroPropRecord[];
   /** The profile meshes that replace trim boxes, loaded like hero props with the box as their fallback. */
   trimMeshes: (TrimMeshRecord | DeclaredTrimRecord)[];
+  /** The declared pendant meshes, loaded with the hero props and hung at the lighting phase's pendant fixtures. */
+  pendantMeshes: PendantMeshRecord[];
   /** Every material name of the build, checked by the shell phase before anything is built. */
   materials: string[];
   /** The style's idle sway of each prop kind the map places, and the server Script source that runs it; absent when none applies. */
@@ -294,7 +350,7 @@ function phaseArguments(
       props: phase.parts,
       generators: build.generators,
       noShadowSizeStuds: config.noShadowPropSizeStuds,
-      heroProps: [...build.heroProps, ...build.trimMeshes],
+      heroProps: [...build.heroProps, ...build.trimMeshes, ...build.pendantMeshes],
       ...build.idle,
     },
     lighting: {
@@ -464,7 +520,15 @@ async function buildMap(
   // A hero prop whose asset fails to load builds its fallback set piece, so its kind needs a generator too.
   const generators = await generatorsOf([...props, ...heroProps.map((hero) => hero.fallback)]);
   const variants = variantsOf(style, input.useRecordedAssets);
-  const lights = lightRecordsOf(spec, layout.parts, style);
+  const pendantMesh =
+    style === undefined ||
+    spec.style === undefined ||
+    style.lightFixtures?.kind !== "pendant" ||
+    !input.useRecordedAssets
+      ? undefined
+      : await pendantMeshOf(presetNamed(spec.style.preset), heroSources);
+  const lights = lightRecordsOf(spec, layout.parts, style, pendantMesh?.target.glow);
+  const pendantMeshes = pendantMesh === undefined ? [] : pendantMeshRecordsOf(lights, pendantMesh);
   const effectSpecs = style?.ambientEffects ?? [];
   const spriteTextures =
     effectSpecs.length === 0 || !input.useRecordedAssets
@@ -492,6 +556,7 @@ async function buildMap(
     generators,
     heroProps,
     trimMeshes,
+    pendantMeshes,
     idle: await idleOf(style, [...props, ...heroProps.map((hero) => hero.fallback)]),
     materials: materialsOf(
       [...layout.parts, ...details, ...facades, ...heroSurfaces],
@@ -543,6 +608,15 @@ async function buildMap(
       }
       for (const failure of built.heroLoadFailures ?? []) {
         const fallback = heroProps.find((hero) => hero.assetId === failure.assetId)?.fallback.kind;
+        if (
+          fallback === undefined &&
+          pendantMeshes.some((mesh) => mesh.assetId === failure.assetId)
+        ) {
+          warnings.push(
+            `Pendant mesh (asset ${failure.assetId}) failed to load: ${failure.error}; only its Neon glow ball hangs.`,
+          );
+          continue;
+        }
         if (fallback === undefined && trimMeshes.some((mesh) => mesh.assetId === failure.assetId)) {
           warnings.push(
             `Trim mesh ${failure.kind} (asset ${failure.assetId}) failed to load: ${failure.error}; its kit trim is built instead.`,
@@ -584,7 +658,8 @@ async function buildMap(
     phases: phases.map((phase) => ({
       name: phase.name,
       partCount:
-        phase.parts.length + (phase.name === "props" ? heroProps.length + trimMeshes.length : 0),
+        phase.parts.length +
+        (phase.name === "props" ? heroProps.length + trimMeshes.length + pendantMeshes.length : 0),
     })),
     bounds,
     zones: zonesOf([...layout.parts, ...details, ...facades]),

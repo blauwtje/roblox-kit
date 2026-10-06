@@ -206,6 +206,23 @@ await test("pendants hang in a centered grid the drop below the ceiling", () => 
   assert.equal(Math.min(...xs), -Math.max(...xs));
 });
 
+await test("a pendant glow rides on every pendant fixture and on no sconce", () => {
+  const room = spec([{ name: "hall", x: 10, z: 0, width: 30, depth: 30 }]);
+  const glow = { diameter: 0.8, drop: 0.54 };
+  const pendantLights = placeLights(room, lightRoles, pendants, glow);
+  const fixtures = pendantLights.filter((light) => light.fixture !== undefined);
+  assert.ok(fixtures.length > 1);
+  for (const light of fixtures) {
+    assert.deepEqual(light.fixture?.glow, glow);
+  }
+  const sconceLights = placeLights(room, lightRoles, sconces, glow);
+  assert.ok(sconceLights.some((light) => light.fixture !== undefined));
+  assert.ok(sconceLights.every((light) => light.fixture?.glow === undefined));
+  assert.ok(
+    placeLights(room, lightRoles, pendants).every((light) => light.fixture?.glow === undefined),
+  );
+});
+
 await test("pendant lines run along the long axis, spacing apart and centered across the short one", () => {
   const lined = { ...pendants, lines: 2 };
   const wide = placeLights(

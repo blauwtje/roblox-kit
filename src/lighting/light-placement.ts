@@ -11,10 +11,17 @@ export type LightRoleName = keyof Preset["lightRoles"];
 type LightFixtures = NonNullable<Preset["lightFixtures"]>;
 type WallSide = RoomSpec["doors"][number]["side"];
 
-/** The box of a visible fixture that holds its light, centered at `position`. */
+/** A Neon ball a fixture shows in place of its box: its `diameter` and how far `drop` it hangs below the box's centre. */
+export interface FixtureGlow {
+  diameter: number;
+  drop: number;
+}
+
+/** The box of a visible fixture that holds its light, centered at `position`; with `glow` the fixture's Part is that ball. */
 export interface FixtureBox {
   position: Vector;
   size: Vector;
+  glow?: FixtureGlow;
 }
 
 /** One light to create: its zone, role, where it hangs, its range, that it casts no shadow and the fixture that holds it. */
@@ -144,12 +151,14 @@ function fixtureBoxes(spec: MapSpec, room: RoomSpec, fixtures: LightFixtures): F
  * markers, each holding its light. A room with a spawn pad gets a focal light over the pad. No
  * light casts shadows, and a room keeps at most `config.maxLocalLightsPerRoom` lights, the
  * latest placed dropped first. Every light's range shrinks with the room's depth from the spawn
- * room (`roomProgression`), to `progressionScale.lightRange` of its role's range.
+ * room (`roomProgression`), to `progressionScale.lightRange` of its role's range. `glow` marks each
+ * pendant fixture as a Neon ball under a mesh, which the caller places; sconces ignore it.
  */
 export function placeLights(
   spec: MapSpec,
   lightRoles: Preset["lightRoles"],
   lightFixtures?: Preset["lightFixtures"],
+  glow?: FixtureGlow,
 ): LightPlacement[] {
   const heroRoom = largestRoom(spec.rooms);
   const progression = roomProgression(spec);
@@ -169,7 +178,8 @@ export function placeLights(
       shadows: false,
     });
     if (lightFixtures !== undefined) {
-      for (const fixture of fixtureBoxes(spec, room, lightFixtures)) {
+      for (const box of fixtureBoxes(spec, room, lightFixtures)) {
+        const fixture = glow && lightFixtures.kind === "pendant" ? { ...box, glow } : box;
         placements.push({
           zone: room.name,
           role: "zoneMarker",

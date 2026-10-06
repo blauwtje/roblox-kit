@@ -54,6 +54,8 @@ type HeroPropRecord = {
 	fallbackPart: PartRecord?,
 	-- A declared mesh's kit parts (a doorway arch's jambs and lintel), all built when the asset fails to load.
 	fallbackParts: { PartRecord }?,
+	-- A pendant mesh's tag: every part carries it, so capture_zones' cutaway hides the mesh with the ceilings.
+	ceilingTag: string?,
 	-- Degrees about the mesh's own x axis, applied after the yaw: 180 turns a cornice over, -90 stands a jamb up.
 	roll: number?,
 	-- Studs of bevel of each surface role's mesh; the smallest of its shapes, 0 for a shape with none. Absent: no bevel rule.
@@ -92,7 +94,8 @@ type LightRecord = {
 	range: number,
 	shadows: boolean,
 	-- The visible box that holds the light; a pendant hangs from the ceiling and hides with it.
-	fixture: { position: Vector, size: Vector, pendant: boolean }?,
+	-- With `glow` the fixture's Part is a Neon ball of that diameter, `drop` studs below the box's centre.
+	fixture: { position: Vector, size: Vector, pendant: boolean, glow: { diameter: number, drop: number }? }?,
 	brightness: number,
 	color: string,
 }
@@ -450,8 +453,14 @@ local function addFixtureBox(model: Model, record: LightRecord, fixtureNumber: n
 	fixture.CastShadow = false
 	fixture.Material = Enum.Material.Neon
 	fixture.Color = Color3.fromHex(record.color)
-	fixture.Size = toVector3(box.size)
-	fixture.Position = toVector3(box.position)
+	if box.glow then
+		fixture.Shape = Enum.PartType.Ball
+		fixture.Size = Vector3.one * box.glow.diameter
+		fixture.Position = toVector3(box.position) - Vector3.new(0, box.glow.drop, 0)
+	else
+		fixture.Size = toVector3(box.size)
+		fixture.Position = toVector3(box.position)
+	end
 	if box.pendant then
 		CollectionService:AddTag(fixture, ceilingTag)
 	end
@@ -664,6 +673,9 @@ local function addHeroProps(
 				descendant.CanCollide = false
 				descendant.CanTouch = false
 				descendant.CanQuery = false
+				if record.ceilingTag then
+					CollectionService:AddTag(descendant, record.ceilingTag)
+				end
 				if descendant:IsA("MeshPart") then
 					descendant.RenderFidelity = Enum.RenderFidelity.Automatic
 					descendant.CollisionFidelity = Enum.CollisionFidelity.Box
