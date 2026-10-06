@@ -2,12 +2,14 @@ import { config } from "../config.ts";
 import type { LookIssue } from "../map/look-lint.ts";
 import type { Preset } from "./preset-schema.ts";
 
+export const paletteIssueKinds = ["palette", "value"] as const;
+
 /**
- * A palette finding in the shape of a `LookIssue`, with its own kinds: `look-lint.ts` widens its
- * `kind` union to include them when `build_map` merges both lists. `zone` is the surface role,
- * slot or role pair the finding lies in, since a preset has no rooms.
+ * A palette finding in the shape of a `LookIssue`, with its own kinds: `build_map` merges both
+ * lists and its output enum is built from `lookIssueKinds` and `paletteIssueKinds`. `zone` is the
+ * surface role, slot or role pair the finding lies in, since a preset has no rooms.
  */
-export type PaletteIssue = Omit<LookIssue, "kind"> & { kind: "palette" | "value" };
+export type PaletteIssue = Omit<LookIssue, "kind"> & { kind: (typeof paletteIssueKinds)[number] };
 
 export interface Oklab {
   /** Lightness, 0 black to 1 white. */

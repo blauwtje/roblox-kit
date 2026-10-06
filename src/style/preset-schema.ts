@@ -500,7 +500,7 @@ export const presetSchema = z
     terrainVariants: z.record(materialName, surfaceRoleName).optional(),
     /** The look the lighting recipe aims for, which the image rubric scores a room against. */
     lightingIntent: z.string().min(1),
-    /** Only the hero light casts shadows, so no role carries a shadows field. */
+    /** No point light casts shadows, so no role carries a shadows field. */
     lightRoles: z.strictObject({
       zoneMarker: lightRole,
       focal: lightRole,

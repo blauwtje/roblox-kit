@@ -7,9 +7,11 @@ import { findPropIssues } from "./prop-rules.ts";
 /** A planned prop; set pieces and arrangement pieces carry a `yaw` in degrees, kit props none. */
 export type PlannedProp = PropRecord & { yaw?: number };
 
+export const lookIssueKinds = ["scale", "gap", "walkway", "doorway", "facing", "density"] as const;
+
 /** One look problem of a planned map; it warns and never fails a build. */
 export interface LookIssue {
-  kind: "scale" | "gap" | "walkway" | "doorway" | "facing" | "density";
+  kind: (typeof lookIssueKinds)[number];
   /** The room the issue lies in. */
   zone: string;
   detail: string;
