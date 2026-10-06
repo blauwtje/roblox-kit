@@ -82,6 +82,19 @@ export const config = Object.freeze({
   maxIssuesPerKind: 100,
   /** A flat part whose two longest sides both exceed this and that has no texture or textured material is an `untextured` issue. */
   maxUntexturedSurfaceStuds: 16,
+  /** Thresholds of the plan-time look lint (`src/map/look-lint.ts`); it only warns. */
+  lookLint: {
+    /** A walkway between two doorways narrower than this, in studs, is too tight to cross comfortably. */
+    minWalkwayStuds: 10,
+    /** A gap between a prop and a prop or wall from `min` up to `max` studs is too narrow to use and too wide to read as flush. */
+    deadGapStuds: { min: 0.25, max: 4 },
+    /** Share of a room's inner floor that prop footprints cover; below `min` reads empty, above `max` crowded. */
+    propDensity: { min: 0.02, max: 0.4 },
+    /** Rooms with a smaller inner floor, in square studs, are not checked for density: hallways and closets stay bare. */
+    densityMinRoomAreaSquareStuds: 400,
+    /** Kinds with no one front: the platform edge faces its track on the wall, a sign shows on both faces, pillars and rails are the same all round. */
+    facingExemptKinds: ["platform-edge", "sign", "pillar", "rail"],
+  },
   /** Full check reports kept in memory; the oldest is dropped past this. */
   maxCheckReports: 50,
 
