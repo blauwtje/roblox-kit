@@ -16,9 +16,11 @@ import { findLookIssues, lookIssueKinds } from "./look-lint.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
 import type { HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import {
+  declaredTrimOf,
   heroPropsOf,
   trimMeshesOf,
   type HeroPropRecord,
+  type DeclaredTrimRecord,
   type TrimMeshRecord,
 } from "./hero-prop-placement.ts";
 import { layoutMap, type PartRecord, type Vector } from "./map-layout.ts";
@@ -245,7 +247,7 @@ interface BuildContext {
   /** The hero props the props phase loads from their assets, beside the set pieces left in `props`. */
   heroProps: HeroPropRecord[];
   /** The profile meshes that replace trim boxes, loaded like hero props with the box as their fallback. */
-  trimMeshes: TrimMeshRecord[];
+  trimMeshes: (TrimMeshRecord | DeclaredTrimRecord)[];
   /** Every material name of the build, checked by the shell phase before anything is built. */
   materials: string[];
   /** The style's idle sway of each prop kind the map places, and the server Script source that runs it; absent when none applies. */
@@ -402,6 +404,22 @@ function presetNamed(name: string): Preset {
 }
 
 /** Builds the map phase by phase; `heroSources` says where recorded hero assets are looked up. */
+/** The declared arch and trim meshes first, then a recorded profile mesh for each detail they left. */
+async function trimMeshesWithDeclared(
+  details: DetailPart[],
+  presetName: string,
+  style: Preset,
+  sources: HeroPropSources,
+) {
+  const base = presetNamed(presetName);
+  const declared = await declaredTrimOf(details, { base }, sources);
+  const profiled = await trimMeshesOf(declared.details, { base, style }, sources);
+  return {
+    details: profiled.details,
+    trimMeshes: [...declared.declaredTrim, ...profiled.trimMeshes],
+  };
+}
+
 async function buildMap(
   input: z.output<typeof buildMapInput>,
   context: ToolContext,
@@ -431,10 +449,10 @@ async function buildMap(
           heroSources,
         );
   const { props, heroProps } = heroes;
-  const trim =
+  const trim: { details: DetailPart[]; trimMeshes: (TrimMeshRecord | DeclaredTrimRecord)[] } =
     style === undefined || spec.style === undefined || !input.useRecordedAssets
       ? { details, trimMeshes: [] }
-      : await trimMeshesOf(details, { base: presetNamed(spec.style.preset), style }, heroSources);
+      : await trimMeshesWithDeclared(details, spec.style.preset, style, heroSources);
   const { trimMeshes } = trim;
   const warnings = [...placed.warnings, ...heroes.warnings];
   // Palette issues use the kinds the look lint's own union lacks, so both lists merge into the output's union.
@@ -527,7 +545,7 @@ async function buildMap(
         const fallback = heroProps.find((hero) => hero.assetId === failure.assetId)?.fallback.kind;
         if (fallback === undefined && trimMeshes.some((mesh) => mesh.assetId === failure.assetId)) {
           warnings.push(
-            `Trim mesh ${failure.kind} (asset ${failure.assetId}) failed to load: ${failure.error}; its trim box is built instead.`,
+            `Trim mesh ${failure.kind} (asset ${failure.assetId}) failed to load: ${failure.error}; its kit trim is built instead.`,
           );
           continue;
         }

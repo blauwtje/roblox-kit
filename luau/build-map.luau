@@ -52,6 +52,8 @@ type HeroPropRecord = {
 	-- The set piece built instead when the asset fails to load; a trim mesh has `fallbackPart` (its box) instead.
 	fallback: PropRecord?,
 	fallbackPart: PartRecord?,
+	-- A declared mesh's kit parts (a doorway arch's jambs and lintel), all built when the asset fails to load.
+	fallbackParts: { PartRecord }?,
 	-- Degrees about the mesh's own x axis, applied after the yaw: 180 turns a cornice over, -90 stands a jamb up.
 	roll: number?,
 	-- Studs of bevel of each surface role's mesh; the smallest of its shapes, 0 for a shape with none. Absent: no bevel rule.

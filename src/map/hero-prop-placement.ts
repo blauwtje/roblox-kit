@@ -341,6 +341,104 @@ export interface TrimMeshRecord {
 }
 
 /**
+ * A declared mesh that replaces trim details: one doorway arch (its jambs and lintel as `fallbackParts`) kept at its
+ * modelled size, or one crown or baseboard run (its box as the one fallback part) stretched along the run.
+ * `part` names the MeshPart of the Model to keep; the mesh's own baked look is kept, so it names no surfaces.
+ */
+export interface DeclaredTrimRecord {
+  kind: "arch" | "crown" | "baseboard";
+  assetId: string;
+  pivot: Vector;
+  yaw: number;
+  size: Vector;
+  surfaces: Record<string, never>;
+  fit: "stretch" | "none";
+  part: string;
+  fallbackParts: DetailPart[];
+}
+
+const archPiece = /^(.*-arch-\d+)-(left|right|lintel)$/;
+const bandRun = /-(crown|baseboard)-(?:north|south|east|west)-[^-]*$/;
+
+/** The doorway arches and the crown and baseboard runs the preset's declared meshes replace, as records; the other details stay. */
+export async function declaredTrimOf(
+  details: DetailPart[],
+  preset: { base: Preset },
+  sources: HeroPropSources = {},
+): Promise<{ details: DetailPart[]; declaredTrim: DeclaredTrimRecord[] }> {
+  const targets = Object.entries(preset.base.meshes ?? {}).flatMap(([meshKind, { targets }]) =>
+    targets.map((target) => ({ meshKind, target })),
+  );
+  const assetIds = new Map<string, string | undefined>();
+  const assetOf = async (replaces: string) => {
+    const match = targets.find(({ target }) => target.replaces === replaces);
+    if (match === undefined || match.target.part === undefined) return undefined;
+    if (!assetIds.has(match.meshKind)) {
+      assetIds.set(
+        match.meshKind,
+        (await recordedHeroAsset(preset.base, match.meshKind, sources)).assetId,
+      );
+    }
+    const assetId = assetIds.get(match.meshKind);
+    return assetId === undefined ? undefined : { assetId, part: match.target.part };
+  };
+  const arches = new Map<string, DetailPart[]>();
+  const kept: DetailPart[] = [];
+  const declaredTrim: DeclaredTrimRecord[] = [];
+  const archAsset = await assetOf("arch");
+  for (const detail of details) {
+    const piece = detail.kind === "arch" ? archPiece.exec(detail.name) : null;
+    if (piece?.[1] !== undefined && archAsset !== undefined) {
+      arches.set(piece[1], [...(arches.get(piece[1]) ?? []), detail]);
+      continue;
+    }
+    const band = detail.profile === undefined ? null : bandRun.exec(detail.name);
+    const bandKind = band?.[1] === "crown" || band?.[1] === "baseboard" ? band[1] : undefined;
+    const asset = bandKind === undefined ? undefined : await assetOf(`band:${bandKind}`);
+    if (bandKind === undefined || asset === undefined || detail.profile === undefined) {
+      kept.push(detail);
+      continue;
+    }
+    // The mesh's x runs along the wall and its profile faces local -Z; the profile's yaw turns x out of the wall.
+    declaredTrim.push({
+      kind: bandKind,
+      assetId: asset.assetId,
+      pivot: detail.position,
+      yaw: (detail.profile.yaw + 270) % 360,
+      size: { x: detail.profile.size.z, y: detail.profile.size.y, z: detail.profile.size.x },
+      surfaces: {},
+      fit: "stretch",
+      part: asset.part,
+      fallbackParts: [detail],
+    });
+  }
+  for (const parts of arches.values()) {
+    const [jamb, other] = parts.filter((part) => !part.name.endsWith("-lintel"));
+    if (archAsset === undefined || jamb === undefined || other === undefined) {
+      kept.push(...parts);
+      continue;
+    }
+    // Centered between its jambs at half the wall's height, turned a quarter when the jambs differ in z.
+    declaredTrim.push({
+      kind: "arch",
+      assetId: archAsset.assetId,
+      pivot: {
+        x: (jamb.position.x + other.position.x) / 2,
+        y: jamb.position.y,
+        z: (jamb.position.z + other.position.z) / 2,
+      },
+      yaw: Math.abs(jamb.position.z - other.position.z) > 1e-9 ? 90 : 0,
+      size: jamb.size,
+      surfaces: {},
+      fit: "none",
+      part: archAsset.part,
+      fallbackParts: parts,
+    });
+  }
+  return { details: kept, declaredTrim };
+}
+
+/**
  * Each detail with a profile whose recipe has a recorded asset as a mesh stretched along its run, and the details
  * left as boxes: the others, and every one when its profile has no recorded upload (nothing is uploaded here).
  */

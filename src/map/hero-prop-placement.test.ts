@@ -12,7 +12,9 @@ import { resolveStyle } from "../style/resolve-style.ts";
 import { propsOf } from "./build-map-tool.ts";
 import { readHeroAssets } from "../hero-props/hero-asset-store.ts";
 import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
-import { heroPropsOf } from "./hero-prop-placement.ts";
+import { declaredTrimOf, heroPropsOf } from "./hero-prop-placement.ts";
+import { layoutMap } from "./map-layout.ts";
+import { buildRoomDetails } from "./room-details.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
@@ -465,4 +467,48 @@ await test("the concourse room type no longer lists the departure board as a her
   assert.deepEqual(base.roomTypes?.concourse?.heroProps ?? [], []);
   assert.ok(base.heroProps?.["departure-board"] !== undefined);
   assert.ok(base.meshes?.["departure-board"] !== undefined);
+});
+
+await test("a declared arch-trim mesh replaces each doorway arch and each crown and baseboard run", async () => {
+  const details = buildRoomDetails(spec, layoutMap(spec, base.surfaces).parts, base.surfaces);
+  const arches = details.filter((detail) => detail.kind === "arch");
+  const runs = details.filter((detail) => /-(crown|baseboard)-/.test(detail.name));
+  assert.ok(arches.length > 0 && runs.length > 0);
+
+  const result = await declaredTrimOf(details, { base }, await declaredSources(["arch-trim"]));
+  const archRecords = result.declaredTrim.filter((record) => record.kind === "arch");
+  assert.equal(archRecords.length * 3, arches.length);
+  assert.equal(result.declaredTrim.length, archRecords.length + runs.length);
+  assert.equal(result.details.length, details.length - arches.length - runs.length);
+  for (const record of archRecords) {
+    assert.equal(record.part, "arch");
+    assert.equal(record.fit, "none");
+    assert.equal(record.fallbackParts.length, 3);
+    const lintel = record.fallbackParts.find((part) => part.name.endsWith("-lintel"));
+    assert.ok(lintel !== undefined);
+    assert.ok(
+      Math.abs(record.pivot.x - lintel.position.x) < 1e-9 ||
+        Math.abs(record.pivot.z - lintel.position.z) < 1e-9,
+    );
+    assert.equal(record.pivot.y, record.fallbackParts[0]?.position.y);
+    assert.equal(record.yaw, lintel.size.z > lintel.size.x ? 90 : 0);
+  }
+  for (const record of result.declaredTrim.filter((entry) => entry.kind !== "arch")) {
+    const [run] = record.fallbackParts;
+    assert.ok(run !== undefined && run.profile !== undefined);
+    assert.ok(run.name.includes(`-${record.kind}-`));
+    assert.equal(record.part, record.kind);
+    assert.equal(record.fit, "stretch");
+    assert.deepEqual(record.pivot, run.position);
+    assert.deepEqual(record.size, { x: run.profile.size.z, y: 0.5, z: 0.3 });
+    // The profile faces local -Z; turned by the yaw it must point from the wall into the room.
+    const turn = (record.yaw * Math.PI) / 180;
+    const face = { x: -Math.sin(turn), z: -Math.cos(turn) };
+    const room = spec.rooms.find((candidate) => candidate.name === run.room);
+    assert.ok(room !== undefined);
+    assert.ok((room.x - run.position.x) * face.x + (room.z - run.position.z) * face.z > 0);
+  }
+
+  const none = await declaredTrimOf(details, { base }, await declaredSources([]));
+  assert.deepEqual(none, { details, declaredTrim: [] });
 });
