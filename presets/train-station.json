@@ -98,6 +98,7 @@
     "spacing": 10,
     "drop": 4,
     "lines": 2,
+    "shadowedPendant": true,
     "size": {
       "width": 3,
       "height": 2,
