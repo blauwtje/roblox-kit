@@ -321,7 +321,10 @@ if recipe then
 	local postRecipe = recipe.PostProcessing
 	if postRecipe then
 		for _, post in POST_EFFECTS do
-			writeEffect(effectOrNew(post.className), postRecipe[post.key])
+			local values = postRecipe[post.key]
+			if values then
+				writeEffect(effectOrNew(post.className), values)
+			end
 		end
 	end
 end
