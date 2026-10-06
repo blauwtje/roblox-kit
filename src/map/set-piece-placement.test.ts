@@ -6,6 +6,7 @@ import { layoutMap } from "./map-layout.ts";
 import { mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
 import type { MapSpec } from "./map-spec.ts";
 import { resolveRelations } from "./relation-solver.ts";
+import { detailDimensions } from "./room-details.ts";
 import { propDimensions, propKinds } from "./prop-placement.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
@@ -230,6 +231,67 @@ await test("a departure board and a clock stand free a quarter width from center
   assert.deepEqual(warningsOf(spec), [
     'Room "concourse" already holds 2 standing pieces, so departure-board has no spot left. The departure-board is skipped.',
   ]);
+});
+
+await test("a departure board stands against the south wall west of a south door, facing north, off the wall by the larger depth", async () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "concourse",
+    doorWidth: 6,
+    rooms: [
+      {
+        name: "concourse",
+        roomType: "concourse",
+        x: 0,
+        z: 400,
+        width: 60,
+        depth: 40,
+        doors: [
+          { side: "north", offset: 0 },
+          { side: "south", offset: 10 },
+        ],
+      },
+    ],
+  });
+  const length = propDimensions["departure-board"].x;
+  const archReach = 3 + detailDimensions.archJambWidthStuds - detailDimensions.archLipStuds;
+  const eastEdge = 10 - archReach - propDimensions.clearanceStuds;
+  const southInnerFace = 400 + 20 - 1;
+  const ownDepth = propDimensions["departure-board"].z;
+  const own = placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  const [board] = piecesOf("departure-board", own);
+  assert.ok(board);
+  assert.equal(board.pivot.x, eastEdge - length / 2);
+  assert.ok(Math.abs(board.pivot.z - (southInnerFace - ownDepth / 2)) < 1e-5);
+  assert.equal(board.yaw, northYaw);
+  assert.equal(board.pivot.y, propDimensions["departure-board"].y / 2);
+  const station = (await loadPresets()).get("train-station");
+  const recipe = station?.heroProps?.["departure-board"];
+  assert.ok(recipe !== undefined);
+  const deeperRecipe = { ...recipe, size: { ...recipe.size, depth: 3 } };
+  const deeper = placeSetPieces(spec, roomTypes, accent, 1, [], {}, { board: deeperRecipe });
+  const [wider] = piecesOf("departure-board", deeper.pieces);
+  assert.ok(wider);
+  assert.ok(Math.abs(wider.pivot.z - (southInnerFace - 1.5)) < 1e-5);
+});
+
+await test("a departure board with no space west of its south door is skipped with a warning", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "concourse",
+    doorWidth: 6,
+    rooms: [
+      {
+        name: "concourse",
+        roomType: "concourse",
+        x: 0,
+        z: 0,
+        width: 60,
+        depth: 40,
+        doors: [{ side: "south", offset: -20 }],
+      },
+    ],
+  });
+  assert.deepEqual(piecesOf("departure-board", place(spec)), []);
+  assert.match(warningsOf(spec)[0] ?? "", /is too small for its set piece departure-board/);
 });
 
 await test("a standing piece a narrow room cannot keep out of its doorway strips is skipped", () => {

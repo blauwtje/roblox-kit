@@ -367,6 +367,39 @@ function standingPiece(
   };
 }
 
+/** The deepest recipe among the hero props that replace `kind`, 0 when none does. */
+function heroDepthOf(kind: PropKind, heroProps: Preset["heroProps"]): number {
+  const depths = Object.values(heroProps ?? {})
+    .filter((recipe) => recipe.replaces === kind)
+    .map((recipe) => recipe.size.depth);
+  return Math.max(0, ...depths);
+}
+
+/**
+ * A departure board on the floor against the south wall, west of the room's first south door past its arch
+ * jamb and the clearance gap, looking north into the room. It stands off the wall by half the larger of its
+ * own depth and its hero recipe's, so either fits inside the room. Throws a SetPieceMisfit when the wall
+ * has no space west of the door.
+ */
+function boardBesideSouthDoor(
+  room: RoomSpec,
+  interior: RoomBounds,
+  door: Door,
+  heroDepth: number,
+  seed: number,
+): SetPieceRecord {
+  const kind = "departure-board";
+  const size = propSize(kind, interior.wallHeight);
+  const archReach =
+    interior.doorWidth / 2 + detailDimensions.archJambWidthStuds - detailDimensions.archLipStuds;
+  const along = door.offset - archReach - propDimensions.clearanceStuds - size.x / 2;
+  const reach = wallSpan(interior, "south").length / 2 - cornerReachStuds - size.x / 2;
+  assertFits(room, kind, reach + along);
+  // The extra micrometer keeps the hero board's back face from rounding past the wall in heroFits' exact test.
+  const inset = Math.max(size.z, heroDepth) / 2 + 1e-6;
+  return placed(room, interior, { kind, side: "south", along, inset, size, facing: "north", seed });
+}
+
 function setPiecesOfRoom(
   spec: MapSpec,
   room: RoomSpec,
@@ -375,6 +408,7 @@ function setPiecesOfRoom(
   seed: number,
   clearances: DoorwayClearanceBox[],
   propRules: Preset["propRules"],
+  heroProps: Preset["heroProps"],
 ): SetPiecePlacement {
   const roomType = room.roomType === undefined ? undefined : roomTypes[room.roomType];
   if (roomType === undefined) {
@@ -384,11 +418,20 @@ function setPiecesOfRoom(
   const pieces: SetPieceRecord[] = [];
   const warnings: string[] = [];
   let standingSlot = 0;
+  const southDoor = room.doors.find((door) => door.side === "south");
   for (const name of roomType.setPieces.filter((setPiece) => setPiece !== "sign")) {
     const kind = setPieceKind(room, name);
     try {
       if (kind === "track-bed" || kind === "platform-edge") {
         pieces.push(trackPiece(room, interior, kind, seed, clearances, propRules));
+      } else if (
+        kind === "departure-board" &&
+        southDoor !== undefined &&
+        !pieces.some((piece) => piece.kind === kind)
+      ) {
+        pieces.push(
+          boardBesideSouthDoor(room, interior, southDoor, heroDepthOf(kind, heroProps), seed),
+        );
       } else if (standingKinds.has(kind)) {
         pieces.push(standingPiece(room, interior, kind, standingSlot, seed));
         standingSlot += 1;
@@ -409,12 +452,14 @@ function setPiecesOfRoom(
 
 /**
  * The set pieces that say which place a typed room is: track bed and platform edge run along the longest
- * wall without a door, a departure board and a clock stand free on the room's center line, other pieces stand
+ * wall without a door, a departure board stands against the south wall west of the room's south door (a room
+ * without one, and a second board, stand it free on the room's center line like a clock), other pieces stand
  * against the wall opposite the entry door (the room's first door) looking at it, and every typed room gets a
  * sign at each door. Rooms without a type get none.
  * The track pieces stop short of the `clearances` (doorway clearance boxes of the map); without them a piece may
  * stand in a doorway's path. A `depth` on the track bed's or platform edge's entry in `propRules` sets how far
- * that piece stands from the wall in place of the generator's own depth.
+ * that piece stands from the wall in place of the generator's own depth. `heroProps` (the preset's) gives the
+ * depth of the hero recipe that replaces the departure board, which sets how far the board stands off the wall.
  * A piece its room has no space for is skipped with a warning; a piece with no generator throws.
  */
 export function placeSetPieces(
@@ -424,12 +469,13 @@ export function placeSetPieces(
   seed: number,
   clearances: DoorwayClearanceBox[] = [],
   propRules: Preset["propRules"] = {},
+  heroProps: Preset["heroProps"] = {},
 ): SetPiecePlacement {
   if (roomTypes === undefined) {
     return { pieces: [], warnings: [] };
   }
   const placements = spec.rooms.map((room) =>
-    setPiecesOfRoom(spec, room, roomTypes, accent, seed, clearances, propRules),
+    setPiecesOfRoom(spec, room, roomTypes, accent, seed, clearances, propRules, heroProps),
   );
   return {
     pieces: placements.flatMap((placement) => placement.pieces),

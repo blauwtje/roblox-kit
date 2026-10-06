@@ -14,6 +14,8 @@ import { readHeroAssets } from "../hero-props/hero-asset-store.ts";
 import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import { heroPropsOf } from "./hero-prop-placement.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
+import { placeSetPieces } from "./set-piece-placement.ts";
+import { doorwayClearanceBoxes } from "./size-rules.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
 const presets = await loadPresets();
@@ -321,6 +323,59 @@ await test("a prop kind with no recorded mesh keeps its Luau model, with no warn
   try {
     const result = await heroPropsOf(spec, plainPreset, [turnedBench, lamp], { assetsFile });
     assert.deepEqual(result, { props: [turnedBench, lamp], heroProps: [], warnings: [] });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+await test("the departure board's hero prop stands where the board beside the south door stood, off the wall by its own depth", async () => {
+  const concourse = spec.rooms.find((room) => room.roomType === "concourse");
+  assert.ok(concourse !== undefined);
+  const board = base.heroProps?.["departure-board"];
+  assert.ok(board !== undefined);
+  const roomTypes = Object.fromEntries(
+    Object.entries(base.roomTypes ?? {}).map(([name, roomType]) => [
+      name,
+      { ...roomType, heroProps: roomType.heroProps?.filter((kind) => kind === "departure-board") },
+    ]),
+  );
+  const agent = { radius: base.sizeRules.agentRadius, height: base.sizeRules.agentHeight };
+  const { pieces, warnings } = placeSetPieces(
+    spec,
+    roomTypes,
+    base.palette.accent,
+    1,
+    doorwayClearanceBoxes(spec, agent),
+    base.propRules,
+    base.heroProps,
+  );
+  const piece = pieces.find((candidate) => candidate.kind === "departure-board");
+  assert.ok(piece !== undefined);
+  assert.deepEqual(warnings, []);
+  const boardHash = await heroRecipeHash(base, "departure-board");
+  const directory = await mkdtemp(join(tmpdir(), "hero-board-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  await writeFile(
+    assetsFile,
+    JSON.stringify({ [boardHash]: { kind: "departure-board", assetId: "555" } }),
+  );
+  try {
+    const result = await heroPropsOf(
+      spec,
+      { name: "train-station", base, style: { ...base, roomTypes } },
+      pieces,
+      { assetsFile },
+    );
+    const hero = result.heroProps.find((candidate) => candidate.kind === "departure-board");
+    assert.ok(hero !== undefined, `no hero board; warnings ${JSON.stringify(result.warnings)}`);
+    assert.equal(hero.pivot.x, piece.pivot.x);
+    assert.equal(hero.pivot.z, piece.pivot.z);
+    assert.equal(hero.yaw, piece.yaw);
+    const southInnerFace = concourse.z + concourse.depth / 2 - 1;
+    assert.ok(
+      hero.pivot.z + board.size.depth / 2 <= southInnerFace + 1e-9,
+      "the hero board stays inside the south wall",
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
