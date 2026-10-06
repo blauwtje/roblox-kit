@@ -1,6 +1,6 @@
 {
   "palette": {
-    "colors": ["#1c1f1d", "#3a4340", "#5b6660", "#2b1d1d"],
+    "colors": ["#1c1f1d", "#3a4340", "#5b6660", "#0c0909"],
     "accent": "#b3261e"
   },
   "surfaces": {
@@ -72,7 +72,7 @@
     },
     "ceiling": {
       "material": "Concrete",
-      "color": "#2b1d1d",
+      "color": "#0c0909",
       "texture": {
         "pattern": "concrete",
         "seed": 24,

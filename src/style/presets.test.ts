@@ -6,7 +6,9 @@ import { relationMapSpecSchema } from "../map/map-spec.ts";
 import { resolveRelations } from "../map/relation-solver.ts";
 import { placeSetPieces } from "../map/set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "../map/size-rules.ts";
+import { config } from "../config.ts";
 import { loadPresets } from "./load-preset.ts";
+import { lintPalette, oklabLightness } from "./palette-lint.ts";
 import {
   heroParts,
   roleTexelDensity,
@@ -279,5 +281,36 @@ await test("every shape of every hero prop in every preset has a bevel", async (
         assert.ok(part.shape.bevel !== undefined, `${name} ${kind}: ${part.shape.op} has no bevel`);
       }
     }
+  }
+});
+
+await test("every bundled preset keeps floor, wall, ceiling and trim apart in OKLab lightness and its surfaces in its palette", async () => {
+  const presets = await loadPresets();
+  const roles = ["floor", "wall", "ceiling", "trim"] as const;
+  for (const [name, preset] of presets) {
+    for (const [index, first] of roles.entries()) {
+      for (const second of roles.slice(index + 1)) {
+        const gap = Math.abs(
+          oklabLightness(preset.surfaces[first].color) -
+            oklabLightness(preset.surfaces[second].color),
+        );
+        assert.ok(
+          gap >= config.lookLint.minValueSeparation,
+          `${name} ${first}/${second}: ${gap.toFixed(3)} under ${String(config.lookLint.minValueSeparation)}`,
+        );
+      }
+    }
+    assert.deepEqual(lintPalette(preset), [], name);
+  }
+});
+
+await test("train-station is flat SmoothPlastic with no textures and a saturated palette", async () => {
+  const presets = await loadPresets();
+  const preset = presets.get("train-station");
+  assert.ok(preset !== undefined);
+  for (const [role, surface] of Object.entries(preset.surfaces)) {
+    assert.equal(surface.material, "SmoothPlastic", role);
+    assert.equal(surface.texture, undefined, `${role} texture`);
+    assert.equal(surface.variant, undefined, `${role} variant`);
   }
 });

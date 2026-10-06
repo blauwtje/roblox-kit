@@ -1,6 +1,6 @@
 {
   "palette": {
-    "colors": ["#e8d5b5", "#b98b5e", "#6f8f5a", "#8c4a3c"],
+    "colors": ["#e8d5b5", "#b98b5e", "#5c3329", "#8a6a44"],
     "accent": "#f2b84b"
   },
   "surfaces": {
@@ -14,11 +14,11 @@
     },
     "trim": {
       "material": "Wood",
-      "color": "#8c4a3c"
+      "color": "#5c3329"
     },
     "ceiling": {
       "material": "Wood",
-      "color": "#b98b5e"
+      "color": "#8a6a44"
     },
     "accent": {
       "material": "Fabric",
