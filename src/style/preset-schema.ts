@@ -150,7 +150,8 @@ const studDimensions = z.strictObject({
 
 /**
  * The visible light fixtures repeated in each room. A sconce sits against the walls, `height` studs
- * above the floor; a pendant hangs in a grid, `drop` studs below the ceiling. Both measure to the
+ * above the floor; a pendant hangs in a grid, `drop` studs below the ceiling, or with `lines` in
+ * that many lines along the room's long axis, centered across the short one. Both measure to the
  * fixture's center and repeat every `spacing` studs.
  */
 const lightFixtures = z.discriminatedUnion("kind", [
@@ -164,6 +165,7 @@ const lightFixtures = z.discriminatedUnion("kind", [
     kind: z.literal("pendant"),
     spacing: z.number().positive(),
     drop: z.number().positive(),
+    lines: z.number().int().positive().optional(),
     size: studDimensions,
   }),
 ]);

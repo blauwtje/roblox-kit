@@ -206,6 +206,28 @@ await test("pendants hang in a centered grid the drop below the ceiling", () => 
   assert.equal(Math.min(...xs), -Math.max(...xs));
 });
 
+await test("pendant lines run along the long axis, spacing apart and centered across the short one", () => {
+  const lined = { ...pendants, lines: 2 };
+  const wide = placeLights(
+    spec([{ name: "hall", x: 10, z: 5, width: 42, depth: 30 }]),
+    lightRoles,
+    lined,
+  ).filter((light) => light.fixture !== undefined);
+  assert.deepEqual([...new Set(wide.map((light) => light.position.z - 5))].sort(), [-10, 10]);
+  assert.deepEqual(
+    [...new Set(wide.map((light) => light.position.x - 10))].sort((a, b) => a - b),
+    [-10, 10],
+  );
+  assert.equal(wide.length, 4);
+  const deep = placeLights(
+    spec([{ name: "hall", x: 10, z: 5, width: 30, depth: 62 }]),
+    lightRoles,
+    { ...pendants, lines: 1 },
+  ).filter((light) => light.fixture !== undefined);
+  assert.deepEqual([...new Set(deep.map((light) => light.position.x - 10))], [0]);
+  assert.equal(deep.length, 3);
+});
+
 /** Three 20-stud rooms in a row, joined by doors, the first holding the spawn pad. */
 const corridor = spec([
   {

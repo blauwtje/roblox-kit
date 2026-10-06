@@ -95,15 +95,33 @@ function sconceBoxes(
   return boxes;
 }
 
-/** The pendants of one room: a grid centered on the room, each hanging `drop` studs below the ceiling. */
+/**
+ * The pendants of one room, each hanging `drop` studs below the ceiling: a grid centered on the
+ * room, or with `lines` that many lines along the long axis, `spacing` apart and centered across
+ * the short one. A line that would leave the room is dropped.
+ */
 function pendantBoxes(
   room: RoomSpec,
   bounds: RoomBounds,
   fixtures: Extract<LightFixtures, { kind: "pendant" }>,
 ): FixtureBox[] {
   const { width, height, depth } = fixtures.size;
-  const columns = repeatedOffsets(Math.max(0, bounds.halfWidth - width / 2), fixtures.spacing);
-  const rows = repeatedOffsets(Math.max(0, bounds.halfDepth - depth / 2), fixtures.spacing);
+  const halfWidth = Math.max(0, bounds.halfWidth - width / 2);
+  const halfDepth = Math.max(0, bounds.halfDepth - depth / 2);
+  let columns = repeatedOffsets(halfWidth, fixtures.spacing);
+  let rows = repeatedOffsets(halfDepth, fixtures.spacing);
+  if (fixtures.lines !== undefined) {
+    const lineCount = fixtures.lines;
+    const lineOffsets = Array.from(
+      { length: lineCount },
+      (_, index) => (index - (lineCount - 1) / 2) * fixtures.spacing,
+    );
+    if (bounds.halfWidth >= bounds.halfDepth) {
+      rows = lineOffsets.filter((offset) => Math.abs(offset) <= halfDepth);
+    } else {
+      columns = lineOffsets.filter((offset) => Math.abs(offset) <= halfWidth);
+    }
+  }
   return columns.flatMap((column) =>
     rows.map((row) => ({
       position: { x: room.x + column, y: bounds.wallHeight - fixtures.drop, z: room.z + row },
