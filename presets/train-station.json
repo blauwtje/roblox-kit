@@ -1,20 +1,20 @@
 {
   "palette": {
-    "colors": ["#2c4a7c", "#d9b86c", "#f6f1e3", "#1f7a55"],
-    "accent": "#f2a900"
+    "colors": ["#7d776d", "#dcd5c2", "#4a3b2a", "#f6f1e3"],
+    "accent": "#1c2a44"
   },
   "surfaces": {
     "floor": {
-      "material": "SmoothPlastic",
-      "color": "#2c4a7c"
+      "material": "Marble",
+      "color": "#7d776d"
     },
     "wall": {
-      "material": "SmoothPlastic",
-      "color": "#d9b86c"
+      "material": "CeramicTiles",
+      "color": "#dcd5c2"
     },
     "trim": {
-      "material": "SmoothPlastic",
-      "color": "#1f7a55"
+      "material": "Metal",
+      "color": "#4a3b2a"
     },
     "ceiling": {
       "material": "SmoothPlastic",
@@ -22,7 +22,7 @@
     },
     "accent": {
       "material": "SmoothPlastic",
-      "color": "#f2a900"
+      "color": "#1c2a44"
     }
   },
   "flatSurfaces": true,
@@ -30,15 +30,15 @@
   "lighting": {
     "LightingStyle": "Realistic",
     "PrioritizeLightingQuality": true,
-    "Ambient": "#4a4740",
+    "Ambient": "#2a2824",
     "OutdoorAmbient": "#6b7280",
     "Brightness": 3,
-    "ExposureCompensation": 0,
+    "ExposureCompensation": -0.5,
     "EnvironmentDiffuseScale": 0.6,
-    "EnvironmentSpecularScale": 0.5,
+    "EnvironmentSpecularScale": 0.2,
     "ShadowSoftness": 0.05,
     "Atmosphere": {
-      "Density": 0.25,
+      "Density": 0.1,
       "Offset": 0.1,
       "Color": "#c9c2b4",
       "Decay": "#8a7f70",
@@ -52,8 +52,8 @@
     },
     "PostProcessing": {
       "ColorCorrection": {
-        "Brightness": 0.02,
-        "Contrast": 0.08,
+        "Brightness": 0,
+        "Contrast": 0.2,
         "Saturation": -0.05,
         "TintColor": "#fff4e0"
       },
@@ -277,11 +277,11 @@
   },
   "propSlots": {
     "frame": {
-      "color": "#1f7a55",
-      "material": "SmoothPlastic"
+      "color": "#4a3b2a",
+      "material": "Metal"
     },
     "seat": {
-      "color": "#d9b86c",
+      "color": "#4a3b2a",
       "material": "SmoothPlastic"
     },
     "panel": {
@@ -293,11 +293,11 @@
       "material": "Glass"
     },
     "screen": {
-      "color": "#f2a900",
+      "color": "#f6f1e3",
       "material": "Neon"
     },
     "signage": {
-      "color": "#2c4a7c",
+      "color": "#1c2a44",
       "material": "SmoothPlastic"
     },
     "light": {

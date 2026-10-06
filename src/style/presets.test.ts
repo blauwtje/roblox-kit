@@ -26,6 +26,7 @@ const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-sta
 /** Names in Enum.Material that these presets may use; "built-in Materials only" means no custom ones. */
 const builtInMaterials = new Set([
   "Brick",
+  "CeramicTiles",
   "Concrete",
   "DiamondPlate",
   "Fabric",
@@ -544,12 +545,14 @@ await test("every bundled preset keeps floor, wall, ceiling and trim apart in OK
   }
 });
 
-await test("train-station is flat SmoothPlastic with no textures and a saturated palette", async () => {
+await test("train-station has a Marble floor, CeramicTiles walls, Metal trim and no textures", async () => {
   const presets = await loadPresets();
   const preset = presets.get("train-station");
   assert.ok(preset !== undefined);
+  assert.equal(preset.surfaces.floor.material, "Marble");
+  assert.equal(preset.surfaces.wall.material, "CeramicTiles");
+  assert.equal(preset.surfaces.trim.material, "Metal");
   for (const [role, surface] of Object.entries(preset.surfaces)) {
-    assert.equal(surface.material, "SmoothPlastic", role);
     assert.equal(surface.texture, undefined, `${role} texture`);
     assert.equal(surface.variant, undefined, `${role} variant`);
   }
