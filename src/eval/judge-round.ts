@@ -114,6 +114,21 @@ export interface RoundResult {
   gate?: { passed: boolean; codeScore: number };
 }
 
+/** What one judge round may capture: how many images, each with this long edge in pixels. */
+export interface RoundImageBudget {
+  images: number;
+  longEdge: number;
+}
+
+/** The images a round may capture: the early rounds' smaller set from `config`, the full set from round `maxJudgeRounds` on. */
+export function roundImageBudget(round: number): RoundImageBudget {
+  const early = config.judgeEarlyRounds[round - 1];
+  if (round >= config.maxJudgeRounds || early === undefined) {
+    return { images: config.maxImagesPerCall, longEdge: config.imageLongEdgeMax };
+  }
+  return early;
+}
+
 /** The finding type each quality axis maps to; the type list has no axis of its own for the last three. */
 const axisFindingType: Record<QualityAxis, JudgeFinding["type"]> = {
   palette: "palette",

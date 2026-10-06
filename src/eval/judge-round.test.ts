@@ -6,6 +6,7 @@ import {
   gateOf as gateResultOf,
   judgeFindingSchema,
   judgeRound,
+  roundImageBudget,
   type GateInput,
   type JudgeFinding,
   type JudgeRoundInput,
@@ -283,4 +284,20 @@ await test("the gate fails a code score under the minimum, and a bright capture"
     result.findings.map((found) => found.cites),
     ["luminance histogram"],
   );
+});
+
+await test("early rounds get fewer and smaller images, only the last round the full set", () => {
+  const last = { images: config.maxImagesPerCall, longEdge: config.imageLongEdgeMax };
+  assert.equal(config.judgeEarlyRounds.length, config.maxJudgeRounds - 1);
+  let previous = { images: 0, longEdge: 0 };
+  for (let round = 1; round < config.maxJudgeRounds; round += 1) {
+    const budget = roundImageBudget(round);
+    assert.ok(budget.images < last.images, `round ${String(round)} images`);
+    assert.ok(budget.longEdge < last.longEdge, `round ${String(round)} long edge`);
+    assert.ok(budget.longEdge >= config.imageLongEdgeMin, `round ${String(round)} capture bound`);
+    assert.ok(budget.images >= previous.images && budget.longEdge >= previous.longEdge);
+    previous = budget;
+  }
+  assert.deepEqual(roundImageBudget(config.maxJudgeRounds), last);
+  assert.deepEqual(roundImageBudget(config.maxJudgeRounds + 1), last);
 });

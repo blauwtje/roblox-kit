@@ -125,6 +125,14 @@ export const config = Object.freeze({
   qualityReviewTimeoutMs: 420_000,
   /** Rounds of one visual-judge loop; `judge_round` reports `round-limit` from this round on. */
   maxJudgeRounds: 3,
+  /**
+   * Images and long edge (pixels) a judge round may use, for rounds 1 up to `maxJudgeRounds - 1`; the last round
+   * uses `maxImagesPerCall` images at `imageLongEdgeMax`. Each long edge stays within the capture bounds.
+   */
+  judgeEarlyRounds: [
+    { images: 4, longEdge: 1000 },
+    { images: 6, longEdge: 1280 },
+  ],
   /** Where `judge_round` appends one line per round, under the project folder. */
   judgeLogFile: ".roblox-kit/judge-log.jsonl",
   /** The code score (`codeScoreOf`) under which the deterministic gate fails a round before any reviewer runs. */
