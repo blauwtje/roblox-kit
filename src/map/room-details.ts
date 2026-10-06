@@ -245,7 +245,7 @@ const corners: Corner[] = [
 ];
 
 /** How far along a wall a doorway's arch reaches on each side of the door center. */
-function archReach(measure: RoomMeasure): number {
+export function archReach(measure: Pick<RoomMeasure, "doorWidth">): number {
   return (
     measure.doorWidth / 2 + detailDimensions.archJambWidthStuds - detailDimensions.archLipStuds
   );

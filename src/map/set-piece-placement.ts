@@ -1,4 +1,4 @@
-import { detailDimensions } from "./room-details.ts";
+import { archReach, detailDimensions } from "./room-details.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import {
@@ -390,9 +390,7 @@ function boardBesideSouthDoor(
 ): SetPieceRecord {
   const kind = "departure-board";
   const size = propSize(kind, interior.wallHeight);
-  const archReach =
-    interior.doorWidth / 2 + detailDimensions.archJambWidthStuds - detailDimensions.archLipStuds;
-  const along = door.offset - archReach - propDimensions.clearanceStuds - size.x / 2;
+  const along = door.offset - archReach(interior) - propDimensions.clearanceStuds - size.x / 2;
   const reach = wallSpan(interior, "south").length / 2 - cornerReachStuds - size.x / 2;
   assertFits(room, kind, reach + along);
   // The extra micrometer keeps the hero board's back face from rounding past the wall in heroFits' exact test.
