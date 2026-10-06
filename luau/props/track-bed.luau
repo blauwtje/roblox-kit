@@ -2,6 +2,8 @@
 -- ProceduralModel generator source for a railway track bed: a ballast bed with two steel rails on sleepers.
 -- Params.Size is (length, height, width); the rails run along X and the output stays inside Size.
 -- The sleeper spacing varies slightly per Seed so repeated track beds do not look stamped.
+-- The ballast, sleepers and rails take the `panel`, `seat` and `frame` slots, read as `<Slot>Color` and
+-- `<Slot>Material` attributes.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -18,18 +20,19 @@ local RAIL_WIDTH = 0.25
 local RAIL_GAUGE_RATIO = 0.5
 local MINIMUM_SLEEPER_SPACING = 1.6
 local MAXIMUM_SLEEPER_SPACING = 2.2
-local BALLAST_COLOR = Color3.fromRGB(96, 92, 88)
-local SLEEPER_COLOR = Color3.fromRGB(79, 56, 38)
-local RAIL_COLOR = Color3.fromRGB(150, 152, 158)
 
-local function addPart(
-	targetContainer: Instance,
-	name: string,
-	size: Vector3,
-	position: Vector3,
-	color: Color3,
-	material: Enum.Material
-): Part
+type Look = { Color: Color3, Material: Enum.Material }
+
+local DEFAULT_COLOR = Instance.new("Part").Color
+local DEFAULT_MATERIAL = "Plastic"
+
+-- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
+local function slotLook(attributes: { [string]: any }, slot: string): Look
+	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
+	return { Color = attributes[`{slot}Color`], Material = material }
+end
+
+local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Anchored = true
@@ -37,20 +40,31 @@ local function addPart(
 	part.CanTouch = false
 	part.CanQuery = false
 	part.Size = size
-	part.Color = color
-	part.Material = material
+	part.Color = look.Color
+	part.Material = look.Material
 	part.CFrame = CFrame.new(position)
 	part.Parent = targetContainer
 	return part
 end
 
 local Generator = {}
-Generator.Attributes = { Seed = 0 }
+Generator.Attributes = {
+	Seed = 0,
+	PanelColor = DEFAULT_COLOR,
+	PanelMaterial = DEFAULT_MATERIAL,
+	SeatColor = DEFAULT_COLOR,
+	SeatMaterial = DEFAULT_MATERIAL,
+	FrameColor = DEFAULT_COLOR,
+	FrameMaterial = DEFAULT_MATERIAL,
+}
 
 function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance)
 	local size = params.Size
 	local random = Random.new(params.Attributes.Seed)
 	local bottom = -size.Y / 2
+	local ballast = slotLook(params.Attributes, "Panel")
+	local sleeper = slotLook(params.Attributes, "Seat")
+	local steel = slotLook(params.Attributes, "Frame")
 	local ballastHeight = size.Y * BALLAST_HEIGHT_RATIO
 	local sleeperHeight = size.Y * SLEEPER_HEIGHT_RATIO
 	local railHeight = size.Y * RAIL_HEIGHT_RATIO
@@ -62,8 +76,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		"Ballast",
 		Vector3.new(size.X, ballastHeight, size.Z),
 		Vector3.new(0, bottom + ballastHeight / 2, 0),
-		BALLAST_COLOR,
-		Enum.Material.Pebble
+		ballast
 	)
 
 	local spacing = random:NextNumber(MINIMUM_SLEEPER_SPACING, MAXIMUM_SLEEPER_SPACING)
@@ -78,8 +91,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 				sleeperTop - sleeperHeight / 2,
 				0
 			),
-			SLEEPER_COLOR,
-			Enum.Material.Wood
+			sleeper
 		)
 	end
 
@@ -89,8 +101,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			side < 0 and "RailLeft" or "RailRight",
 			Vector3.new(size.X, railHeight, RAIL_WIDTH),
 			Vector3.new(0, sleeperTop + railHeight / 2, side * gauge / 2),
-			RAIL_COLOR,
-			Enum.Material.Metal
+			steel
 		)
 	end
 	params:Pause()

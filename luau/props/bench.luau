@@ -2,6 +2,7 @@
 -- ProceduralModel generator source for a bench: a slatted seat on two side frames, plus a backrest.
 -- Params.Size is (length, height, depth); the output is centered on the pivot and stays inside Size.
 -- Slat thickness varies slightly per Seed so repeated benches do not look stamped.
+-- Colors and materials come from the `frame` and `seat` slot, read as `<Slot>Color` and `<Slot>Material` attributes.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -17,7 +18,18 @@ local BACKREST_DEPTH = 0.2
 local BACKREST_HEIGHT_RATIO = 0.4
 local MINIMUM_SLAT_THICKNESS_RATIO = 0.85
 
-local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3): Part
+type Look = { Color: Color3, Material: Enum.Material }
+
+local DEFAULT_COLOR = Instance.new("Part").Color
+local DEFAULT_MATERIAL = "Plastic"
+
+-- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
+local function slotLook(attributes: { [string]: any }, slot: string): Look
+	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
+	return { Color = attributes[`{slot}Color`], Material = material }
+end
+
+local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Anchored = true
@@ -25,29 +37,22 @@ local function addPart(targetContainer: Instance, name: string, size: Vector3, p
 	part.CanTouch = false
 	part.CanQuery = false
 	part.Size = size
+	part.Color = look.Color
+	part.Material = look.Material
 	part.CFrame = CFrame.new(position)
 	part.Parent = targetContainer
 	return part
 end
 
-local DEFAULT_SURFACE_COLOR = Color3.fromRGB(163, 162, 165)
-local DEFAULT_SURFACE_MATERIAL = "Plastic"
-
--- Gives every part the preset surface role's color and material; the defaults are a new Part's own look.
-local function paintParts(targetContainer: Instance, attributes: { [string]: any })
-	local color: Color3 = attributes.SurfaceColor
-	local material = Enum.Material:FromName(attributes.SurfaceMaterial) :: Enum.Material
-	for _, child in targetContainer:GetChildren() do
-		if child:IsA("BasePart") then
-			child.Color = color
-			child.Material = material
-		end
-	end
-end
-
 local Generator = {}
-Generator.Attributes =
-	{ Seed = 0, Slats = 4, SurfaceColor = DEFAULT_SURFACE_COLOR, SurfaceMaterial = DEFAULT_SURFACE_MATERIAL }
+Generator.Attributes = {
+	Seed = 0,
+	Slats = 4,
+	FrameColor = DEFAULT_COLOR,
+	FrameMaterial = DEFAULT_MATERIAL,
+	SeatColor = DEFAULT_COLOR,
+	SeatMaterial = DEFAULT_MATERIAL,
+}
 
 function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance)
 	local size = params.Size
@@ -58,6 +63,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local usableDepth = size.Z - BACKREST_DEPTH
 	local slatDepth = (usableDepth - SLAT_GAP * (slatCount - 1)) / slatCount
 	local frontZ = -size.Z / 2
+	local frame = slotLook(params.Attributes, "Frame")
+	local seat = slotLook(params.Attributes, "Seat")
 
 	for index = 1, slatCount do
 		local thickness = seatThickness * random:NextNumber(MINIMUM_SLAT_THICKNESS_RATIO, 1)
@@ -66,7 +73,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			targetContainer,
 			"Slat" .. index,
 			Vector3.new(size.X, thickness, slatDepth),
-			Vector3.new(0, seatTop - thickness / 2, centerZ)
+			Vector3.new(0, seatTop - thickness / 2, centerZ),
+			seat
 		)
 	end
 
@@ -76,7 +84,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			targetContainer,
 			side < 0 and "FrameLeft" or "FrameRight",
 			Vector3.new(FRAME_WIDTH, frameHeight, usableDepth),
-			Vector3.new(side * (size.X / 2 - FRAME_WIDTH / 2), -size.Y / 2 + frameHeight / 2, frontZ + usableDepth / 2)
+			Vector3.new(side * (size.X / 2 - FRAME_WIDTH / 2), -size.Y / 2 + frameHeight / 2, frontZ + usableDepth / 2),
+			frame
 		)
 	end
 
@@ -85,9 +94,9 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		targetContainer,
 		"Backrest",
 		Vector3.new(size.X, backrestHeight, BACKREST_DEPTH),
-		Vector3.new(0, seatTop + backrestHeight / 2, size.Z / 2 - BACKREST_DEPTH / 2)
+		Vector3.new(0, seatTop + backrestHeight / 2, size.Z / 2 - BACKREST_DEPTH / 2),
+		seat
 	)
-	paintParts(targetContainer, params.Attributes)
 	params:Pause()
 end
 

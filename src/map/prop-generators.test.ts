@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-/** The train-station prop kinds whose generators read their colors and materials from preset prop slots. */
+/** The prop kinds whose generators read their colors and materials from preset prop slots. */
 const slotKinds = [
   "ticket-machine",
   "ticket-counter",
@@ -10,6 +10,12 @@ const slotKinds = [
   "platform-edge",
   "sign",
   "departure-board",
+  "bench",
+  "pillar",
+  "lamp",
+  "rail",
+  "stairs",
+  "track-bed",
 ];
 
 /** A color built from numbers or a hex string, a BrickColor, or the Neon material: a look a preset slot must decide. */
