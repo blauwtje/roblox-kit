@@ -67,27 +67,38 @@ function isOnGrid(yaw: number): boolean {
   return Math.min(remainder, GRID_DEGREES - remainder) <= GRID_TOLERANCE_DEGREES;
 }
 
+type Axis = "height" | "width" | "depth";
+
+const axisSizes: Record<Axis, (size: PropRecord["size"]) => number> = {
+  height: (size) => size.y,
+  width: (size) => size.x,
+  depth: (size) => size.z,
+};
+
 function scaleIssue(
   prop: PropRecord,
-  heightRatio: { min: number; max: number },
+  axis: Axis,
+  ratioRange: { min: number; max: number },
   avatarHeight: { min: number; max: number },
 ): CheckIssue | undefined {
-  // Out of bounds against the shortest avatar is too tall, against the tallest too short.
-  const tallestRatio = prop.size.y / avatarHeight.min;
-  const shortestRatio = prop.size.y / avatarHeight.max;
-  const tooTall = tallestRatio > heightRatio.max;
-  if (!tooTall && shortestRatio >= heightRatio.min) {
+  const studs = axisSizes[axis](prop.size);
+  // Out of bounds against the shortest avatar is too large, against the tallest too small.
+  const largestRatio = studs / avatarHeight.min;
+  const smallestRatio = studs / avatarHeight.max;
+  const tooLarge = largestRatio > ratioRange.max;
+  if (!tooLarge && smallestRatio >= ratioRange.min) {
     return undefined;
   }
-  const limit = tooTall
-    ? `over ${String(heightRatio.max)} of a ${String(avatarHeight.min)}-stud avatar`
-    : `under ${String(heightRatio.min)} of a ${String(avatarHeight.max)}-stud avatar`;
-  const ratio = tooTall ? tallestRatio : shortestRatio;
+  const limit = tooLarge
+    ? `over ${String(ratioRange.max)} of a ${String(avatarHeight.min)}-stud avatar`
+    : `under ${String(ratioRange.min)} of a ${String(avatarHeight.max)}-stud avatar`;
+  const ratio = tooLarge ? largestRatio : smallestRatio;
+  const description = { height: "tall", width: "wide", depth: "deep" }[axis];
   return {
     kind: "scale",
     parts: [prop.path],
     position: prop.position,
-    detail: `${prop.kind} is ${String(prop.size.y)} studs tall, ${String(Math.round(ratio * 100) / 100)} of the avatar's height, ${limit}.`,
+    detail: `${prop.kind} is ${String(studs)} studs ${description}, ${String(Math.round(ratio * 100) / 100)} of the avatar's height, ${limit}.`,
   };
 }
 
@@ -106,7 +117,7 @@ function rotationIssue(prop: PropRecord): CheckIssue | undefined {
   };
 }
 
-/** The scale and rotation issues of props against the preset's rules; a kind without a rule is not checked. */
+/** The scale (height, width and depth) and rotation issues of props against the preset's rules; a kind without a rule is not checked. */
 export function findPropIssues(props: PropRecord[], preset: Preset): CheckIssue[] {
   const issues: CheckIssue[] = [];
   for (const prop of props) {
@@ -114,12 +125,14 @@ export function findPropIssues(props: PropRecord[], preset: Preset): CheckIssue[
     if (rule === undefined) {
       continue;
     }
-    const scale =
-      rule.heightRatio === undefined
+    const scales = (["height", "width", "depth"] as const).map((axis) => {
+      const ratioRange = rule[`${axis}Ratio`];
+      return ratioRange === undefined
         ? undefined
-        : scaleIssue(prop, rule.heightRatio, preset.sizeRules.avatarHeight);
+        : scaleIssue(prop, axis, ratioRange, preset.sizeRules.avatarHeight);
+    });
     const rotation = rule.freeRotation ? undefined : rotationIssue(prop);
-    for (const issue of [scale, rotation]) {
+    for (const issue of [...scales, rotation]) {
       if (issue !== undefined) {
         issues.push(issue);
       }

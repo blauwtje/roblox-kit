@@ -108,6 +108,14 @@
         "min": 0.34,
         "max": 0.75
       },
+      "widthRatio": {
+        "min": 0.69,
+        "max": 1.5
+      },
+      "depthRatio": {
+        "min": 0.28,
+        "max": 0.63
+      },
       "freeRotation": false,
       "surface": "trim"
     },
@@ -116,10 +124,30 @@
         "min": 1.03,
         "max": 2.25
       },
+      "widthRatio": {
+        "min": 0.17,
+        "max": 0.38
+      },
+      "depthRatio": {
+        "min": 0.17,
+        "max": 0.38
+      },
       "freeRotation": false,
       "surface": "accent"
     },
     "pillar": {
+      "heightRatio": {
+        "min": 1.84,
+        "max": 6
+      },
+      "widthRatio": {
+        "min": 0.23,
+        "max": 0.75
+      },
+      "depthRatio": {
+        "min": 0.23,
+        "max": 0.75
+      },
       "freeRotation": false,
       "surface": "wall"
     },
@@ -127,6 +155,14 @@
       "heightRatio": {
         "min": 0.34,
         "max": 0.75
+      },
+      "widthRatio": {
+        "min": 0.69,
+        "max": 1.5
+      },
+      "depthRatio": {
+        "min": 0.46,
+        "max": 1
       },
       "freeRotation": false,
       "surface": "exempt"
@@ -136,6 +172,14 @@
         "min": 0.34,
         "max": 0.75
       },
+      "widthRatio": {
+        "min": 0.92,
+        "max": 2
+      },
+      "depthRatio": {
+        "min": 0.05,
+        "max": 0.13
+      },
       "freeRotation": false,
       "surface": "trim"
     },
@@ -144,6 +188,14 @@
         "min": 1.15,
         "max": 2.5
       },
+      "widthRatio": {
+        "min": 1.38,
+        "max": 3
+      },
+      "depthRatio": {
+        "min": 0.11,
+        "max": 0.25
+      },
       "freeRotation": false,
       "surface": "exempt"
     },
@@ -151,6 +203,14 @@
       "heightRatio": {
         "min": 1.26,
         "max": 2.75
+      },
+      "widthRatio": {
+        "min": 0.57,
+        "max": 1.25
+      },
+      "depthRatio": {
+        "min": 0.13,
+        "max": 0.3
       },
       "freeRotation": false,
       "surface": "exempt"
@@ -167,6 +227,14 @@
         "min": 0.11,
         "max": 0.25
       },
+      "widthRatio": {
+        "min": 1.84,
+        "max": 4
+      },
+      "depthRatio": {
+        "min": 0.57,
+        "max": 1.25
+      },
       "freeRotation": false,
       "depth": 10,
       "surface": "exempt"
@@ -176,6 +244,14 @@
         "min": 0.05,
         "max": 0.13
       },
+      "widthRatio": {
+        "min": 1.84,
+        "max": 4
+      },
+      "depthRatio": {
+        "min": 0.23,
+        "max": 0.5
+      },
       "freeRotation": false,
       "surface": "exempt"
     },
@@ -183,6 +259,14 @@
       "heightRatio": {
         "min": 0.92,
         "max": 2
+      },
+      "widthRatio": {
+        "min": 1.61,
+        "max": 3.5
+      },
+      "depthRatio": {
+        "min": 0.34,
+        "max": 0.75
       },
       "freeRotation": false,
       "surface": "exempt"

@@ -276,10 +276,14 @@ const numberRange = z
   .strictObject({ min: z.number().positive(), max: z.number().positive() })
   .refine((range) => range.min <= range.max, "min must not exceed max");
 
-/** What a prop kind may look like: its height as a share of the avatar's, and whether it may stand at any yaw. */
+/** What a prop kind may look like: its height, width and depth as shares of the avatar's, and whether it may stand at any yaw. */
 const propRule = z.strictObject({
-  /** Prop height divided by avatar height; absent when the room's wall height sets the prop's height. */
+  /** Prop height divided by avatar height; `presetSchema` requires it for every `propKit` and `setPieces` kind. */
   heightRatio: numberRange.optional(),
+  /** Prop width (along its wall) divided by avatar height; required like `heightRatio`. */
+  widthRatio: numberRange.optional(),
+  /** Prop depth (away from its wall) divided by avatar height; required like `heightRatio`. */
+  depthRatio: numberRange.optional(),
   /** False keeps the prop square to its wall or row, on the 90-degree grid. */
   freeRotation: z.boolean(),
   /**
@@ -534,6 +538,15 @@ export const presetSchema = z
       for (const kind of roomType.setPieces) kinds.add(kind);
     }
     for (const kind of kinds) {
+      for (const ratio of ["heightRatio", "widthRatio", "depthRatio"] as const) {
+        if (preset.propRules[kind]?.[ratio] === undefined) {
+          context.addIssue({
+            code: "custom",
+            path: ["propRules", kind, ratio],
+            message: `Prop kind "${kind}" is in the prop kit or a room type's set pieces and needs a ${ratio}`,
+          });
+        }
+      }
       if (preset.propRules[kind]?.surface === undefined) {
         context.addIssue({
           code: "custom",

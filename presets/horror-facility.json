@@ -166,6 +166,18 @@
   "propKit": ["pillar", "lamp", "stairs"],
   "propRules": {
     "pillar": {
+      "heightRatio": {
+        "min": 1.38,
+        "max": 6
+      },
+      "widthRatio": {
+        "min": 0.17,
+        "max": 0.75
+      },
+      "depthRatio": {
+        "min": 0.17,
+        "max": 0.75
+      },
       "freeRotation": false,
       "surface": "exempt"
     },
@@ -173,6 +185,14 @@
       "heightRatio": {
         "min": 1.03,
         "max": 2.25
+      },
+      "widthRatio": {
+        "min": 0.17,
+        "max": 0.38
+      },
+      "depthRatio": {
+        "min": 0.17,
+        "max": 0.38
       },
       "freeRotation": false,
       "surface": "exempt"
@@ -182,6 +202,14 @@
         "min": 0.34,
         "max": 0.75
       },
+      "widthRatio": {
+        "min": 0.69,
+        "max": 1.5
+      },
+      "depthRatio": {
+        "min": 0.46,
+        "max": 1
+      },
       "freeRotation": false,
       "surface": "exempt"
     },
@@ -190,6 +218,14 @@
         "min": 0.36,
         "max": 0.8
       },
+      "widthRatio": {
+        "min": 0.8,
+        "max": 1.75
+      },
+      "depthRatio": {
+        "min": 0.28,
+        "max": 0.63
+      },
       "freeRotation": false,
       "surface": "exempt"
     },
@@ -197,6 +233,14 @@
       "heightRatio": {
         "min": 1.03,
         "max": 2.25
+      },
+      "widthRatio": {
+        "min": 0.92,
+        "max": 2
+      },
+      "depthRatio": {
+        "min": 0.05,
+        "max": 0.13
       },
       "freeRotation": false,
       "surface": "exempt"
