@@ -1922,7 +1922,6 @@
   "roomTypes": {
     "concourse": {
       "setPieces": ["bench", "departure-board", "clock"],
-      "heroProps": ["departure-board"],
       "arrangements": [
         {
           "shape": "bank",

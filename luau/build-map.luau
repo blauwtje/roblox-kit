@@ -56,8 +56,13 @@ type HeroPropRecord = {
 	roll: number?,
 	-- Studs of bevel of each surface role's mesh; the smallest of its shapes, 0 for a shape with none. Absent: no bevel rule.
 	bevels: { [string]: number }?,
-	-- "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, not evenly to `size.x`.
+	-- "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, not evenly to `size.x`;
+	-- "none" (a declared mesh) keeps its modelled size.
 	fit: string?,
+	-- With fit "none": whether `pivot` is the mesh's "bottom" centre or its box "center" (the default).
+	anchor: string?,
+	-- The one MeshPart of the asset to keep; the others are removed. Absent keeps them all.
+	part: string?,
 }
 
 type HeroLoadFailure = { kind: string, assetId: string, error: string }
@@ -627,13 +632,28 @@ local function addHeroProps(
 			continue
 		end
 		local hero = heroOrError :: Model
+		if record.part then
+			local kept = false
+			for _, descendant in hero:GetDescendants() do
+				if descendant:IsA("MeshPart") then
+					if descendant.Name == record.part then
+						kept = true
+					else
+						descendant:Destroy()
+					end
+				end
+			end
+			if not kept then
+				error(`Hero prop {record.kind} (asset {record.assetId}) has no MeshPart named "{record.part}".`, 0)
+			end
+		end
 		local _, extents = hero:GetBoundingBox()
 		if extents.X <= 0 then
 			error(`Hero prop {record.kind} (asset {record.assetId}) has no width to scale.`, 0)
 		end
 		if record.fit == "stretch" then
 			stretchHero(hero, extents, record)
-		else
+		elseif record.fit ~= "none" then
 			hero:ScaleTo(hero:GetScale() * record.size.x / extents.X)
 		end
 		for _, descendant in hero:GetDescendants() do
@@ -645,14 +665,19 @@ local function addHeroProps(
 				if descendant:IsA("MeshPart") then
 					descendant.RenderFidelity = Enum.RenderFidelity.Automatic
 					descendant.CollisionFidelity = Enum.CollisionFidelity.Box
-					paintHeroPart(descendant, record)
+					-- A declared mesh names no surfaces: its baked SurfaceAppearance is its look.
+					if next(record.surfaces) ~= nil then
+						paintHeroPart(descendant, record)
+					end
 				end
 			end
 		end
-		local center = hero:GetBoundingBox()
+		local center, size = hero:GetBoundingBox()
 		hero.WorldPivot = CFrame.new(center.Position)
+		-- A bottom anchor stands the mesh on the pivot: its box center is half its height above.
+		local lift = if record.anchor == "bottom" then Vector3.new(0, size.Y / 2, 0) else Vector3.zero
 		hero:PivotTo(
-			CFrame.new(toVector3(record.pivot))
+			CFrame.new(toVector3(record.pivot) + lift)
 				* CFrame.Angles(0, math.rad(record.yaw), 0)
 				* CFrame.Angles(math.rad(record.roll or 0), 0, 0)
 		)

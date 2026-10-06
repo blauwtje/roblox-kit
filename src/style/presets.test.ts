@@ -162,7 +162,7 @@ await test("the concourse's departure board replaces its departure-board set pie
   const board = preset.heroProps?.["departure-board"];
   assert.ok(board !== undefined);
   assert.equal(board.replaces, "departure-board");
-  assert.deepEqual(preset.roomTypes?.["concourse"]?.heroProps, ["departure-board"]);
+  assert.equal(preset.roomTypes?.["concourse"]?.heroProps, undefined);
   const setPiece = setPieces.find((piece) => piece.kind === "departure-board");
   assert.ok(setPiece !== undefined);
   assert.ok(board.size.width <= setPiece.size.x, `board ${String(board.size.width)} studs wide`);

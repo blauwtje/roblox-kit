@@ -380,3 +380,89 @@ await test("the departure board's hero prop stands where the board beside the so
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+const declaredBase: Preset = base;
+
+/** A temporary hero-assets.json recording `kinds` of the preset's declared meshes, the nth as asset "<n+1>00". */
+async function declaredSources(kinds: string[]): Promise<HeroPropSources> {
+  const directory = await mkdtemp(join(tmpdir(), "declared-mesh-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  const assets: Record<string, { kind: string; assetId: string }> = {};
+  for (const [index, kind] of kinds.entries()) {
+    assets[await heroRecipeHash(declaredBase, kind)] = { kind, assetId: `${String(index + 1)}00` };
+  }
+  await writeFile(assetsFile, JSON.stringify(assets));
+  return { assetsFile };
+}
+
+const ticketMachine = {
+  kind: "ticket-machine" as const,
+  pivot: { x: 4, y: 3, z: 8 },
+  size: { x: 3, y: 6, z: 2 },
+  yaw: 90,
+  seed: 6,
+};
+const clock = {
+  kind: "clock" as const,
+  pivot: { x: 2, y: 12, z: 1 },
+  size: { x: 3, y: 3, z: 0.5 },
+  seed: 7,
+};
+const concourseSign = {
+  kind: "sign" as const,
+  pivot: { x: 1, y: 10, z: 1 },
+  size: { x: 6, y: 2, z: 0.4 },
+  seed: 8,
+  attributes: { Label: "CONCOURSE" },
+};
+const platformSign = { ...concourseSign, attributes: { Label: "PLATFORM 1" } };
+
+await test("a declared mesh replaces its piece at the piece's anchor, unscaled, with the target's extra turn", async () => {
+  const sources = await declaredSources(["ticket-machine", "clock", "sign"]);
+  const props = [ticketMachine, clock, concourseSign, platformSign, lamp];
+  const result = await heroPropsOf(spec, plainPreset, props, sources);
+  assert.deepEqual(result.props, [platformSign, lamp]);
+  assert.deepEqual(result.warnings, []);
+  const [machine, face, sign] = result.heroProps;
+  assert.equal(result.heroProps.length, 3);
+  assert.ok(machine !== undefined && face !== undefined && sign !== undefined);
+  assert.equal(machine.assetId, "100");
+  assert.equal(machine.fit, "none");
+  assert.equal(machine.anchor, "bottom");
+  assert.deepEqual(machine.pivot, { x: 4, y: 0, z: 8 });
+  assert.equal(machine.yaw, 270);
+  assert.equal(machine.part, undefined);
+  assert.equal(machine.fallback, ticketMachine);
+  assert.equal(face.anchor, "center");
+  assert.deepEqual(face.pivot, clock.pivot);
+  assert.equal(face.yaw, 0);
+  assert.equal(sign.fallback, concourseSign);
+});
+
+await test("a declared mesh wins over the prop kind's recipe, and a mesh with no recorded asset leaves the piece", async () => {
+  const benchHash = await heroRecipeHash(base, "prop-bench");
+  const directory = await mkdtemp(join(tmpdir(), "declared-wins-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  await writeFile(
+    assetsFile,
+    JSON.stringify({
+      [await heroRecipeHash(base, "bench")]: { kind: "bench", assetId: "100" },
+      [benchHash]: { kind: "prop-bench", assetId: "777" },
+    }),
+  );
+  const both = await heroPropsOf(spec, plainPreset, [turnedBench], { assetsFile });
+  assert.deepEqual(
+    both.heroProps.map(({ assetId, fit }) => ({ assetId, fit })),
+    [{ assetId: "100", fit: "none" }],
+  );
+  assert.deepEqual(both.props, []);
+  const none = await declaredSources([]);
+  const kept = await heroPropsOf(spec, plainPreset, [turnedBench, clock], none);
+  assert.deepEqual(kept, { props: [turnedBench, clock], heroProps: [], warnings: [] });
+});
+
+await test("the concourse room type no longer lists the departure board as a hero prop", () => {
+  assert.deepEqual(base.roomTypes?.concourse?.heroProps ?? [], []);
+  assert.ok(base.heroProps?.["departure-board"] !== undefined);
+  assert.ok(base.meshes?.["departure-board"] !== undefined);
+});

@@ -5,7 +5,7 @@ import {
   trimRecipeKind,
   type TrimProfileKind,
 } from "../hero-props/prop-recipes.ts";
-import { heroParts, type Preset } from "../style/preset-schema.ts";
+import { heroParts, type MeshDeclaration, type Preset } from "../style/preset-schema.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import type { DetailPart } from "./room-details.ts";
@@ -24,7 +24,9 @@ type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, strin
  * the replaced piece's turn about Y, and `surfaces` the color and material of each role a MeshPart is named after.
  * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load.
  * `bevels` is the bevel in studs of each role's mesh (the smallest of its shapes, 0 when a shape has none), which `build-map.luau` sets on the MeshPart for `check_map`.
- * `fit` "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, in place of scaling it evenly to `size.x`.
+ * `fit` "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, in place of scaling it evenly to `size.x`;
+ * "none" (a declared mesh) keeps the asset's modelled size, and then `anchor` says what `pivot` is: the
+ * mesh's bottom centre ("bottom") or its box centre ("center"), and `part` names the one MeshPart to keep.
  */
 export interface HeroPropRecord {
   kind: string;
@@ -35,7 +37,9 @@ export interface HeroPropRecord {
   surfaces: Record<string, { color: string; material: string }>;
   bevels: Record<string, number>;
   fallback: PlacedProp;
-  fit?: "stretch";
+  fit?: "stretch" | "none";
+  anchor?: "bottom" | "center";
+  part?: string;
 }
 
 /** The preset, the style resolved from it, and the preset's name, which names the generated folders. */
@@ -162,6 +166,7 @@ function heroRecord(
  * uploaded. A hero prop whose recipe hash has no recorded asset leaves its set piece in place, with a warning
  * saying to generate and upload it from a clone of the roblox-kit repo. A room with no such set piece
  * gets a warning and no hero prop, and so does one whose hero prop would reach through a wall or into a doorway.
+ * A prop a declared mesh (the preset's `meshes`) replaces becomes that mesh first, so no hero prop sees it.
  * Then every remaining prop whose kind's `prop-<kind>` recipe has a recorded asset becomes that mesh, stretched to
  * the prop's box; a kind with no recorded asset keeps its Luau model, with no warning.
  */
@@ -172,6 +177,8 @@ export async function heroPropsOf<Prop extends PlacedProp>(
   sources: HeroPropSources = {},
 ): Promise<{ props: Prop[]; heroProps: HeroPropRecord[]; warnings: string[] }> {
   const { style } = preset;
+  const declared = await declaredMeshesOf(preset, props, sources);
+  props = declared.props;
   const rooms = spec.rooms.flatMap((room) => {
     const kinds =
       room.roomType === undefined ? undefined : style.roomTypes?.[room.roomType]?.heroProps;
@@ -225,7 +232,73 @@ export async function heroPropsOf<Prop extends PlacedProp>(
     props.filter((prop) => !replaced.has(prop)),
     sources,
   );
-  return { props: meshes.props, heroProps: [...heroProps, ...meshes.heroProps], warnings };
+  return {
+    props: meshes.props,
+    heroProps: [...declared.heroProps, ...heroProps, ...meshes.heroProps],
+    warnings,
+  };
+}
+
+type MeshTarget = MeshDeclaration["targets"][number];
+
+/** The record that puts a declared mesh in the piece's slot at its modelled size, turned by the piece's yaw and the target's. */
+function declaredRecord(assetId: string, target: MeshTarget, piece: PlacedProp): HeroPropRecord {
+  const anchor = target.anchor ?? "center";
+  const { x, y, z } = piece.pivot;
+  return {
+    kind: piece.kind,
+    assetId,
+    pivot: anchor === "bottom" ? { x, y: y - piece.size.y / 2, z } : piece.pivot,
+    yaw: ((piece.yaw ?? 0) + (target.yaw ?? 0)) % 360,
+    size: piece.size,
+    surfaces: {},
+    bevels: {},
+    fallback: piece,
+    fit: "none",
+    anchor,
+    ...(target.part === undefined ? {} : { part: target.part }),
+  };
+}
+
+/**
+ * Each prop a declared mesh replaces (a `prop:<kind>` target, and its `label` when it has one) as that mesh at its
+ * modelled size, ahead of any `heroProps` entry or `prop-<kind>` recipe for the piece. A mesh with no recorded
+ * asset leaves its pieces in place, with no warning.
+ */
+async function declaredMeshesOf<Prop extends PlacedProp>(
+  preset: HeroPreset,
+  props: Prop[],
+  sources: HeroPropSources,
+): Promise<{ props: Prop[]; heroProps: HeroPropRecord[] }> {
+  const declarations = Object.entries(preset.base.meshes ?? {});
+  const assetIds = new Map<string, string | undefined>();
+  const kept: Prop[] = [];
+  const heroProps: HeroPropRecord[] = [];
+  for (const prop of props) {
+    const match = declarations.flatMap(([meshKind, { targets }]) =>
+      targets
+        .filter(
+          (target) =>
+            target.replaces === `prop:${prop.kind}` &&
+            (target.label === undefined || prop.attributes?.Label === target.label),
+        )
+        .map((target) => ({ meshKind, target })),
+    )[0];
+    if (match === undefined) {
+      kept.push(prop);
+      continue;
+    }
+    if (!assetIds.has(match.meshKind)) {
+      assetIds.set(
+        match.meshKind,
+        (await recordedHeroAsset(preset.base, match.meshKind, sources)).assetId,
+      );
+    }
+    const assetId = assetIds.get(match.meshKind);
+    if (assetId === undefined) kept.push(prop);
+    else heroProps.push(declaredRecord(assetId, match.target, prop));
+  }
+  return { props: kept, heroProps };
 }
 
 /** Each prop whose kind's recipe has a recorded asset as its stretched mesh; the others stay Luau models. */
