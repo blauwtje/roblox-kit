@@ -47,8 +47,20 @@ function validPreset(exposure = 0.5) {
       light: slot,
     },
     propRules: {
-      bench: { heightRatio: { min: 0.34, max: 0.75 }, freeRotation: false, surface: "trim" },
-      lamp: { heightRatio: { min: 1.03, max: 2.25 }, freeRotation: false, surface: "trim" },
+      bench: {
+        heightRatio: { min: 0.34, max: 0.75 },
+        widthRatio: { min: 0.69, max: 1.5 },
+        depthRatio: { min: 0.28, max: 0.63 },
+        freeRotation: false,
+        surface: "trim",
+      },
+      lamp: {
+        heightRatio: { min: 1.03, max: 2.25 },
+        widthRatio: { min: 0.17, max: 0.38 },
+        depthRatio: { min: 0.17, max: 0.38 },
+        freeRotation: false,
+        surface: "trim",
+      },
     },
     sizeRules: {
       agentRadius: 2,

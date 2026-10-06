@@ -427,7 +427,16 @@ await test("a room type the style declares builds", async () => {
   );
   const overrides = {
     roomTypes: { platform: { setPieces: ["track-bed"], signLabel: "PLATFORM 1" } },
-    propRules: { "track-bed": { freeRotation: false, depth: 10, surface: "exempt" } },
+    propRules: {
+      "track-bed": {
+        heightRatio: { min: 0.11, max: 0.25 },
+        widthRatio: { min: 1.84, max: 4 },
+        depthRatio: { min: 0.57, max: 1.25 },
+        freeRotation: false,
+        depth: 10,
+        surface: "exempt",
+      },
+    },
   };
   const spec = { ...twoRoomSpec, rooms: typedRooms, style: { preset: "cozy-town", overrides } };
   await run(studio, spec);
