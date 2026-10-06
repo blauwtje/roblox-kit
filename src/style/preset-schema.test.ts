@@ -741,3 +741,60 @@ await test("presetSchema takes idle animations per prop kind with a top or botto
     );
   }
 });
+
+await test("presetSchema takes declared meshes with their targets and placement", () => {
+  const meshes = {
+    bench: {
+      script: "src/hero-props/meshes/train-station/bench.py",
+      targets: [{ replaces: "prop:bench", anchor: "bottom" }],
+    },
+    "ticket-machine": {
+      script: "src/hero-props/meshes/train-station/ticket-machine.py",
+      targets: [{ replaces: "prop:ticket-machine", anchor: "bottom", yaw: 180 }],
+    },
+    sign: {
+      script: "src/hero-props/meshes/train-station/sign.py",
+      targets: [{ replaces: "prop:sign", anchor: "center", label: "CONCOURSE" }],
+    },
+    pendant: {
+      script: "src/hero-props/meshes/train-station/pendant.py",
+      targets: [{ replaces: "fixture:pendant", glow: { diameter: 0.8, drop: 0.54 } }],
+    },
+    "arch-trim": {
+      script: "src/hero-props/meshes/train-station/arch-trim.py",
+      targets: [
+        { replaces: "arch", part: "arch" },
+        { replaces: "band:crown", part: "crown" },
+        { replaces: "band:baseboard", part: "baseboard" },
+      ],
+    },
+  };
+  assert.ok(presetSchema.safeParse({ ...validPreset(), meshes }).success);
+  assert.ok(presetSchema.safeParse(validPreset()).success);
+  assert.ok(presetOverridesSchema.safeParse({ meshes }).success);
+});
+
+await test("presetSchema rejects a bad mesh declaration", () => {
+  const target = { replaces: "prop:bench" };
+  const mesh = { script: "bench.py", targets: [target] };
+  for (const bad of [
+    { ...mesh, script: "" },
+    { ...mesh, targets: [] },
+    { ...mesh, extra: 1 },
+    { script: "bench.py" },
+    { ...mesh, targets: [{ ...target, replaces: "bench" }] },
+    { ...mesh, targets: [{ ...target, replaces: "band:cornice" }] },
+    { ...mesh, targets: [{ ...target, replaces: "prop:" }] },
+    { ...mesh, targets: [{ ...target, anchor: "top" }] },
+    { ...mesh, targets: [{ ...target, yaw: "180" }] },
+    { ...mesh, targets: [{ ...target, glow: { diameter: 0, drop: 0.5 } }] },
+    { ...mesh, targets: [{ ...target, glow: { diameter: 0.8 } }] },
+    { ...mesh, targets: [{ ...target, extra: 1 }] },
+  ]) {
+    assert.equal(
+      presetSchema.safeParse({ ...validPreset(), meshes: { bench: bad } }).success,
+      false,
+      JSON.stringify(bad),
+    );
+  }
+});

@@ -135,6 +135,37 @@ const idleAnimation = z.strictObject({
 
 export type IdleAnimation = z.infer<typeof idleAnimation>;
 
+/** What a declared mesh replaces: a prop kind, the doorway arch, a crown or baseboard band, or the pendant fixture. */
+const meshTarget = z.strictObject({
+  replaces: z
+    .string()
+    .regex(
+      /^(prop:[a-z][a-z0-9-]*|arch|band:(crown|baseboard)|fixture:pendant)$/,
+      'expected "prop:<kind>", "arch", "band:crown", "band:baseboard" or "fixture:pendant"',
+    ),
+  /** The MeshPart of the uploaded Model to place; absent places the whole Model. */
+  part: z.string().min(1).optional(),
+  /** Extra turn in degrees about the vertical axis. */
+  yaw: z.number().optional(),
+  /** `bottom` stands the mesh on the replaced piece's bottom; `center` puts it at the piece's box centre. */
+  anchor: z.enum(["bottom", "center"]).optional(),
+  /** Only a piece whose `Label` attribute equals this takes the mesh; others keep the kit piece. */
+  label: z.string().min(1).optional(),
+  /** A Neon ball kept with the mesh: its `diameter` in studs and `drop` below the fixture centre. */
+  glow: z
+    .strictObject({ diameter: z.number().positive(), drop: z.number().nonnegative() })
+    .optional(),
+});
+
+/** A Blender-scripted mesh: the script that generates it and the pieces of a map it replaces. */
+const meshDeclaration = z.strictObject({
+  /** Repository path of the Blender script, such as `src/hero-props/meshes/<preset>/<kind>.py`. */
+  script: z.string().min(1),
+  targets: z.array(meshTarget).min(1),
+});
+
+export type MeshDeclaration = z.infer<typeof meshDeclaration>;
+
 const lightRole = z.strictObject({
   range: z.number().positive().max(maxLightRange),
   brightness: z.number().nonnegative(),
@@ -541,6 +572,8 @@ export const presetSchema = z
     ambientEffects: z.array(ambientEffect).optional(),
     /** Idle sway keyed by prop kind, run by a server Script in the map during play; absent animates nothing. */
     idleAnimations: z.record(z.string().min(1), idleAnimation).optional(),
+    /** Blender-scripted meshes keyed by mesh kind; each replaces the pieces its targets name; absent keeps the kit pieces. */
+    meshes: z.record(z.string().min(1), meshDeclaration).optional(),
     sizeRules: z.strictObject({
       agentRadius: z.number().positive(),
       agentHeight: z.number().positive(),
