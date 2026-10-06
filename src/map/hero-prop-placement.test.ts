@@ -167,7 +167,7 @@ await test("a recorded asset takes the replaced set piece's slot, standing on it
       size: trackBed.size,
       seed: trackBed.seed,
       yaw: trackBed.yaw,
-      attributes: {},
+      attributes: trackBed.attributes,
     },
   });
 });

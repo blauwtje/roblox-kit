@@ -468,7 +468,7 @@ await test("propsOf furnishes a typed room with its arrangements after its set p
   assert.match(warnings[0] ?? "", /pillar/);
 });
 
-await test("propsOf gives a prop whose rule names a surface role that role's color and material, and leaves the rest unchanged", async () => {
+await test("propsOf gives every prop the preset's slot attributes, a surface role overriding frame and exempt keeping it", async () => {
   const preset = (await loadPresets()).get("cozy-town");
   assert.ok(preset !== undefined);
   const lampRule = preset.propRules["lamp"];
@@ -480,21 +480,33 @@ await test("propsOf gives a prop whose rule names a surface role that role's col
     propRules: {
       ...preset.propRules,
       lamp: { ...lampRule, surface: "accent" as const },
-      bench: { ...benchRule, surface: undefined },
+      bench: { ...benchRule, surface: "exempt" as const },
     },
   };
   const { props } = propsOf(mapSpecSchema.parse(twoRoomSpec), style);
   const lamps = props.filter((prop) => prop.kind === "lamp");
   const benches = props.filter((prop) => prop.kind === "bench");
   assert.ok(lamps.length > 0 && benches.length > 0, "the plain rooms place both kinds");
+  const slotAttributes = Object.fromEntries(
+    Object.entries(style.propSlots).flatMap(([slot, look]) => {
+      const name = slot.charAt(0).toUpperCase() + slot.slice(1);
+      return [
+        [`${name}Color`, look.color],
+        [`${name}Material`, look.material],
+      ];
+    }),
+  );
   for (const lamp of lamps) {
+    assert.equal(Object.keys(lamp.attributes ?? {}).length, 14);
     assert.deepEqual(lamp.attributes, {
-      SurfaceColor: style.surfaces.accent.color,
-      SurfaceMaterial: style.surfaces.accent.material,
+      ...slotAttributes,
+      FrameColor: style.surfaces.accent.color,
+      FrameMaterial: style.surfaces.accent.material,
     });
+    assert.equal(Object.hasOwn(lamp.attributes ?? {}, "SurfaceColor"), false);
   }
   for (const bench of benches) {
-    assert.equal(bench.attributes, undefined);
+    assert.deepEqual(bench.attributes, slotAttributes);
   }
 });
 

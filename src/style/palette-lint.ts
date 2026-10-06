@@ -70,11 +70,19 @@ export function lintColorsAgainstPalette(
   return issues;
 }
 
-/** The preset's surface colors against its palette, and floor, wall, ceiling and trim against each other by lightness. */
+/** The preset's surface and prop slot colors against its palette, and floor, wall, ceiling and trim against each other by lightness. */
 export function lintPalette(preset: Preset): PaletteIssue[] {
-  const colors = Object.fromEntries(
-    Object.entries(preset.surfaces).map(([role, surface]) => [role, surface.color]),
-  );
+  const entries: [string, string][] = [
+    ...Object.entries(preset.surfaces).map(([role, surface]): [string, string] => [
+      role,
+      surface.color,
+    ]),
+    ...Object.entries(preset.propSlots).map(([slot, look]): [string, string] => [
+      `${slot} slot`,
+      look.color,
+    ]),
+  ];
+  const colors = Object.fromEntries(entries);
   const issues = lintColorsAgainstPalette(colors, preset);
   for (const [index, first] of separatedRoles.entries()) {
     for (const second of separatedRoles.slice(index + 1)) {

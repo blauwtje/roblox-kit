@@ -24,9 +24,16 @@ function withSurfaces(
   for (const role of ["floor", "wall", "ceiling", "trim"] as const) {
     surfaces[role] = { ...surfaces[role], color: colors[role] };
   }
+  const propSlots = Object.fromEntries(
+    Object.entries(preset.propSlots).map(([slot, look]) => [
+      slot,
+      { ...look, color: colors.floor },
+    ]),
+  ) as Preset["propSlots"];
   return {
     ...preset,
     surfaces,
+    propSlots,
     palette: { colors: palette.slice(0, 4), accent: surfaces.accent.color },
   };
 }
@@ -62,6 +69,18 @@ await test("a surface color outside the palette is a palette issue naming the ro
     ["trim"],
   );
   assert.match(String(palette[0]?.detail), /#585858/);
+});
+
+await test("a prop slot color outside the palette is a palette issue naming the slot", () => {
+  const base = withSurfaces(separated);
+  const issues = lintPalette({
+    ...base,
+    propSlots: { ...base.propSlots, glass: { ...base.propSlots.glass, color: "#ff00ff" } },
+  });
+  assert.deepEqual(
+    issues.map((issue) => [issue.kind, issue.zone]),
+    [["palette", "glass slot"]],
+  );
 });
 
 await test("a color within the match distance of a palette color is a member", () => {

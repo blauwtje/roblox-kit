@@ -323,24 +323,34 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
 /** A prop with the generator attributes its preset surface role adds. */
 type StyledPropRecord = PropRecord & { attributes?: Record<string, string> };
 
-/** The prop with `SurfaceColor` and `SurfaceMaterial` from its kind's surface role; unchanged without a role or when exempt. */
-function withSurface(prop: StyledPropRecord, style: Preset): StyledPropRecord {
+/** A generator attribute name prefix of a prop slot: `frame` is `Frame`, so its attributes are `FrameColor` and `FrameMaterial`. */
+function slotAttributeName(slot: string): string {
+  return slot.charAt(0).toUpperCase() + slot.slice(1);
+}
+
+/**
+ * The prop with `<Slot>Color` and `<Slot>Material` attributes for every preset prop slot; the kind's surface
+ * role, unless exempt, overrides the `frame` slot.
+ */
+function withSlots(prop: StyledPropRecord, style: Preset): StyledPropRecord {
+  const looks = { ...style.propSlots };
   const role = style.propRules[prop.kind]?.surface;
-  if (role === undefined || role === "exempt") {
-    return prop;
+  if (role !== undefined && role !== "exempt") {
+    looks.frame = style.surfaces[role];
   }
-  const { color, material } = style.surfaces[role];
-  return {
-    ...prop,
-    attributes: { ...prop.attributes, SurfaceColor: color, SurfaceMaterial: material },
-  };
+  const attributes: Record<string, string> = { ...prop.attributes };
+  for (const [slot, look] of Object.entries(looks)) {
+    attributes[`${slotAttributeName(slot)}Color`] = look.color;
+    attributes[`${slotAttributeName(slot)}Material`] = look.material;
+  }
+  return { ...prop, attributes };
 }
 
 /**
  * The props of a styled map: kit props in plain rooms, and in typed rooms the set pieces of their room type
  * followed by its arrangements, which would collide with random kit props; warnings name each set piece
- * skipped for lack of space and each arrangement that placed nothing; a prop whose rule names a surface role
- * carries that role's color and material as attributes.
+ * skipped for lack of space and each arrangement that placed nothing; each prop carries the preset's
+ * slot colors and materials as attributes, its surface role overriding `frame`.
  */
 export function propsOf(
   spec: MapSpec,
@@ -363,7 +373,7 @@ export function propsOf(
       ...placeProps(plainSpec, style.propKit, seed),
       ...setPieces.pieces,
       ...arrangements.pieces,
-    ].map((prop) => withSurface(prop, style)),
+    ].map((prop) => withSlots(prop, style)),
     warnings: [...setPieces.warnings, ...arrangements.warnings],
   };
 }
