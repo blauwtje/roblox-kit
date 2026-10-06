@@ -242,10 +242,7 @@ await test("a style sends its lights per zone and applies its lighting recipe af
       zoneLights.filter((light) => light.role === "hero").map((light) => light.shadows),
       [false],
     );
-    assert.equal(
-      zoneLights.filter((light) => light.role === "focal").length,
-      zone === "start" ? 1 : 0,
-    );
+    assert.equal(zoneLights.filter((light) => light.role === "focal").length, 0);
     const fixtureLights = zoneLights.filter((light) => light.fixture !== undefined);
     assert.ok(fixtureLights.length > 0, `${zone} has fixtures`);
     assert.ok(fixtureLights.every((light) => light.role === "zoneMarker" && !light.shadows));
