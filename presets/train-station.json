@@ -96,7 +96,7 @@
   "lightFixtures": {
     "kind": "pendant",
     "spacing": 10,
-    "drop": 2,
+    "drop": 4,
     "lines": 2,
     "size": {
       "width": 3,
