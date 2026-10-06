@@ -18,8 +18,19 @@ await test("a map with wide doors and tall walls has no size-rule issues", () =>
   assert.deepEqual(issuesOf(rooms, { doorWidth: 12, wallHeight: 16 }), []);
 });
 
-await test("a default 6-stud door is reported with its side, width and world position", () => {
-  const [issue, ...others] = issuesOf([{ ...hub, doors: [{ side: "east", offset: 5 }] }]);
+await test("a styled spec that omits doorWidth reports no doorway issue", () => {
+  const rooms = [{ ...hub, doors: [{ side: "east", offset: 0 }] }];
+  const issues = issuesOf(rooms, { wallHeight: 16, style: { preset: "cozy-town" } });
+  assert.deepEqual(
+    issues.filter((issue) => /wall of room/.test(issue.detail)),
+    [],
+  );
+});
+
+await test("a 6-stud door is reported with its side, width and world position", () => {
+  const [issue, ...others] = issuesOf([{ ...hub, doors: [{ side: "east", offset: 5 }] }], {
+    doorWidth: 6,
+  });
   assert.deepEqual(others, []);
   assert.equal(issue?.kind, "sizeRule");
   assert.deepEqual(issue.position, { x: 19.5, y: 0, z: 5 });
@@ -84,6 +95,7 @@ await test("a hallway shorter than it is wide is measured across its direction, 
 await test("findDoorways lists each opening with its room, side and width", () => {
   const spec = relationMapSpecSchema.parse({
     mapId: "m",
+    doorWidth: 6,
     rooms: [{ ...hub, doors: [{ side: "east", offset: 5 }] }],
   });
   const [doorway, ...others] = findDoorways(spec);
@@ -98,6 +110,7 @@ await test("findDoorways lists each opening with its room, side and width", () =
 await test("a doorway's clearance box spans its width, the wall and an agent radius on both faces, and the agent height", () => {
   const spec = relationMapSpecSchema.parse({
     mapId: "m",
+    doorWidth: 6,
     rooms: [{ ...hub, doors: [{ side: "east", offset: 5 }] }],
   });
   const [box] = doorwayClearanceBoxes(spec, { radius: 1.5, height: 5 });

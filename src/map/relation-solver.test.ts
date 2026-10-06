@@ -27,7 +27,7 @@ function relatedRoom(
 }
 
 function resolve(rooms: object[]) {
-  return resolveRelations(relationMapSpecSchema.parse({ mapId: "m", rooms }));
+  return resolveRelations(relationMapSpecSchema.parse({ mapId: "m", doorWidth: 6, rooms }));
 }
 
 function roomsOverlapInTest(first: RoomSpec, second: RoomSpec) {
@@ -144,7 +144,7 @@ await test("a room that lands on another room moves along its hallway and keeps 
   const blocker = roomNamed(resolved, "blocker");
   assert.ok(lab.x - lab.width / 2 >= blocker.x + blocker.width / 2 - config.overlapToleranceStuds);
   assert.ok(lab.x > 0, "the lab stays east of the hub");
-  assert.ok(layoutMap({ mapId: "m", rooms: resolved } as never).parts.length > 0);
+  assert.ok(layoutMap({ mapId: "m", doorWidth: 6, rooms: resolved } as never).parts.length > 0);
   assert.deepEqual(resolve(rooms).rooms, resolved);
 });
 

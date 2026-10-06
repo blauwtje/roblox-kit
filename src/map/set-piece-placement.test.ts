@@ -27,6 +27,7 @@ const southYaw = 180;
 /** A 60x40 platform with a door in its south wall, and a 30x30 hall whose entry door is in its north wall. */
 const stationSpec = mapSpecSchema.parse({
   mapId: "station",
+  doorWidth: 6,
   rooms: [
     {
       name: "platform",

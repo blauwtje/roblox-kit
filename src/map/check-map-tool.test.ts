@@ -382,6 +382,7 @@ await test("check-map.luau walks every spawn to every room and objective and rep
 await test("a preset with a spec adds sizeRule issues to the counts and the report, without them none", async () => {
   const spec = {
     mapId: "arena",
+    doorWidth: 6,
     rooms: [
       { name: "a", x: 0, z: 0, width: 30, depth: 30, doors: [{ side: "east", offset: 0 }] },
       { name: "b", x: 60, z: 0, width: 30, depth: 30, doors: [{ side: "west", offset: 0 }] },
@@ -425,6 +426,7 @@ await test("a preset with a spec adds sizeRule issues to the counts and the repo
 await test("with a preset, quality rules report an untextured flat surface, an unlit room and an unbevelled hero part", async () => {
   const spec = {
     mapId: "arena",
+    doorWidth: 6,
     rooms: [
       { name: "a", x: 0, z: 0, width: 30, depth: 30, doors: [{ side: "east", offset: 0 }] },
       { name: "b", x: 60, z: 0, width: 30, depth: 30, doors: [{ side: "west", offset: 0 }] },

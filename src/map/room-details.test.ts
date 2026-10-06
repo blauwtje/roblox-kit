@@ -137,6 +137,7 @@ await test("a doorway splits the bands of its wall and gets two jambs and a lint
 await test("a pillar is skipped where a doorway arch covers its corner", () => {
   const details = detailsOf({
     mapId: "corner-door",
+    doorWidth: 6,
     rooms: [
       {
         name: "hall",

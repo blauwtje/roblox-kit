@@ -97,10 +97,10 @@ await test("a door splits its wall into two stretches with a gap of the door wid
   });
   const left = partNamed(parts, "box-wall-south-1");
   const right = partNamed(parts, "box-wall-south-2");
-  assert.deepEqual(left.position, { x: -9.5, y: 6, z: 19.5 });
-  assert.deepEqual(left.size, { x: 21, y: 12, z: 1 });
-  assert.deepEqual(right.position, { x: 13.5, y: 6, z: 19.5 });
-  assert.deepEqual(right.size, { x: 13, y: 12, z: 1 });
+  assert.deepEqual(left.position, { x: -10.5, y: 6, z: 19.5 });
+  assert.deepEqual(left.size, { x: 19, y: 12, z: 1 });
+  assert.deepEqual(right.position, { x: 14.5, y: 6, z: 19.5 });
+  assert.deepEqual(right.size, { x: 11, y: 12, z: 1 });
   const gap = right.position.x - right.size.x / 2 - (left.position.x + left.size.x / 2);
   assert.equal(gap, config.defaultDoorWidthStuds);
 });
@@ -108,6 +108,7 @@ await test("a door splits its wall into two stretches with a gap of the door wid
 await test("a door at the wall end leaves one stretch", () => {
   const { parts } = layoutOf({
     mapId: "corner",
+    doorWidth: 6,
     rooms: [
       { name: "box", x: 0, z: 0, width: 40, depth: 40, doors: [{ side: "north", offset: -17 }] },
     ],
