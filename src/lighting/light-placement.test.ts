@@ -289,37 +289,3 @@ await test("caps the lights of a room at maxLocalLightsPerRoom, dropping the lat
     Array(config.maxLocalLightsPerRoom - 1).fill("zoneMarker"),
   );
 });
-
-await test("shadowedPendant makes only the pendant nearest the room center cast shadows", () => {
-  const lights = placeLights(
-    spec([
-      { name: "hall", x: 0, z: 0, width: 40, depth: 40 },
-      { name: "yard", x: 60, z: 0, width: 20, depth: 20 },
-    ]),
-    lightRoles,
-    { ...pendants, spacing: 10, lines: 2, shadowedPendant: true },
-  );
-  for (const zone of ["hall", "yard"]) {
-    const shadowed = lights.filter((light) => light.zone === zone && light.shadows);
-    assert.equal(shadowed.length, 1, `${zone} shadowed lights`);
-    const [light] = shadowed;
-    assert.ok(light?.fixture !== undefined, "the shadowed light is a pendant");
-    const center = zone === "hall" ? 0 : 60;
-    const distance = (x: number, z: number) => Math.hypot(x - center, z);
-    for (const other of lights.filter((l) => l.zone === zone && l.fixture !== undefined)) {
-      assert.ok(
-        distance(light.position.x, light.position.z) <=
-          distance(other.position.x, other.position.z),
-      );
-    }
-  }
-});
-
-await test("without shadowedPendant a pendant preset casts no shadows", () => {
-  const lights = placeLights(
-    spec([{ name: "hall", x: 0, z: 0, width: 40, depth: 40 }]),
-    lightRoles,
-    pendants,
-  );
-  assert.ok(lights.every((light) => !light.shadows));
-});

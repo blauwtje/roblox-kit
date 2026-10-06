@@ -166,8 +166,6 @@ const lightFixtures = z.discriminatedUnion("kind", [
     spacing: z.number().positive(),
     drop: z.number().positive(),
     lines: z.number().int().positive().optional(),
-    /** The one pendant per room nearest its center, where the eye view looks, casts shadows; absent keeps every pendant shadowless. */
-    shadowedPendant: z.boolean().optional(),
     size: studDimensions,
   }),
 ]);
@@ -521,7 +519,7 @@ export const presetSchema = z
     terrainVariants: z.record(materialName, surfaceRoleName).optional(),
     /** The look the lighting recipe aims for, which the image rubric scores a room against. */
     lightingIntent: z.string().min(1),
-    /** A role carries no shadows field; only a pendant fixture's `shadowedPendant` makes one light cast shadows. */
+    /** No point light casts shadows, so no role carries a shadows field. */
     lightRoles: z.strictObject({
       zoneMarker: lightRole,
       focal: lightRole,

@@ -17,18 +17,15 @@ export interface FixtureBox {
   size: Vector;
 }
 
-/** One light to create: its zone, role, where it hangs, its range, whether it casts shadows and the fixture that holds it. */
+/** One light to create: its zone, role, where it hangs, its range, that it casts no shadow and the fixture that holds it. */
 export interface LightPlacement {
   /** Name of the room the light belongs to. */
   zone: string;
   role: LightRoleName;
   position: Vector;
   range: number;
-  /**
-   * A PointLight shadow costs a cube-map render per frame, too much for mobile, so only the one
-   * pendant per room that a preset's `shadowedPendant` picks is true.
-   */
-  shadows: boolean;
+  /** Always false: a PointLight shadow costs a cube-map render per frame, too much for mobile. */
+  shadows: false;
   /** Set on a light a preset's `lightFixtures` places; the center and focal lights have none. */
   fixture?: FixtureBox;
 }
@@ -133,20 +130,6 @@ function pendantBoxes(
   );
 }
 
-/** Index of the box nearest the room center, the point the eye view looks at; the first wins a tie. */
-function nearestToCenter(room: RoomSpec, boxes: FixtureBox[]): number {
-  let nearest = -1;
-  let nearestDistance = Infinity;
-  boxes.forEach((box, index) => {
-    const distance = Math.hypot(box.position.x - room.x, box.position.z - room.z);
-    if (distance < nearestDistance) {
-      nearest = index;
-      nearestDistance = distance;
-    }
-  });
-  return nearest;
-}
-
 function fixtureBoxes(spec: MapSpec, room: RoomSpec, fixtures: LightFixtures): FixtureBox[] {
   const bounds = roomBounds(spec, room);
   return fixtures.kind === "sconce"
@@ -159,8 +142,7 @@ function fixtureBoxes(spec: MapSpec, room: RoomSpec, fixtures: LightFixtures): F
  * one light at its center below the ceiling: the hero in the largest room and a zone marker in each
  * other room. With them, every room's center light is a hero and the fixtures repeat as zone
  * markers, each holding its light. A room with a spawn pad gets a focal light over the pad. No
- * light casts shadows, except the pendant nearest the room center when the fixtures set
- * `shadowedPendant`, and a room keeps at most `config.maxLocalLightsPerRoom` lights, the
+ * light casts shadows, and a room keeps at most `config.maxLocalLightsPerRoom` lights, the
  * latest placed dropped first. Every light's range shrinks with the room's depth from the spawn
  * room (`roomProgression`), to `progressionScale.lightRange` of its role's range.
  */
@@ -187,18 +169,13 @@ export function placeLights(
       shadows: false,
     });
     if (lightFixtures !== undefined) {
-      const boxes = fixtureBoxes(spec, room, lightFixtures);
-      const shadowed =
-        lightFixtures.kind === "pendant" && lightFixtures.shadowedPendant === true
-          ? nearestToCenter(room, boxes)
-          : -1;
-      for (const [index, fixture] of boxes.entries()) {
+      for (const fixture of fixtureBoxes(spec, room, lightFixtures)) {
         placements.push({
           zone: room.name,
           role: "zoneMarker",
           position: fixture.position,
           range: lightRoles.zoneMarker.range * reach,
-          shadows: index === shadowed,
+          shadows: false,
           fixture,
         });
       }
