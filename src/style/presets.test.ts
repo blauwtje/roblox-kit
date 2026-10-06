@@ -271,3 +271,13 @@ await test("every part of each hero prop lies inside the prop's size", async () 
     }
   }
 });
+
+await test("every shape of every hero prop in every preset has a bevel", async () => {
+  for (const [name, preset] of await loadPresets()) {
+    for (const [kind, heroProp] of Object.entries(preset.heroProps ?? {})) {
+      for (const part of heroParts(heroProp.operations)) {
+        assert.ok(part.shape.bevel !== undefined, `${name} ${kind}: ${part.shape.op} has no bevel`);
+      }
+    }
+  }
+});
