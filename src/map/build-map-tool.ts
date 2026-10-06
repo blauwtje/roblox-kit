@@ -11,6 +11,8 @@ import { selectStudio } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { IdleAnimation, Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
+import { lintPalette } from "../style/palette-lint.ts";
+import { findLookIssues } from "./look-lint.ts";
 import { groupBuildPhases, type BuildPhase, type BuildPhaseName } from "./build-phases.ts";
 import type { HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import {
@@ -68,6 +70,20 @@ const buildMapOutput = z.strictObject({
   ),
   /** One line per set piece skipped because its room has no space for it, per hero prop not built and why, per hero asset that failed to load and per ambient sprite with no recorded asset. */
   warnings: z.array(z.string()),
+  /**
+   * Look problems of the plan, found before Studio is touched; they warn and never fail a build. Only walkway
+   * and doorway issues carry a `suggestedSpecPatch`, a JSON merge patch of this tool's input.
+   */
+  lookIssues: z.array(
+    z.strictObject({
+      kind: z.enum(["scale", "gap", "walkway", "doorway", "facing", "density", "palette", "value"]),
+      zone: z.string(),
+      detail: z.string(),
+      suggestedSpecPatch: z
+        .strictObject({ rooms: z.array(z.record(z.string(), z.unknown())) })
+        .optional(),
+    }),
+  ),
 });
 
 /** What `build-map.luau` reports after a phase: the parts in the Model; the shell phase also says whether it replaced a map. */
@@ -392,6 +408,11 @@ async function buildMap(
       : await trimMeshesOf(details, { base: presetNamed(spec.style.preset), style }, heroSources);
   const { trimMeshes } = trim;
   const warnings = [...placed.warnings, ...heroes.warnings];
+  // Palette issues use the kinds the look lint's own union lacks, so both lists merge into the output's union.
+  const lookIssues =
+    style === undefined
+      ? []
+      : [...findLookIssues(spec, placed.props, style), ...lintPalette(style)];
   const heroSurfaces = heroProps.flatMap((hero) => Object.values(hero.surfaces));
   // A hero prop whose asset fails to load builds its fallback set piece, so its kind needs a generator too.
   const generators = await generatorsOf([...props, ...heroProps.map((hero) => hero.fallback)]);
@@ -521,6 +542,7 @@ async function buildMap(
     bounds,
     zones: zonesOf([...layout.parts, ...details, ...facades]),
     warnings,
+    lookIssues,
   });
 }
 
@@ -540,7 +562,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
     `replaces the Model and clears the terrain its previous build filled. A terrain fill of shape heightmap { center, size, material, layers, seed, noiseScaleStuds, erosion } is seeded fractal noise with particle hydraulic erosion inside its box (minimum corner and size on the 4-stud voxel grid, size.y the tallest height above the box bottom), written with WriteVoxels in chunks after the shell phase: sand low, snow high, rock on steep slopes, grass elsewhere, and the fill's material below. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
     `A style with ambientEffects also gets, per room of a listed type (or every room), a ParticleEmitter at the floor's center or a Beam across the room from west to east under Attachments on the floor part, textured with its sprite (drawn by the repo's own code and recorded by hash in hero-assets.json); a sprite with no recorded asset builds its emitters untextured with a warning. A style with idleAnimations also gives each set piece of a listed kind sway attributes and the map one server Script that sways them about the top or bottom of their box during play. The build runs in seven phases (shell, floors and ceilings, openings, surfaces, props, lighting, ambient effects), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
-    `Returns { mapId, partCount, phases, bounds, zones, warnings }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead), and one per ambient sprite with no recorded asset.`,
+    `Returns { mapId, partCount, phases, bounds, zones, warnings, lookIssues }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead), and one per ambient sprite with no recorded asset; lookIssues lists plan-time look problems of a styled map (prop scale, dead gaps, walkway and doorway widths, prop facing and density, colors outside the palette, too little lightness separation between floor, wall, ceiling and trim), computed before Studio is touched, warning only and never failing the build, where walkway and doorway issues carry a suggestedSpecPatch, a JSON merge patch of this input.`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
   annotations: {

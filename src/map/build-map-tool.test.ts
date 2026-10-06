@@ -831,3 +831,29 @@ await test("build-map.luau sets the idle attributes on animated props and adds t
     assert.ok(source.includes(fragment), `build-map.luau has ${fragment}`);
   }
 });
+
+await test("lookIssues is empty without a style", async () => {
+  const result = await run(phaseStudio(), twoRoomSpec);
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.deepEqual(structured.lookIssues, []);
+});
+
+await test("lookIssues reports narrow doorways with a patch and palette findings, and the build still succeeds", async () => {
+  const studio = phaseStudio();
+  const narrowRooms = twoRoomSpec.rooms.map((room) => ({ ...room, doorWidth: 4 }));
+  const result = await run(studio, {
+    ...twoRoomSpec,
+    rooms: narrowRooms,
+    style: {
+      preset: "cozy-town",
+      overrides: { surfaces: { wall: { color: "#ff00ff" }, ceiling: { color: "#ff00ff" } } },
+    },
+  });
+  assert.equal(result.isError, undefined);
+  assert.equal(studio.requests.length, 8);
+  const { lookIssues } = buildMapTool.outputSchema.parse(result.structuredContent);
+  const doorway = lookIssues.find((issue) => issue.kind === "doorway");
+  assert.ok(doorway?.suggestedSpecPatch, "a doorway issue carries a patch");
+  assert.ok(lookIssues.some((issue) => issue.kind === "palette"));
+  assert.ok(lookIssues.some((issue) => issue.kind === "value"));
+});
