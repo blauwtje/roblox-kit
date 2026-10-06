@@ -3,6 +3,8 @@
 -- Params.Size is (diameter, height, depth); a dial with hour marks and hands is on both the -Z and +Z faces,
 -- so the clock reads from either side, and the output stays inside Size.
 -- The time shown varies per Seed so repeated clocks do not look stamped.
+-- Colors and materials come from the `frame`, `panel` and `signage` slots, read as `<Slot>Color` and
+-- `<Slot>Material` attributes; a missing attribute leaves a new Part's own look.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -24,17 +26,23 @@ local POST_WIDTH = 0.4
 local BASE_HEIGHT = 0.3
 local BASE_WIDTH = 1.5
 local HOUR_COUNT = 12
-local RIM_COLOR = Color3.fromRGB(35, 38, 42)
-local DIAL_COLOR = Color3.fromRGB(245, 244, 238)
-local MARK_COLOR = Color3.fromRGB(20, 20, 22)
+type Look = { Color: Color3, Material: Enum.Material }
+
+local DEFAULT_COLOR = Instance.new("Part").Color
+local DEFAULT_MATERIAL = "Plastic"
+
+-- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
+local function slotLook(attributes: { [string]: any }, slot: string): Look
+	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
+	return { Color = attributes[`{slot}Color`], Material = material }
+end
 
 local function addPart(
 	targetContainer: Instance,
 	name: string,
 	size: Vector3,
 	cframe: CFrame,
-	color: Color3,
-	material: Enum.Material,
+	look: Look,
 	shape: Enum.PartType?
 ): Part
 	local part = Instance.new("Part")
@@ -45,8 +53,8 @@ local function addPart(
 	part.CanQuery = false
 	part.Shape = shape or Enum.PartType.Block
 	part.Size = size
-	part.Color = color
-	part.Material = material
+	part.Color = look.Color
+	part.Material = look.Material
 	part.CFrame = cframe
 	part.Parent = targetContainer
 	return part
@@ -65,7 +73,8 @@ local function addRadialBar(
 	angle: number,
 	innerRadius: number,
 	outerRadius: number,
-	width: number
+	width: number,
+	look: Look
 )
 	local middle = (innerRadius + outerRadius) / 2
 	local x = facing * math.sin(angle) * middle
@@ -75,17 +84,27 @@ local function addRadialBar(
 		name,
 		Vector3.new(width, outerRadius - innerRadius, MARK_THICKNESS),
 		CFrame.new(center + Vector3.new(x, y, 0)) * CFrame.Angles(0, 0, -facing * angle),
-		MARK_COLOR,
-		Enum.Material.SmoothPlastic
+		look
 	)
 end
 
 local Generator = {}
-Generator.Attributes = { Seed = 0 }
+Generator.Attributes = {
+	Seed = 0,
+	FrameColor = DEFAULT_COLOR,
+	FrameMaterial = DEFAULT_MATERIAL,
+	PanelColor = DEFAULT_COLOR,
+	PanelMaterial = DEFAULT_MATERIAL,
+	SignageColor = DEFAULT_COLOR,
+	SignageMaterial = DEFAULT_MATERIAL,
+}
 
 function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance)
 	local size = params.Size
 	local random = Random.new(params.Attributes.Seed)
+	local frame = slotLook(params.Attributes, "Frame")
+	local panel = slotLook(params.Attributes, "Panel")
+	local signage = slotLook(params.Attributes, "Signage")
 	local diameter = size.X
 	local center = Vector3.new(0, size.Y / 2 - diameter / 2, 0)
 	local dialRadius = diameter / 2 - RIM_WIDTH
@@ -97,16 +116,14 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		"Base",
 		Vector3.new(BASE_WIDTH, BASE_HEIGHT, math.min(BASE_WIDTH, size.Z)),
 		CFrame.new(0, bottom + BASE_HEIGHT / 2, 0),
-		RIM_COLOR,
-		Enum.Material.Metal
+		frame
 	)
 	addPart(
 		targetContainer,
 		"Post",
 		Vector3.new(POST_WIDTH, postHeight, POST_WIDTH),
 		CFrame.new(0, bottom + BASE_HEIGHT + postHeight / 2, 0),
-		RIM_COLOR,
-		Enum.Material.Metal
+		frame
 	)
 	local rimDepth = size.Z - 2 * (DIAL_THICKNESS + MARK_THICKNESS)
 	addPart(
@@ -114,8 +131,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		"Rim",
 		Vector3.new(rimDepth, diameter, diameter),
 		CFrame.new(center) * AXIS_TO_Z,
-		RIM_COLOR,
-		Enum.Material.Metal,
+		frame,
 		Enum.PartType.Cylinder
 	)
 
@@ -133,8 +149,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			`Dial{faceName}`,
 			Vector3.new(DIAL_THICKNESS, dialRadius * 2, dialRadius * 2),
 			CFrame.new(center.X, center.Y, dialZ) * AXIS_TO_Z,
-			DIAL_COLOR,
-			Enum.Material.SmoothPlastic,
+			panel,
 			Enum.PartType.Cylinder
 		)
 		for hour = 0, HOUR_COUNT - 1 do
@@ -148,7 +163,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 				angle,
 				inner,
 				dialRadius - MARK_INSET,
-				MARK_WIDTH
+				MARK_WIDTH,
+				signage
 			)
 		end
 		addRadialBar(
@@ -159,7 +175,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			hourAngle,
 			0,
 			dialRadius * HOUR_HAND_RATIO,
-			HAND_WIDTH
+			HAND_WIDTH,
+			signage
 		)
 		addRadialBar(
 			targetContainer,
@@ -169,7 +186,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			minuteAngle,
 			0,
 			dialRadius * MINUTE_HAND_RATIO,
-			HAND_WIDTH
+			HAND_WIDTH,
+			signage
 		)
 	end
 	params:Pause()

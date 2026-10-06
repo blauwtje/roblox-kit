@@ -3,6 +3,8 @@
 -- Params.Size is (width, height, thickness); the text and frame are on both the -Z and +Z faces, so the sign
 -- reads from either side, and the output stays inside Size.
 -- Label is the room type name and AccentColor the preset accent; an empty Label leaves the board blank.
+-- The board takes the `signage` slot's color and material, read as `SignageColor` and `SignageMaterial`; the frame
+-- and text take AccentColor. A missing attribute leaves a new Part's own look.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -12,18 +14,20 @@ type GeneratorParams = {
 
 local FRAME_WIDTH = 0.15
 local FRAME_THICKNESS_RATIO = 0.4
-local BOARD_COLOR = Color3.fromRGB(28, 30, 34)
-local DEFAULT_ACCENT_COLOR = Color3.fromRGB(245, 205, 48)
+type Look = { Color: Color3, Material: Enum.Material }
+
+local DEFAULT_COLOR = Instance.new("Part").Color
+local DEFAULT_MATERIAL = "Plastic"
+
+-- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
+local function slotLook(attributes: { [string]: any }, slot: string): Look
+	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
+	return { Color = attributes[`{slot}Color`], Material = material }
+end
+
 local TEXT_FONT = Enum.Font.GothamBold
 
-local function addPart(
-	targetContainer: Instance,
-	name: string,
-	size: Vector3,
-	position: Vector3,
-	color: Color3,
-	material: Enum.Material
-): Part
+local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Anchored = true
@@ -31,8 +35,8 @@ local function addPart(
 	part.CanTouch = false
 	part.CanQuery = false
 	part.Size = size
-	part.Color = color
-	part.Material = material
+	part.Color = look.Color
+	part.Material = look.Material
 	part.CFrame = CFrame.new(position)
 	part.Parent = targetContainer
 	return part
@@ -59,15 +63,23 @@ local function addLabel(board: Part, face: Enum.NormalId, text: string, color: C
 end
 
 local Generator = {}
-Generator.Attributes = { Seed = 0, Label = "", AccentColor = DEFAULT_ACCENT_COLOR }
+Generator.Attributes = {
+	Seed = 0,
+	Label = "",
+	AccentColor = DEFAULT_COLOR,
+	SignageColor = DEFAULT_COLOR,
+	SignageMaterial = DEFAULT_MATERIAL,
+}
 
 function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance)
 	local size = params.Size
+	local signage = slotLook(params.Attributes, "Signage")
 	local accent: Color3 = params.Attributes.AccentColor
 	local label: string = params.Attributes.Label
+	local frameLook: Look = { Color = accent, Material = signage.Material }
 	local frameThickness = size.Z * FRAME_THICKNESS_RATIO
 
-	local board = addPart(targetContainer, "Board", size, Vector3.zero, BOARD_COLOR, Enum.Material.SmoothPlastic)
+	local board = addPart(targetContainer, "Board", size, Vector3.zero, signage)
 	local horizontalSize = Vector3.new(size.X, FRAME_WIDTH, frameThickness)
 	local verticalSize = Vector3.new(FRAME_WIDTH, size.Y - FRAME_WIDTH * 2, frameThickness)
 	for _, face in
@@ -81,32 +93,28 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			`Frame{face.name}Top`,
 			horizontalSize,
 			Vector3.new(0, size.Y / 2 - FRAME_WIDTH / 2, face.z),
-			accent,
-			Enum.Material.SmoothPlastic
+			frameLook
 		)
 		addPart(
 			targetContainer,
 			`Frame{face.name}Bottom`,
 			horizontalSize,
 			Vector3.new(0, -size.Y / 2 + FRAME_WIDTH / 2, face.z),
-			accent,
-			Enum.Material.SmoothPlastic
+			frameLook
 		)
 		addPart(
 			targetContainer,
 			`Frame{face.name}Left`,
 			verticalSize,
 			Vector3.new(-size.X / 2 + FRAME_WIDTH / 2, 0, face.z),
-			accent,
-			Enum.Material.SmoothPlastic
+			frameLook
 		)
 		addPart(
 			targetContainer,
 			`Frame{face.name}Right`,
 			verticalSize,
 			Vector3.new(size.X / 2 - FRAME_WIDTH / 2, 0, face.z),
-			accent,
-			Enum.Material.SmoothPlastic
+			frameLook
 		)
 	end
 	if label ~= "" then

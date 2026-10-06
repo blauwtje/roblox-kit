@@ -4,6 +4,8 @@
 -- Params.Size is (width, height, depth); the board shows the same list on its -Z and +Z faces, so it reads
 -- from either side, and the output stays inside Size.
 -- The times and platforms vary per Seed so repeated boards do not look stamped.
+-- Colors and materials come from the `frame`, `signage`, `panel` and `screen` slots, read as `<Slot>Color` and
+-- `<Slot>Material` attributes; a missing attribute leaves a new Part's own look.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -17,10 +19,17 @@ local CAP_HEIGHT = 0.3
 local POST_WIDTH = 0.5
 local POST_INSET = 0.6
 local PIXELS_PER_STUD = 50
-local BOARD_COLOR = Color3.fromRGB(18, 18, 20)
-local FRAME_COLOR = Color3.fromRGB(60, 64, 70)
-local TEXT_COLOR = Color3.fromRGB(255, 176, 0)
-local HEADER_COLOR = Color3.fromRGB(245, 245, 240)
+type Look = { Color: Color3, Material: Enum.Material }
+
+local DEFAULT_COLOR = Instance.new("Part").Color
+local DEFAULT_MATERIAL = "Plastic"
+
+-- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
+local function slotLook(attributes: { [string]: any }, slot: string): Look
+	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
+	return { Color = attributes[`{slot}Color`], Material = material }
+end
+
 local TEXT_FONT = Enum.Font.Code
 local HEADER = "DEPARTURES"
 local DESTINATIONS = { "CENTRAL", "HARBOUR", "NORTH PARK", "AIRPORT" }
@@ -28,14 +37,7 @@ local FIRST_HOUR = 8
 local LAST_HOUR = 20
 local PLATFORM_COUNT = 4
 
-local function addPart(
-	targetContainer: Instance,
-	name: string,
-	size: Vector3,
-	position: Vector3,
-	color: Color3,
-	material: Enum.Material
-): Part
+local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Anchored = true
@@ -43,8 +45,8 @@ local function addPart(
 	part.CanTouch = false
 	part.CanQuery = false
 	part.Size = size
-	part.Color = color
-	part.Material = material
+	part.Color = look.Color
+	part.Material = look.Material
 	part.CFrame = CFrame.new(position)
 	part.Parent = targetContainer
 	return part
@@ -77,7 +79,7 @@ local function departureRows(random: Random): { string }
 	return rows
 end
 
-local function addBoardFace(board: Part, face: Enum.NormalId, rows: { string })
+local function addBoardFace(board: Part, face: Enum.NormalId, rows: { string }, headerColor: Color3, textColor: Color3)
 	local surface = Instance.new("SurfaceGui")
 	surface.Name = `DepartureSurface{face.Name}`
 	surface.Face = face
@@ -91,18 +93,32 @@ local function addBoardFace(board: Part, face: Enum.NormalId, rows: { string })
 	layout.Parent = surface
 
 	local rowCount = #rows + 1
-	addRow(surface, 0, HEADER, HEADER_COLOR, rowCount)
+	addRow(surface, 0, HEADER, headerColor, rowCount)
 	for index, text in rows do
-		addRow(surface, index, text, TEXT_COLOR, rowCount)
+		addRow(surface, index, text, textColor, rowCount)
 	end
 end
 
 local Generator = {}
-Generator.Attributes = { Seed = 0 }
+Generator.Attributes = {
+	Seed = 0,
+	FrameColor = DEFAULT_COLOR,
+	FrameMaterial = DEFAULT_MATERIAL,
+	SignageColor = DEFAULT_COLOR,
+	SignageMaterial = DEFAULT_MATERIAL,
+	PanelColor = DEFAULT_COLOR,
+	PanelMaterial = DEFAULT_MATERIAL,
+	ScreenColor = DEFAULT_COLOR,
+	ScreenMaterial = DEFAULT_MATERIAL,
+}
 
 function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance)
 	local size = params.Size
 	local random = Random.new(params.Attributes.Seed)
+	local frame = slotLook(params.Attributes, "Frame")
+	local signage = slotLook(params.Attributes, "Signage")
+	local panel = slotLook(params.Attributes, "Panel")
+	local screenLook = slotLook(params.Attributes, "Screen")
 	local bottom = -size.Y / 2
 	local boardHeight = size.Y * BOARD_HEIGHT_RATIO - CAP_HEIGHT
 	local postHeight = size.Y - boardHeight - CAP_HEIGHT
@@ -114,8 +130,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			if side < 0 then "PostLeft" else "PostRight",
 			Vector3.new(POST_WIDTH, postHeight, POST_WIDTH),
 			Vector3.new(side * (size.X / 2 - POST_INSET), bottom + postHeight / 2, 0),
-			FRAME_COLOR,
-			Enum.Material.Metal
+			frame
 		)
 	end
 	local board = addPart(
@@ -123,20 +138,18 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		"Board",
 		Vector3.new(size.X, boardHeight, boardDepth),
 		Vector3.new(0, bottom + postHeight + boardHeight / 2, 0),
-		BOARD_COLOR,
-		Enum.Material.SmoothPlastic
+		signage
 	)
 	addPart(
 		targetContainer,
 		"Cap",
 		Vector3.new(size.X, CAP_HEIGHT, size.Z),
 		Vector3.new(0, size.Y / 2 - CAP_HEIGHT / 2, 0),
-		FRAME_COLOR,
-		Enum.Material.Metal
+		frame
 	)
 	local rows = departureRows(random)
-	addBoardFace(board, Enum.NormalId.Front, rows)
-	addBoardFace(board, Enum.NormalId.Back, rows)
+	addBoardFace(board, Enum.NormalId.Front, rows, panel.Color, screenLook.Color)
+	addBoardFace(board, Enum.NormalId.Back, rows, panel.Color, screenLook.Color)
 	params:Pause()
 end
 
