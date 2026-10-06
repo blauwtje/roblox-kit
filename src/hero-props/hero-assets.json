@@ -510,5 +510,37 @@
   "e39fe4c66b1a": {
     "kind": "trim-quarter-round",
     "assetId": "112291612406353"
+  },
+  "117701b7d4c5": {
+    "kind": "bench",
+    "assetId": "101880144843053"
+  },
+  "f57bb73cd689": {
+    "kind": "ticket-machine",
+    "assetId": "94698669314713"
+  },
+  "b3c08dfb9896": {
+    "kind": "clock",
+    "assetId": "113868462637400"
+  },
+  "2c2b61cbb19a": {
+    "kind": "departure-board",
+    "assetId": "112440369639628"
+  },
+  "93ebeddc4cca": {
+    "kind": "sign",
+    "assetId": "107871902578867"
+  },
+  "7576cafe8bf9": {
+    "kind": "pendant",
+    "assetId": "127045372575746"
+  },
+  "ba8489229e26": {
+    "kind": "arch-trim",
+    "assetId": "101771726099445"
+  },
+  "e71d4aca9eb5": {
+    "kind": "pillar",
+    "assetId": "119951924235625"
   }
 }
