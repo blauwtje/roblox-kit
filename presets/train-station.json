@@ -26,6 +26,7 @@
     }
   },
   "flatSurfaces": true,
+  "flushSpawn": true,
   "lighting": {
     "LightingStyle": "Realistic",
     "PrioritizeLightingQuality": true,
@@ -93,13 +94,14 @@
     }
   },
   "lightFixtures": {
-    "kind": "sconce",
+    "kind": "pendant",
     "spacing": 10,
-    "height": 8,
+    "drop": 2,
+    "lines": 2,
     "size": {
-      "width": 2,
-      "height": 3,
-      "depth": 1
+      "width": 3,
+      "height": 2,
+      "depth": 3
     }
   },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
@@ -1923,23 +1925,22 @@
       "heroProps": ["departure-board"],
       "arrangements": [
         {
-          "shape": "grid",
+          "shape": "bank",
+          "piece": "ticket-machine",
+          "count": 6,
+          "inset": 2
+        },
+        {
+          "shape": "colonnade",
           "piece": "pillar",
-          "spacing": 9
+          "spacing": 8,
+          "inset": 4
         },
         {
           "shape": "rows",
           "piece": "bench",
           "spacing": 6,
           "perRow": 3
-        },
-        {
-          "shape": "along-walls",
-          "piece": "ticket-machine",
-          "spacing": 5,
-          "walls": "doorless",
-          "inset": 2,
-          "max": 6
         }
       ],
       "signLabel": "CONCOURSE",
