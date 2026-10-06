@@ -49,6 +49,12 @@ const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
 const buildMapInput = relationMapSpecSchema.safeExtend({
   /** Which Studio builds the map; optional while exactly one is connected. */
   studioId: z.string().min(1).optional(),
+  /**
+   * Uses the recorded asset ids (hero props, trim meshes, ambient sprites and the baked maps of material
+   * variants) that belong to the author's own places. Off by default: those ids do not load for other
+   * users, so the map is built from Luau generators and plain materials, with no missing-asset warnings.
+   */
+  useRecordedAssets: z.boolean().default(false),
 });
 
 const buildMapOutput = z.strictObject({
@@ -127,12 +133,15 @@ function zonesOf(parts: RoomPart[]): z.infer<typeof buildMapOutput>["zones"] {
 }
 
 /** The flat MaterialVariant of each surface role of the style that names one; none without a style. */
-function variantsOf(style: Preset | undefined): Record<string, Variant> {
+function variantsOf(
+  style: Preset | undefined,
+  useRecordedAssets: boolean,
+): Record<string, Variant> {
   const variants: Record<string, Variant> = {};
   for (const [role, surface] of Object.entries(style?.surfaces ?? {})) {
-    if (surface.variant !== undefined) {
-      variants[role] = surface.variant;
-    }
+    if (surface.variant === undefined) continue;
+    // Without recorded assets a variant renders flat color only: its baked maps are dropped.
+    variants[role] = useRecordedAssets ? surface.variant : { ...surface.variant, maps: undefined };
   }
   return variants;
 }
@@ -368,7 +377,7 @@ async function buildMap(
   const facades = style === undefined ? [] : buildFacades(spec, layout.parts, style.surfaces);
   const placed = style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
   const heroes =
-    style === undefined || spec.style === undefined
+    style === undefined || spec.style === undefined || !input.useRecordedAssets
       ? { props: placed.props, heroProps: [], warnings: [] }
       : await heroPropsOf(
           spec,
@@ -378,7 +387,7 @@ async function buildMap(
         );
   const { props, heroProps } = heroes;
   const trim =
-    style === undefined || spec.style === undefined
+    style === undefined || spec.style === undefined || !input.useRecordedAssets
       ? { details, trimMeshes: [] }
       : await trimMeshesOf(details, { base: presetNamed(spec.style.preset), style }, heroSources);
   const { trimMeshes } = trim;
@@ -386,23 +395,27 @@ async function buildMap(
   const heroSurfaces = heroProps.flatMap((hero) => Object.values(hero.surfaces));
   // A hero prop whose asset fails to load builds its fallback set piece, so its kind needs a generator too.
   const generators = await generatorsOf([...props, ...heroProps.map((hero) => hero.fallback)]);
-  const variants = variantsOf(style);
+  const variants = variantsOf(style, input.useRecordedAssets);
   const lights = lightRecordsOf(spec, layout.parts, style);
   const effectSpecs = style?.ambientEffects ?? [];
   const spriteTextures =
-    effectSpecs.length === 0 ? {} : await recordedSprites(heroSources.assetsFile ?? heroAssetsFile);
+    effectSpecs.length === 0 || !input.useRecordedAssets
+      ? {}
+      : await recordedSprites(heroSources.assetsFile ?? heroAssetsFile);
   const effects: AmbientEffectRecord[] = ambientEffectsOf(
     spec,
     layout.parts,
     effectSpecs,
     spriteTextures,
   );
-  warnings.push(
-    ...missingSpriteWarnings(
-      effectSpecs.filter((effect) => effects.some((record) => record.name === effect.name)),
-      spriteTextures,
-    ),
-  );
+  if (input.useRecordedAssets) {
+    warnings.push(
+      ...missingSpriteWarnings(
+        effectSpecs.filter((effect) => effects.some((record) => record.name === effect.name)),
+        spriteTextures,
+      ),
+    );
+  }
   const build: BuildContext = {
     mapId: input.mapId,
     terrainFills: layout.terrainFills,
@@ -521,6 +534,7 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   title: "Build map",
   description:
     `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A styled room marked exterior (optionally with facadeFloors storeys) also gets a facade on the outer face of its walls: an accent band between storeys, a framed window per bay and storey and a trim cornice, none colliding. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor (each light within ${String(config.lightCeilingDropStuds)} stud of a ceiling also gets a ${String(config.lightFixtureSizeStuds)}-stud Neon fixture part against the ceiling, tagged ${config.ceilingTag} so it hides with the ceilings), applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
+    `Recorded assets are off by default: with useRecordedAssets false (the default) hero props, trim meshes, ambient sprite textures and the baked maps of MaterialVariants are all skipped, the map is built from Luau generators and plain materials and no missing-asset or missing-sprite warning is returned. Set useRecordedAssets true only for the author's own places, where those ids load; the rest of this paragraph and the next two describe that mode. ` +
     `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. build_map only reads recorded assets and never uploads; an asset that fails to load builds the set piece instead with a warning naming the asset id and error; a hero prop with no recorded asset keeps its set piece and a warning says to generate and upload it from a clone of the roblox-kit repo. Each other prop whose kind's prop-<kind> recipe has a recorded asset is that mesh instead, stretched on each axis to the prop's box; a kind with no recorded asset keeps its ProceduralModel, with no warning. ` +
     `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
     `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +

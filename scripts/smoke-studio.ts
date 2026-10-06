@@ -173,6 +173,9 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
   ],
 });
 
+/** The smoke map as build_map takes it with the recorded assets on: its hero props, trim meshes and baked variant maps are probed. */
+const recordedSmokeSpec = { ...smokeRelationSpec, useRecordedAssets: true };
+
 /** A map holding only a noise heightmap, inside the smoke region and spanning four chunks; the terrain step builds and removes it. */
 const terrainSmokeSpec = relationMapSpecSchema.parse({
   mapId: "smoke-terrain",
@@ -512,7 +515,7 @@ async function probeBuildMap(connection: StudioConnection): Promise<string> {
     ceilingLightPlacements().length +
     fixtureLightPlacements().length -
     trim.trimMeshes.length;
-  const { output } = await callRealTool(buildMapTool, smokeRelationSpec, connection);
+  const { output } = await callRealTool(buildMapTool, recordedSmokeSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
   expectEqual("build_map partCount", output.partCount, expectedPartCount);
   expectEqual(
@@ -1048,7 +1051,7 @@ async function probeLighting(connection: StudioConnection): Promise<string> {
     post.Sky.CelestialBodiesShown,
   );
 
-  await callRealTool(buildMapTool, smokeRelationSpec, connection);
+  await callRealTool(buildMapTool, recordedSmokeSpec, connection);
   const rebuilt = await readMapLights(connection, studioId);
   expectEqual("light count after a rebuild", rebuilt.lights.length, placements.length);
   expectEqual("snapshot kept across a rebuild", rebuilt.snapshot, built.snapshot);
@@ -1443,7 +1446,9 @@ async function probeAmbientEffects(connection: StudioConnection): Promise<string
   const effects = preset?.ambientEffects ?? [];
   const spec = resolveRelations(ambientSmokeSpec);
   const planned = ambientEffectsOf(spec, layoutMap(spec).parts, effects, {});
-  const built = (await callRealTool(buildMapTool, ambientSmokeSpec, connection)).output;
+  const built = (
+    await callRealTool(buildMapTool, { ...ambientSmokeSpec, useRecordedAssets: true }, connection)
+  ).output;
   const counts = ambientCountSchema.parse(
     JSON.parse(await executeLuau(connection, studioId, ambientCountLuau)),
   );

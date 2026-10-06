@@ -597,10 +597,47 @@ async function countFetchesWithReviewedTrainCar(run: () => Promise<void>): Promi
 
 const propsPhaseIndex = phaseNames.indexOf("props");
 
-await test("a recorded hero asset is sent to the props phase in the slot of the set piece it replaces", async () => {
+/** The benchmark with recorded assets turned on, as the author's own places build it. */
+const recordedBenchmarkSpec = { ...benchmarkSpec, useRecordedAssets: true };
+
+await test("recorded assets are off by default: no hero props, trim meshes, variant maps or missing-asset warnings", async () => {
   const studio = phaseStudio();
   const tool = buildMapToolWith(await fakeHeroSources(true));
   const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  const propsPhase = requestArguments(studio, propsPhaseIndex);
+  assert.deepEqual(propsPhase["heroProps"] ?? [], []);
+  assert.deepEqual(propsPhase["trimMeshes"] ?? [], []);
+  const props = propsPhase["props"] as { kind: string }[];
+  assert.ok(
+    props.some((prop) => prop.kind === "track-bed"),
+    "the set piece stays",
+  );
+  const shell = String(studio.requests[0]?.arguments["code"]);
+  assert.ok(!shell.includes('"maps"'), "no MaterialVariant carries baked maps");
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.deepEqual(
+    structured.warnings.filter((warning) => /hero prop|Trim mesh|Ambient sprite/.test(warning)),
+    [],
+  );
+});
+
+await test("useRecordedAssets true keeps the variants' baked maps", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(false));
+  await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
+  assert.ok(String(studio.requests[0]?.arguments["code"]).includes('"maps"'));
+});
+
+await test("useRecordedAssets is a documented boolean that defaults to false", () => {
+  assert.equal(buildMapTool.inputSchema.parse(twoRoomSpec).useRecordedAssets, false);
+  assert.throws(() => buildMapTool.inputSchema.parse({ ...twoRoomSpec, useRecordedAssets: "yes" }));
+  assert.match(buildMapTool.description, /useRecordedAssets/);
+});
+
+await test("a recorded hero asset is sent to the props phase in the slot of the set piece it replaces", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(true));
+  const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
   const propsPhase = requestArguments(studio, propsPhaseIndex);
   const heroProps = propsPhase["heroProps"] as { kind: string; assetId: string; size: object }[];
   const trainCars = heroProps.filter((hero) => hero.kind === "train-car");
@@ -626,7 +663,7 @@ await test("a recorded hero asset is sent to the props phase in the slot of the 
 await test("without a recorded hero asset the set piece stays and the result says why", async () => {
   const studio = phaseStudio();
   const tool = buildMapToolWith(await fakeHeroSources(false));
-  const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
   const propsPhase = requestArguments(studio, propsPhaseIndex);
   const heroProps = propsPhase["heroProps"] as { kind: string }[];
   assert.ok(!heroProps.some((hero) => hero.kind === "train-car"));
@@ -649,7 +686,7 @@ await test("a reviewed but unrecorded hero prop makes no Open Cloud call and ret
   const tool = buildMapToolWith(await fakeHeroSources(false));
   let result: Awaited<ReturnType<typeof tool.handler>> | undefined;
   const fetchCalls = await countFetchesWithReviewedTrainCar(async () => {
-    result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+    result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
   });
   assert.equal(fetchCalls, 0, "no Open Cloud call is made");
   const structured = buildMapTool.outputSchema.parse(result?.structuredContent);
@@ -674,7 +711,7 @@ await test("a hero asset that fails to load becomes a warning naming its asset i
     },
   });
   const tool = buildMapToolWith(await fakeHeroSources(true));
-  const result = await tool.handler(tool.inputSchema.parse(benchmarkSpec), { studio });
+  const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
   const failure = structured.warnings.filter((warning) => warning.includes("failed to load"));
   assert.equal(failure.length, 1);
@@ -723,6 +760,7 @@ await test("a typed room gets its style's ambient effects, untextured with one w
   const connection = styledStudio();
   const typedSpec = {
     ...twoRoomSpec,
+    useRecordedAssets: true,
     style: { preset: "train-station" },
     rooms: twoRoomSpec.rooms.map((room) =>
       room.name === "hall" ? { ...room, roomType: "platform" } : room,
