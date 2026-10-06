@@ -260,6 +260,21 @@ await test("the lighting phase carries what places a fixture at each ceiling lig
   assert.equal(lightingArguments["fixtureSizeStuds"], config.lightFixtureSizeStuds);
 });
 
+await test("the props phase carries the size under which a prop casts no shadow", async () => {
+  const connection = styledStudio();
+  await run(connection, { ...twoRoomSpec, style: { preset: "train-station" } });
+  assert.equal(requestArguments(connection, 4)["noShadowSizeStuds"], config.noShadowPropSizeStuds);
+});
+
+await test("build-map.luau turns shadows off on fixtures, trim details and small props and sets loaded mesh fidelity", async () => {
+  const source = await readFile(new URL("../../luau/build-map.luau", import.meta.url), "utf8");
+  assert.equal(source.match(/fixture\.CastShadow = false/g)?.length, 2);
+  assert.ok(source.includes("part.CastShadow = false"));
+  assert.ok(source.includes("descendant.CastShadow = false"));
+  assert.ok(source.includes("descendant.RenderFidelity = Enum.RenderFidelity.Automatic"));
+  assert.ok(source.includes("descendant.CollisionFidelity = Enum.CollisionFidelity.Box"));
+});
+
 await test("without a style no lights are sent and the request after the lighting phase only restores Lighting", async () => {
   const connection = phaseStudio();
   await run(connection, twoRoomSpec);

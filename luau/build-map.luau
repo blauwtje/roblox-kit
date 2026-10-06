@@ -157,6 +157,8 @@ type Arguments = {
 	generators: { [string]: string }?,
 	heroProps: { HeroPropRecord }?,
 	ceilingTag: string?,
+	-- Props phase: a prop whose largest side is under this casts no shadow.
+	noShadowSizeStuds: number?,
 	-- Lighting phase: how far below a ceiling a light may hang to get a fixture, and the fixture's side.
 	ceilingDropStuds: number?,
 	fixtureSizeStuds: number?,
@@ -340,6 +342,10 @@ local function newPart(record: PartRecord): BasePart
 		end
 		CollectionService:AddTag(part, ceilingTag)
 	end
+	if record.kind ~= "ceiling" and record.canCollide == false then
+		-- A trim detail is thin ornament, so it casts no shadow.
+		part.CastShadow = false
+	end
 	if record.kind == "ceiling" or record.canCollide == false then
 		part.CanCollide = false
 		part.CanTouch = false
@@ -434,6 +440,7 @@ local function addFixtureBox(model: Model, record: LightRecord, fixtureNumber: n
 	fixture.CanCollide = false
 	fixture.CanTouch = false
 	fixture.CanQuery = false
+	fixture.CastShadow = false
 	fixture.Material = Enum.Material.Neon
 	fixture.Color = Color3.fromHex(record.color)
 	fixture.Size = toVector3(box.size)
@@ -497,6 +504,7 @@ local function addFixture(model: Model, record: LightRecord)
 	fixture.CanCollide = false
 	fixture.CanTouch = false
 	fixture.CanQuery = false
+	fixture.CastShadow = false
 	fixture.Material = Enum.Material.Neon
 	fixture.Color = Color3.fromHex(record.color)
 	fixture.Size = Vector3.new(sizeStuds, sizeStuds, sizeStuds)
@@ -635,6 +643,8 @@ local function addHeroProps(
 				descendant.CanTouch = false
 				descendant.CanQuery = false
 				if descendant:IsA("MeshPart") then
+					descendant.RenderFidelity = Enum.RenderFidelity.Automatic
+					descendant.CollisionFidelity = Enum.CollisionFidelity.Box
 					paintHeroPart(descendant, record)
 				end
 			end
@@ -660,6 +670,25 @@ local function addHeroProps(
 	return failures
 end
 
+-- Turns off CastShadow on every part of each generated prop whose largest side is under noShadowSizeStuds.
+local function clearSmallPropShadows(proceduralModels: { ProceduralModel })
+	local limit = arguments.noShadowSizeStuds
+	if not limit then
+		error("A props phase needs noShadowSizeStuds.", 0)
+	end
+	for _, proceduralModel in proceduralModels do
+		local size = proceduralModel.Size
+		if math.max(size.X, size.Y, size.Z) >= limit then
+			continue
+		end
+		for _, descendant in proceduralModel:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.CastShadow = false
+			end
+		end
+	end
+end
+
 -- Adds the set pieces, then the hero props; returns the hero assets that failed to load.
 local function addPropModels(model: Model): { HeroLoadFailure }
 	local generators = addGenerators(model)
@@ -670,6 +699,7 @@ local function addPropModels(model: Model): { HeroLoadFailure }
 	end
 	local failures = addHeroProps(model, generators, countByKind, proceduralModels)
 	waitForGeneration(proceduralModels)
+	clearSmallPropShadows(proceduralModels)
 	if arguments.idleScript then
 		local idleScript = Instance.new("Script")
 		idleScript.Name = IDLE_SCRIPT_NAME

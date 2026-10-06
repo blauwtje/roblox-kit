@@ -68,6 +68,8 @@ export const config = Object.freeze({
   maxLocalLightsPerRoom: 5,
   /** Most particles alive at once across one map (each emitter's rate times its lifetime, summed); a guessed start for mobile, and rates over it are scaled down together. */
   maxAliveParticlesPerMap: 400,
+  /** Props whose largest side is under this many studs cast no shadow; light fixtures and trim details never do. A guessed start for mobile. */
+  noShadowPropSizeStuds: 3,
   /** Height above the floor of the focal light over a spawn pad. */
   focalLightHeightStuds: 6,
 

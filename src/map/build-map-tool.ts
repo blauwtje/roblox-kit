@@ -277,6 +277,7 @@ function phaseArguments(
     props: {
       props: phase.parts,
       generators: build.generators,
+      noShadowSizeStuds: config.noShadowPropSizeStuds,
       heroProps: [...build.heroProps, ...build.trimMeshes],
       ...build.idle,
     },
