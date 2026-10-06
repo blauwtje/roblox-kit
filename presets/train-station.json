@@ -2030,6 +2030,22 @@
     "pillar": {
       "script": "src/hero-props/meshes/train-station/pillar.py",
       "targets": [{ "replaces": "prop:pillar", "anchor": "bottom" }]
+    },
+    "bench": {
+      "script": "src/hero-props/meshes/train-station/bench.py",
+      "targets": [{ "replaces": "prop:bench", "anchor": "bottom" }]
+    },
+    "ticket-machine": {
+      "script": "src/hero-props/meshes/train-station/ticket-machine.py",
+      "targets": [{ "replaces": "prop:ticket-machine", "anchor": "bottom", "yaw": 180 }]
+    },
+    "clock": {
+      "script": "src/hero-props/meshes/train-station/clock.py",
+      "targets": [{ "replaces": "prop:clock", "anchor": "center" }]
+    },
+    "departure-board": {
+      "script": "src/hero-props/meshes/train-station/departure-board.py",
+      "targets": [{ "replaces": "prop:departure-board", "anchor": "center" }]
     }
   },
   "ambientEffects": [
