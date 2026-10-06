@@ -255,6 +255,13 @@ function pendantMeshRecordsOf(
   );
 }
 
+/** The light with its fixture back to a plain box, with no glow ball. */
+function withoutGlow(light: LightRecord): LightRecord {
+  if (light.fixture?.glow === undefined) return light;
+  const { position, size, pendant } = light.fixture;
+  return { ...light, fixture: { position, size, pendant } };
+}
+
 /** The lights the style's light roles and fixtures place, each tied to the floor part of its zone's room; `glow` turns each pendant's Part into a Neon ball. */
 function lightRecordsOf(
   spec: MapSpec,
@@ -459,7 +466,6 @@ function presetNamed(name: string): Preset {
   return preset;
 }
 
-/** Builds the map phase by phase; `heroSources` says where recorded hero assets are looked up. */
 /** The declared arch and trim meshes first, then a recorded profile mesh for each detail they left. */
 async function trimMeshesWithDeclared(
   details: DetailPart[],
@@ -476,6 +482,7 @@ async function trimMeshesWithDeclared(
   };
 }
 
+/** Builds the map phase by phase; `heroSources` says where recorded hero assets are looked up. */
 async function buildMap(
   input: z.output<typeof buildMapInput>,
   context: ToolContext,
@@ -578,7 +585,13 @@ async function buildMap(
     effects,
   });
   let partCount = 0;
-  for (const [index, phase] of phases.entries()) {
+  let pendantMeshFailed = false;
+  for (const [index, builtPhase] of phases.entries()) {
+    // A pendant mesh that failed to load in the props phase leaves the lighting phase its kit fixture boxes.
+    const phase =
+      builtPhase.name === "lighting" && pendantMeshFailed
+        ? { ...builtPhase, parts: (builtPhase.parts as LightRecord[]).map(withoutGlow) }
+        : builtPhase;
     try {
       const built = await runLuauFile({
         connection: context.studio,
@@ -612,8 +625,9 @@ async function buildMap(
           fallback === undefined &&
           pendantMeshes.some((mesh) => mesh.assetId === failure.assetId)
         ) {
+          pendantMeshFailed = true;
           warnings.push(
-            `Pendant mesh (asset ${failure.assetId}) failed to load: ${failure.error}; only its Neon glow ball hangs.`,
+            `Pendant mesh (asset ${failure.assetId}) failed to load: ${failure.error}; its kit fixture box is built instead.`,
           );
           continue;
         }

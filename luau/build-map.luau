@@ -639,6 +639,10 @@ local function addHeroProps(
 				table.insert(proceduralModels, addProp(model, generators, record.fallback, countByKind))
 			elseif record.fallbackPart then
 				newPart(record.fallbackPart).Parent = model
+			elseif record.fallbackParts then
+				for _, part in record.fallbackParts do
+					newPart(part).Parent = model
+				end
 			end
 			continue
 		end

@@ -288,17 +288,29 @@ async function declaredMeshesOf<Prop extends PlacedProp>(
       kept.push(prop);
       continue;
     }
-    if (!assetIds.has(match.meshKind)) {
-      assetIds.set(
-        match.meshKind,
-        (await recordedHeroAsset(preset.base, match.meshKind, sources)).assetId,
-      );
-    }
-    const assetId = assetIds.get(match.meshKind);
+    const assetId = await cachedAssetId(
+      assetIds,
+      match.meshKind,
+      preset.base,
+      match.meshKind,
+      sources,
+    );
     if (assetId === undefined) kept.push(prop);
     else heroProps.push(declaredRecord(assetId, match.target, prop));
   }
   return { props: kept, heroProps };
+}
+
+/** The recorded asset of `recipeKind`, looked up once per `key` of `cache`; undefined when none is recorded. */
+async function cachedAssetId<Key>(
+  cache: Map<Key, string | undefined>,
+  key: Key,
+  base: Preset,
+  recipeKind: string,
+  sources: HeroPropSources,
+): Promise<string | undefined> {
+  if (!cache.has(key)) cache.set(key, (await recordedHeroAsset(base, recipeKind, sources)).assetId);
+  return cache.get(key);
 }
 
 /** Each prop whose kind's recipe has a recorded asset as its stretched mesh; the others stay Luau models. */
@@ -317,10 +329,7 @@ async function propMeshesOf<Prop extends PlacedProp>(
       kept.push(prop);
       continue;
     }
-    if (!assetIds.has(kind)) {
-      assetIds.set(kind, (await recordedHeroAsset(preset.base, kind, sources)).assetId);
-    }
-    const assetId = assetIds.get(kind);
+    const assetId = await cachedAssetId(assetIds, kind, preset.base, kind, sources);
     if (assetId === undefined) kept.push(prop);
     else heroProps.push(stretchedRecord(assetId, recipe, prop, preset.style));
   }
@@ -341,8 +350,8 @@ export interface TrimMeshRecord {
 }
 
 /**
- * A declared mesh that replaces trim details: one doorway arch (its jambs and lintel as `fallbackParts`) kept at its
- * modelled size, or one crown or baseboard run (its box as the one fallback part) stretched along the run.
+ * A declared mesh that replaces trim details: one doorway arch (its jambs and lintel as `fallbackParts`) stretched to
+ * the frame's outer bounds, or one crown or baseboard run (its box as the one fallback part) stretched along the run.
  * `part` names the MeshPart of the Model to keep; the mesh's own baked look is kept, so it names no surfaces.
  */
 export interface DeclaredTrimRecord {
@@ -373,13 +382,13 @@ export async function declaredTrimOf(
   const assetOf = async (replaces: string) => {
     const match = targets.find(({ target }) => target.replaces === replaces);
     if (match === undefined || match.target.part === undefined) return undefined;
-    if (!assetIds.has(match.meshKind)) {
-      assetIds.set(
-        match.meshKind,
-        (await recordedHeroAsset(preset.base, match.meshKind, sources)).assetId,
-      );
-    }
-    const assetId = assetIds.get(match.meshKind);
+    const assetId = await cachedAssetId(
+      assetIds,
+      match.meshKind,
+      preset.base,
+      match.meshKind,
+      sources,
+    );
     return assetId === undefined ? undefined : { assetId, part: match.target.part };
   };
   const arches = new Map<string, DetailPart[]>();
@@ -418,19 +427,26 @@ export async function declaredTrimOf(
       kept.push(...parts);
       continue;
     }
-    // Centered between its jambs at half the wall's height, turned a quarter when the jambs differ in z.
+    // Stretched to the frame's outer bounds (both jambs and the lintel), turned a quarter when the jambs differ in z.
+    const low = (axis: "x" | "y" | "z") =>
+      Math.min(...parts.map((part) => part.position[axis] - part.size[axis] / 2));
+    const high = (axis: "x" | "y" | "z") =>
+      Math.max(...parts.map((part) => part.position[axis] + part.size[axis] / 2));
+    const extent = { x: high("x") - low("x"), y: high("y") - low("y"), z: high("z") - low("z") };
+    const alongZ = Math.abs(jamb.position.z - other.position.z) > 1e-9;
     declaredTrim.push({
       kind: "arch",
       assetId: archAsset.assetId,
       pivot: {
-        x: (jamb.position.x + other.position.x) / 2,
-        y: jamb.position.y,
-        z: (jamb.position.z + other.position.z) / 2,
+        x: (low("x") + high("x")) / 2,
+        y: (low("y") + high("y")) / 2,
+        z: (low("z") + high("z")) / 2,
       },
-      yaw: Math.abs(jamb.position.z - other.position.z) > 1e-9 ? 90 : 0,
-      size: jamb.size,
+      yaw: alongZ ? 90 : 0,
+      // The mesh's x runs along the wall and its z through it.
+      size: alongZ ? { x: extent.z, y: extent.y, z: extent.x } : extent,
       surfaces: {},
-      fit: "none",
+      fit: "stretch",
       part: archAsset.part,
       fallbackParts: parts,
     });
@@ -457,11 +473,13 @@ export async function trimMeshesOf(
       kept.push(detail);
       continue;
     }
-    if (!assetIds.has(profile.kind)) {
-      const recorded = await recordedHeroAsset(preset.base, trimRecipeKind(profile.kind), sources);
-      assetIds.set(profile.kind, recorded.assetId);
-    }
-    const assetId = assetIds.get(profile.kind);
+    const assetId = await cachedAssetId(
+      assetIds,
+      profile.kind,
+      preset.base,
+      trimRecipeKind(profile.kind),
+      sources,
+    );
     if (assetId === undefined) {
       kept.push(detail);
       continue;

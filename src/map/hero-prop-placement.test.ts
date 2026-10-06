@@ -482,7 +482,7 @@ await test("a declared arch-trim mesh replaces each doorway arch and each crown 
   assert.equal(result.details.length, details.length - arches.length - runs.length);
   for (const record of archRecords) {
     assert.equal(record.part, "arch");
-    assert.equal(record.fit, "none");
+    assert.equal(record.fit, "stretch");
     assert.equal(record.fallbackParts.length, 3);
     const lintel = record.fallbackParts.find((part) => part.name.endsWith("-lintel"));
     assert.ok(lintel !== undefined);
@@ -490,8 +490,17 @@ await test("a declared arch-trim mesh replaces each doorway arch and each crown 
       Math.abs(record.pivot.x - lintel.position.x) < 1e-9 ||
         Math.abs(record.pivot.z - lintel.position.z) < 1e-9,
     );
-    assert.equal(record.pivot.y, record.fallbackParts[0]?.position.y);
+    assert.ok(Math.abs(record.pivot.y - (record.fallbackParts[0]?.position.y ?? NaN)) < 1e-9);
     assert.equal(record.yaw, lintel.size.z > lintel.size.x ? 90 : 0);
+    // The record's box is the frame's outer bounds: the jambs' span along the wall, their height, the arch's depth.
+    const [jambA, jambB] = record.fallbackParts.filter((part) => part !== lintel);
+    assert.ok(jambA !== undefined && jambB !== undefined);
+    const alongZ = record.yaw === 90;
+    const axis = alongZ ? "z" : "x";
+    const span = Math.abs(jambA.position[axis] - jambB.position[axis]) + jambA.size[axis];
+    assert.ok(Math.abs(record.size.x - span) < 1e-9);
+    assert.ok(Math.abs(record.size.y - jambA.size.y) < 1e-9);
+    assert.ok(Math.abs(record.size.z - lintel.size[alongZ ? "x" : "z"]) < 1e-9);
   }
   for (const record of result.declaredTrim.filter((entry) => entry.kind !== "arch")) {
     const [run] = record.fallbackParts;
