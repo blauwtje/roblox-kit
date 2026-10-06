@@ -17,14 +17,15 @@ export interface FixtureBox {
   size: Vector;
 }
 
-/** One light to create: its zone, role, where it hangs, its range, whether it casts shadows and the fixture that holds it. */
+/** One light to create: its zone, role, where it hangs, its range, that it casts no shadow and the fixture that holds it. */
 export interface LightPlacement {
   /** Name of the room the light belongs to. */
   zone: string;
   role: LightRoleName;
   position: Vector;
   range: number;
-  shadows: boolean;
+  /** Always false: a PointLight shadow costs a cube-map render per frame, too much for mobile. */
+  shadows: false;
   /** Set on a light a preset's `lightFixtures` places; the center and focal lights have none. */
   fixture?: FixtureBox;
 }
@@ -120,11 +121,12 @@ function fixtureBoxes(spec: MapSpec, room: RoomSpec, fixtures: LightFixtures): F
 
 /**
  * Places the lights of a map from a style's light roles. Without `lightFixtures`, every room gets
- * one light at its center below the ceiling: the hero in the largest room, a zone marker in each
- * other room, and only the hero casts shadows. With them, every room's center light is a hero that
- * casts shadows and the fixtures repeat as shadowless zone markers, each holding its light. A room
- * with a spawn pad gets a focal light over the pad. Every light's range shrinks with the room's depth
- * from the spawn room (`roomProgression`), to `progressionScale.lightRange` of its role's range.
+ * one light at its center below the ceiling: the hero in the largest room and a zone marker in each
+ * other room. With them, every room's center light is a hero and the fixtures repeat as zone
+ * markers, each holding its light. A room with a spawn pad gets a focal light over the pad. No
+ * light casts shadows, and a room keeps at most `config.maxLocalLightsPerRoom` lights, the
+ * latest placed dropped first. Every light's range shrinks with the room's depth from the spawn
+ * room (`roomProgression`), to `progressionScale.lightRange` of its role's range.
  */
 export function placeLights(
   spec: MapSpec,
@@ -135,6 +137,7 @@ export function placeLights(
   const progression = roomProgression(spec);
   const placements: LightPlacement[] = [];
   for (const room of spec.rooms) {
+    const roomStart = placements.length;
     // Rooms deeper from the spawn room get a shorter reach, which reads as dimmer light.
     const reach = progressionFactor(progression.get(room.name) ?? 0, progressionScale.lightRange);
     const wallHeight = room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds;
@@ -145,7 +148,7 @@ export function placeLights(
       role,
       position: { x: room.x, y: wallHeight - config.lightCeilingDropStuds, z: room.z },
       range: lightRoles[role].range * reach,
-      shadows: isHeroRoom,
+      shadows: false,
     });
     if (lightFixtures !== undefined) {
       for (const fixture of fixtureBoxes(spec, room, lightFixtures)) {
@@ -168,6 +171,7 @@ export function placeLights(
         shadows: false,
       });
     }
+    placements.length = Math.min(placements.length, roomStart + config.maxLocalLightsPerRoom);
   }
   return placements;
 }

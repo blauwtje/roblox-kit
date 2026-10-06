@@ -64,6 +64,8 @@ export const config = Object.freeze({
   lightCeilingDropStuds: 1,
   /** Side of the cube fixture that build_map hangs from the ceiling at each ceiling light. */
   lightFixtureSizeStuds: 1,
+  /** Most lights one room keeps; a guessed start to tune later, and the latest placed lights over it are dropped. */
+  maxLocalLightsPerRoom: 5,
   /** Height above the floor of the focal light over a spawn pad. */
   focalLightHeightStuds: 6,
 

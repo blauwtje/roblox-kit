@@ -33,7 +33,7 @@ await test("puts the hero in the largest room and a zone marker in every other r
       range: 20,
       shadows: false,
     },
-    { zone: "yard", role: "hero", position: { x: 40, y: 11, z: 0 }, range: 60, shadows: true },
+    { zone: "yard", role: "hero", position: { x: 40, y: 11, z: 0 }, range: 60, shadows: false },
     {
       zone: "closet",
       role: "zoneMarker",
@@ -92,7 +92,7 @@ await test("hangs lights below the ceiling of the room's resolved wall height", 
   );
 });
 
-await test("only the hero casts shadows", () => {
+await test("no light casts shadows", () => {
   const lights = placeLights(
     spec([
       { name: "a", x: 0, z: 0, width: 30, depth: 30, spawn: true },
@@ -101,7 +101,7 @@ await test("only the hero casts shadows", () => {
     lightRoles,
   );
   for (const light of lights) {
-    assert.equal(light.shadows, light.role === "hero");
+    assert.equal(light.shadows, false);
   }
 });
 
@@ -119,7 +119,7 @@ const pendants: NonNullable<Preset["lightFixtures"]> = {
   size: { width: 2, height: 1, depth: 2 },
 };
 
-await test("with fixtures every room's center light is a shadow-casting hero and each fixture a shadowless zone marker", () => {
+await test("with fixtures every room's center light is a hero and each fixture a zone marker", () => {
   const lights = placeLights(
     spec([
       { name: "hall", x: 0, z: 0, width: 40, depth: 40 },
@@ -131,7 +131,7 @@ await test("with fixtures every room's center light is a shadow-casting hero and
   for (const light of lights) {
     const isFixture = light.fixture !== undefined;
     assert.equal(light.role, isFixture ? "zoneMarker" : "hero");
-    assert.equal(light.shadows, !isFixture);
+    assert.equal(light.shadows, false);
     if (light.fixture !== undefined) {
       assert.deepEqual(light.position, light.fixture.position);
     }
@@ -158,6 +158,14 @@ await test("sconces repeat along every wall at the preset spacing and height, fl
     assert.equal(light.position.y, 8);
   }
   assert.deepEqual(north[0]?.fixture?.size, { x: 2, y: 3, z: 1 });
+});
+
+await test("sconces on an east wall swap their width and depth", () => {
+  const lights = placeLights(
+    spec([{ name: "hall", x: 0, z: 0, width: 40, depth: 40 }]),
+    lightRoles,
+    { ...sconces, spacing: 40 },
+  );
   const east = lights.find((light) => light.fixture?.position.x === 18.5);
   assert.deepEqual(east?.fixture?.size, { x: 1, y: 3, z: 2 });
 });
@@ -184,7 +192,7 @@ await test("sconces keep out of the corners and of door gaps", () => {
 
 await test("pendants hang in a centered grid the drop below the ceiling", () => {
   const lights = placeLights(
-    spec([{ name: "hall", x: 10, z: 0, width: 50, depth: 30 }]),
+    spec([{ name: "hall", x: 10, z: 0, width: 30, depth: 30 }]),
     lightRoles,
     pendants,
   );
@@ -241,4 +249,21 @@ await test("light range shrinks with a room's door distance from the spawn room"
 await test("the focal light over the spawn pad keeps its full range", () => {
   const focal = placeLights(corridor, lightRoles).find((light) => light.role === "focal");
   assert.equal(focal?.range, lightRoles.focal.range);
+});
+
+await test("caps the lights of a room at maxLocalLightsPerRoom, dropping the latest placed", () => {
+  const rooms = [
+    { name: "hall", x: 0, z: 0, width: 80, depth: 80, spawn: true },
+    { name: "yard", x: 200, z: 0, width: 20, depth: 20 },
+  ];
+  const lights = placeLights(spec(rooms), lightRoles, sconces);
+  const hallLights = lights.filter((light) => light.zone === "hall");
+  assert.equal(hallLights.length, config.maxLocalLightsPerRoom);
+  assert.equal(hallLights[0]?.role, "hero");
+  assert.ok(hallLights.every((light) => light.role !== "focal"));
+  assert.ok(lights.filter((light) => light.zone === "yard").length <= config.maxLocalLightsPerRoom);
+  assert.deepEqual(
+    hallLights.slice(1).map((light) => light.role),
+    Array(config.maxLocalLightsPerRoom - 1).fill("zoneMarker"),
+  );
 });
