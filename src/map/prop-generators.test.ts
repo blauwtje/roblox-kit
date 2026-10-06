@@ -2,21 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-/** The prop kinds whose generators read their colors and materials from preset prop slots. */
-const slotKinds = [
-  "ticket-machine",
-  "ticket-counter",
-  "clock",
-  "platform-edge",
-  "sign",
-  "departure-board",
-  "bench",
-  "pillar",
-  "lamp",
-  "rail",
-  "stairs",
-  "track-bed",
-];
+import { propKinds } from "./prop-placement.ts";
 
 /** A color built from numbers or a hex string, a BrickColor, or the Neon material: a look a preset slot must decide. */
 const hardcodedLook =
@@ -26,7 +12,8 @@ function generatorSource(kind: string): string {
   return readFileSync(new URL(`../../luau/props/${kind}.luau`, import.meta.url), "utf8");
 }
 
-for (const kind of slotKinds) {
+/** Every prop kind's generator reads its colors and materials from preset prop slots. */
+for (const kind of propKinds) {
   await test(`the ${kind} generator hardcodes no color literal and no Neon`, () => {
     const lines = generatorSource(kind).split("\n");
     const offenders = lines.filter((line) => hardcodedLook.test(line.replace(/--.*$/, "")));
