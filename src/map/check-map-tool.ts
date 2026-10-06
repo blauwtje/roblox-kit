@@ -222,7 +222,7 @@ export function createCheckMapTool(
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles): withinBudget is false and warnings name each zone over a limit, without failing passed; warnings also name any model outside the map that stands between a spawn and a target it cannot reach; issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
       `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box. ` +
-      `With a preset it also reports untextured issues (a part whose two longest sides both exceed ${String(config.maxUntexturedSurfaceStuds)} studs and that has no texture, material variant or textured material) and unbevelled issues (a hero prop MeshPart whose recipe shape has no bevel), and with the spec too unlit issues (a room with no light inside its footprint).`,
+      `With a preset it also reports untextured issues (a part whose two longest sides both exceed ${String(config.maxUntexturedSurfaceStuds)} studs and that has no texture, material variant or textured material; none for a preset with flatSurfaces) and unbevelled issues (a hero prop MeshPart whose recipe shape has no bevel), and with the spec too unlit issues (a room with no light inside its footprint).`,
     inputSchema: checkMapInput,
     outputSchema: checkMapOutput,
     annotations: {
@@ -269,7 +269,10 @@ export function createCheckMapTool(
           : await readMapRecords(context.studio, studioId, input.mapId);
       const propIssues =
         preset === undefined || records === undefined ? [] : findPropIssues(records.props, preset);
-      const untexturedIssues = records === undefined ? [] : findSurfaceIssues(records.surfaces);
+      const untexturedIssues =
+        records === undefined || preset?.flatSurfaces === true
+          ? []
+          : findSurfaceIssues(records.surfaces);
       const unlitIssues =
         records === undefined || input.spec === undefined
           ? []

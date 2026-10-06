@@ -492,6 +492,8 @@ export const presetSchema = z
       ceiling: surfaceRole,
       accent: surfaceRole,
     }),
+    /** Surfaces are plain by design (no texture or textured material), so check_map reports no untextured issue. */
+    flatSurfaces: z.boolean().optional(),
     lighting,
     /**
      * Terrain materials drawn with a surface role's MaterialVariant, keyed by material name (`Concrete` to `wall`).

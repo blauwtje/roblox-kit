@@ -491,6 +491,25 @@ await test("with a preset, quality rules report an untextured flat surface, an u
   );
 });
 
+await test("a preset with flatSurfaces reports no untextured issue for a flat untextured surface", async () => {
+  const side = config.maxUntexturedSurfaceStuds + 4;
+  const reply = recordsReply({
+    surfaces: [
+      {
+        path: partPath("a-floor"),
+        size: { x: side, y: 1, z: side },
+        position: { x: 0, y: 0, z: 0 },
+        textured: false,
+      },
+    ],
+  });
+  const { tool, run } = setup(studioReturning(checkedMap(), false, reply));
+  const structured = tool.outputSchema.parse(
+    (await run({ mapId: "arena", preset: "train-station" })).structuredContent,
+  );
+  assert.equal(structured.counts.untextured, 0);
+});
+
 await test("with a preset, props out of scale or off the grid become scale and rotation issues naming their part path", async () => {
   const bench = { kind: "bench", position: { x: 1, y: 2, z: 3 }, upright: true };
   const props = [

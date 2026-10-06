@@ -25,6 +25,7 @@
       "color": "#f2a900"
     }
   },
+  "flatSurfaces": true,
   "lighting": {
     "LightingStyle": "Realistic",
     "PrioritizeLightingQuality": true,
