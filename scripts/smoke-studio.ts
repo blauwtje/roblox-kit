@@ -124,14 +124,16 @@ async function probeCapabilities(connection: StudioConnection): Promise<Capabili
  * A fixed 3-room map far from the place's Baseplate (x and z near 2000), so everything the smoke
  * builds, fills and removes lies outside what the place owns. The vault and the yard are placed by
  * relation, so the map also has two hallway zones. The hall, vault and yard take the train-station room
- * types concourse, ticket-hall and platform, so the map also has set pieces. The yard is big enough for
- * the 40-stud train car hero prop to replace its track bed clear of the walls and the doorway.
+ * types concourse, ticket-hall and platform, so the map also has set pieces. The hall is wide enough for its
+ * free-standing departure board, the vault deep enough for its ticket counter between the doorways, and the
+ * yard big enough for the 40-stud train car hero prop to replace its track bed clear of the walls and the doorway.
  */
 /**
- * The train-station wall's baked MaterialVariant once `npm run materials -- train-station` has written it, else a
- * flat one, so the smoke probes that build_map applies the variant and its four maps.
+ * The train-station preset paints every surface flat SmoothPlastic, which no MaterialVariant can sit on, so the
+ * smoke gives the floor, wall and ceiling textured built-in materials: the wall carries a flat variant that the
+ * palette step probes, and check_map finds no untextured surface.
  */
-const smokeWallVariant = presets.get("train-station")?.surfaces.wall.variant ?? {
+const smokeWallVariant = {
   baseMaterial: "Brick",
   studsPerTile: 8,
 };
@@ -140,19 +142,25 @@ const smokeRelationSpec = relationMapSpecSchema.parse({
   mapId: "roblox-kit-smoke",
   style: {
     preset: "train-station",
-    overrides: { surfaces: { wall: { variant: smokeWallVariant } } },
+    overrides: {
+      surfaces: {
+        floor: { material: "Marble" },
+        wall: { material: smokeWallVariant.baseMaterial, variant: smokeWallVariant },
+        ceiling: { material: "Concrete" },
+      },
+    },
   },
   seed: 1,
   // At the train-station size rules, so check_map with the preset reports no sizeRule issue.
   wallHeight: 16,
   doorWidth: 10,
   rooms: [
-    { name: "hall", x: 2000, z: 2000, width: 20, depth: 20, spawn: true, roomType: "concourse" },
+    { name: "hall", x: 2000, z: 2000, width: 60, depth: 24, spawn: true, roomType: "concourse" },
     {
       name: "vault",
       roomType: "ticket-hall",
-      width: 20,
-      depth: 20,
+      width: 24,
+      depth: 64,
       relation: { to: "hall", direction: "east", hallwayLength: 14, hallwayWidth: 14 },
     },
     {
@@ -181,8 +189,16 @@ const terrainSmokeSpec = relationMapSpecSchema.parse({
   mapId: "smoke-terrain",
   seed: 3,
   rooms: [{ name: "lookout", x: 2300, z: 2300, width: 20, depth: 20 }],
-  // The train-station ceiling role has a Concrete variant, so Concrete terrain is drawn with it.
-  style: { preset: "train-station", overrides: { terrainVariants: { Concrete: "ceiling" } } },
+  // The train-station ceiling is flat SmoothPlastic, so the smoke gives it a Concrete variant for Concrete terrain to draw with.
+  style: {
+    preset: "train-station",
+    overrides: {
+      surfaces: {
+        ceiling: { material: "Concrete", variant: { baseMaterial: "Concrete", studsPerTile: 8 } },
+      },
+      terrainVariants: { Concrete: "ceiling" },
+    },
+  },
   terrain: [
     {
       shape: "heightmap",
@@ -197,7 +213,7 @@ const terrainSmokeSpec = relationMapSpecSchema.parse({
 const smokeMapSpec = resolveRelations(smokeRelationSpec);
 
 /** Studs box (min, max) around everything the smoke can touch; cleared to Air and asserted empty. */
-const smokeRegion = { min: [1960, -30, 1960], max: [2130, 30, 2100] };
+const smokeRegion = { min: [1960, -30, 1960], max: [2160, 30, 2100] };
 
 /** Name of the Model the blocker probe puts beside the smoke map; the cleanup removes it by name. */
 const blockerModelName = `${smokeMapSpec.mapId}-blocker`;
@@ -468,13 +484,17 @@ async function styledSmokeMap() {
   }
   const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
   const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces, ["floor"]);
-  const { props, heroProps } = await heroPropsOf(
+  const {
+    props,
+    heroProps,
+    warnings: heroWarnings,
+  } = await heroPropsOf(
     smokeMapSpec,
     { name: "train-station", base: preset, style: preset },
     propsOf(smokeMapSpec, preset).props,
   );
   const trim = await trimMeshesOf(details, { base: preset, style: preset });
-  return { layout, details, props, heroProps, trim };
+  return { layout, details, props, heroProps, heroWarnings, trim };
 }
 
 /** Name ending of the fixture part build_map hangs at each ceiling light. */
@@ -776,17 +796,28 @@ end
 table.sort(kinds)
 return game:GetService("HttpService"):JSONEncode(kinds)`;
 
-/** Proves the smoke map places at least one hero prop and Studio loaded each one build_map placed. */
+/**
+ * Proves every hero room holds the set piece its hero prop replaces, and that Studio loaded each hero prop
+ * build_map placed. A recipe whose hash has no recorded asset keeps its set piece, as recoloring a preset leaves
+ * its uploads stale and no re-upload is planned.
+ */
 async function probeHeroProps(connection: StudioConnection): Promise<string> {
-  const { heroProps } = await styledSmokeMap();
-  expectEqual("the smoke map places a hero prop", heroProps.length > 0, true);
+  const { heroProps, heroWarnings } = await styledSmokeMap();
+  expectEqual(
+    "hero rooms missing the set piece to replace",
+    heroWarnings.filter((warning) => warning.includes(" set piece for hero prop ")),
+    [],
+  );
   const studioId = await selectStudio(connection, undefined);
   const built = z
     .array(z.string())
     .parse(JSON.parse(await executeLuau(connection, studioId, heroKindsLuau)));
   const heroKinds = built.filter((kind) => !kind.startsWith("trim-"));
   expectEqual("hero Models in Studio", heroKinds, heroProps.map((hero) => hero.kind).sort());
-  return `${String(heroKinds.length)} hero props loaded: ${heroKinds.join(", ")}`;
+  const fallbacks = heroWarnings.filter((warning) =>
+    warning.includes("has no recorded asset"),
+  ).length;
+  return `${String(heroKinds.length)} hero props loaded${heroKinds.length > 0 ? `: ${heroKinds.join(", ")}` : ""}, ${String(fallbacks)} kept their set piece for want of a recorded asset`;
 }
 
 /** The names of the baseboard, crown and arch boxes under the built map. */
@@ -888,7 +919,7 @@ async function probePaintedMap(connection: StudioConnection): Promise<string> {
   expectEqual("MaterialVariant base", painted.variantBase, smokeWallVariant.baseMaterial);
   expectEqual("MaterialVariant studsPerTile", painted.variantStuds, smokeWallVariant.studsPerTile);
   const noMaps = { color: "", normal: "", roughness: "", metalness: "" };
-  expectEqual("MaterialVariant maps", painted.variantMaps, smokeWallVariant.maps ?? noMaps);
+  expectEqual("MaterialVariant maps", painted.variantMaps, noMaps);
   return `${String(painted.floors.length)} floors and ${String(painted.walls.length)} walls painted`;
 }
 
