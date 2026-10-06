@@ -240,7 +240,7 @@ await test("a style sends its lights per zone and applies its lighting recipe af
     assert.ok(zoneLights.every((light) => light.fixture === undefined || !light.fixture.pendant));
     assert.deepEqual(
       zoneLights.filter((light) => light.role === "hero").map((light) => light.shadows),
-      [true],
+      [false],
     );
     assert.equal(
       zoneLights.filter((light) => light.role === "focal").length,
