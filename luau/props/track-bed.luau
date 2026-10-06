@@ -2,7 +2,7 @@
 -- ProceduralModel generator source for a railway track bed: a ballast bed with two steel rails on sleepers.
 -- Params.Size is (length, height, width); the rails run along X and the output stays inside Size.
 -- The sleeper spacing varies slightly per Seed so repeated track beds do not look stamped.
--- The ballast, sleepers and rails take the `panel`, `seat` and `frame` slots, read as `<Slot>Color` and
+-- The ballast, sleepers and rails take the `panel`, `signage` and `frame` slots, read as `<Slot>Color` and
 -- `<Slot>Material` attributes.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
@@ -52,8 +52,8 @@ Generator.Attributes = {
 	Seed = 0,
 	PanelColor = DEFAULT_COLOR,
 	PanelMaterial = DEFAULT_MATERIAL,
-	SeatColor = DEFAULT_COLOR,
-	SeatMaterial = DEFAULT_MATERIAL,
+	SignageColor = DEFAULT_COLOR,
+	SignageMaterial = DEFAULT_MATERIAL,
 	FrameColor = DEFAULT_COLOR,
 	FrameMaterial = DEFAULT_MATERIAL,
 }
@@ -63,7 +63,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local random = Random.new(params.Attributes.Seed)
 	local bottom = -size.Y / 2
 	local ballast = slotLook(params.Attributes, "Panel")
-	local sleeper = slotLook(params.Attributes, "Seat")
+	local sleeper = slotLook(params.Attributes, "Signage")
 	local steel = slotLook(params.Attributes, "Frame")
 	local ballastHeight = size.Y * BALLAST_HEIGHT_RATIO
 	local sleeperHeight = size.Y * SLEEPER_HEIGHT_RATIO
