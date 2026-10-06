@@ -21,7 +21,7 @@ const boundsTolerance = 0.01;
 /** Blender prints its whole log on stdout; the buffer only has to hold it. */
 const blenderOutputBytes = 10 * 1024 * 1024;
 
-/** Runs the original script into a temp folder and reads the one GLB it exports. */
+/** Runs the original script into a temp folder and reads the one GLB it exports, from the maps folder or `<out prefix>.glb`. */
 async function originalStructure(script: string): Promise<GlbStructure> {
   const folder = await mkdtemp(join(tmpdir(), "mesh-parity-"));
   try {
@@ -44,12 +44,13 @@ async function originalStructure(script: string): Promise<GlbStructure> {
     );
     const glbs = (await readdir(maps)).filter((name) => name.endsWith(".glb"));
     const [glb, ...others] = glbs;
-    if (glb === undefined || others.length > 0) {
-      throw new Error(
-        `${script} exported ${String(glbs.length)} GLBs into its maps folder, not one`,
-      );
+    if (others.length > 0) {
+      throw new Error(`${script} exported ${String(glbs.length)} GLBs into its maps folder`);
     }
-    return readGlbStructure(await readFile(join(maps, glb)));
+    // A script may write its one GLB beside the out prefix instead of into the maps folder.
+    return readGlbStructure(
+      await readFile(glb === undefined ? join(folder, "out.glb") : join(maps, glb)),
+    );
   } finally {
     await rm(folder, { recursive: true, force: true });
   }

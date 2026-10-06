@@ -2046,6 +2046,22 @@
     "departure-board": {
       "script": "src/hero-props/meshes/train-station/departure-board.py",
       "targets": [{ "replaces": "prop:departure-board", "anchor": "center" }]
+    },
+    "sign": {
+      "script": "src/hero-props/meshes/train-station/sign.py",
+      "targets": [{ "replaces": "prop:sign", "anchor": "center", "label": "CONCOURSE" }]
+    },
+    "pendant": {
+      "script": "src/hero-props/meshes/train-station/pendant.py",
+      "targets": [{ "replaces": "fixture:pendant", "anchor": "center" }]
+    },
+    "arch-trim": {
+      "script": "src/hero-props/meshes/train-station/arch-trim.py",
+      "targets": [
+        { "replaces": "arch", "part": "arch" },
+        { "replaces": "band:crown", "part": "crown" },
+        { "replaces": "band:baseboard", "part": "baseboard" }
+      ]
     }
   },
   "ambientEffects": [
