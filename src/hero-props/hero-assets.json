@@ -394,5 +394,121 @@
   "fb8a9ac51b3c": {
     "kind": "sprite-glow",
     "assetId": "89207008552510"
+  },
+  "51cbfe871fe3": {
+    "kind": "train-car",
+    "assetId": "99491360335475"
+  },
+  "54db8fb73489": {
+    "kind": "departure-board",
+    "assetId": "113420254674641"
+  },
+  "58771de853ef": {
+    "kind": "prop-bench",
+    "assetId": "124229131580963"
+  },
+  "55b8cf176227": {
+    "kind": "prop-lamp",
+    "assetId": "111280341715173"
+  },
+  "33e139fc9bbf": {
+    "kind": "prop-pillar",
+    "assetId": "79311038436280"
+  },
+  "69493ecee8c3": {
+    "kind": "prop-stairs",
+    "assetId": "93781541206164"
+  },
+  "a4d1b855eafa": {
+    "kind": "prop-rail",
+    "assetId": "115846156775832"
+  },
+  "d829223410c8": {
+    "kind": "trim-ogee",
+    "assetId": "108901460592568"
+  },
+  "84485d4f4772": {
+    "kind": "trim-bead",
+    "assetId": "122285022703690"
+  },
+  "ee849c1fbad9": {
+    "kind": "trim-quarter-round",
+    "assetId": "138894610734393"
+  },
+  "5299f94444b1": {
+    "kind": "prop-bench",
+    "assetId": "113797016782564"
+  },
+  "360334fa0c64": {
+    "kind": "prop-lamp",
+    "assetId": "126675766979009"
+  },
+  "fc175edb7344": {
+    "kind": "prop-rail",
+    "assetId": "109426702916016"
+  },
+  "0eb777397198": {
+    "kind": "trim-ogee",
+    "assetId": "89213014958638"
+  },
+  "e5fe648a4fa4": {
+    "kind": "trim-bead",
+    "assetId": "119642392921457"
+  },
+  "a54ff99e6b67": {
+    "kind": "trim-quarter-round",
+    "assetId": "71643130069405"
+  },
+  "05d1829d2475": {
+    "kind": "prop-pillar",
+    "assetId": "104369594617523"
+  },
+  "907a963cf382": {
+    "kind": "prop-lamp",
+    "assetId": "134535404582086"
+  },
+  "df7845376fa5": {
+    "kind": "prop-stairs",
+    "assetId": "133908141238719"
+  },
+  "680042df7249": {
+    "kind": "trim-ogee",
+    "assetId": "78593381324887"
+  },
+  "e99d25b22ad5": {
+    "kind": "trim-bead",
+    "assetId": "95347161811146"
+  },
+  "a3521b843ec5": {
+    "kind": "trim-quarter-round",
+    "assetId": "96015750739185"
+  },
+  "e39b584997f1": {
+    "kind": "prop-pillar",
+    "assetId": "135792349229413"
+  },
+  "6339b32ccff5": {
+    "kind": "prop-lamp",
+    "assetId": "106994147183543"
+  },
+  "20e2b46482e4": {
+    "kind": "prop-stairs",
+    "assetId": "97215190458953"
+  },
+  "2c7fd9f03701": {
+    "kind": "prop-rail",
+    "assetId": "82876626984585"
+  },
+  "8a0f41768e15": {
+    "kind": "trim-ogee",
+    "assetId": "113358147979344"
+  },
+  "57d92b1c3c31": {
+    "kind": "trim-bead",
+    "assetId": "99137216268906"
+  },
+  "e39fe4c66b1a": {
+    "kind": "trim-quarter-round",
+    "assetId": "112291612406353"
   }
 }
