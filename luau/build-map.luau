@@ -358,6 +358,17 @@ local function addGenerators(model: Model): { [string]: ModuleScript }
 	return modules
 end
 
+-- Gives a prop of a kind listed in `idleAnimations` the sway attributes idle-animation.luau reads, whether it is a
+-- ProceduralModel or the Model of its mesh; a prop of any other kind is left as it is.
+local function setIdleSway(prop: Model, kind: string)
+	local idle = (arguments.idleAnimations or ({} :: { [string]: IdleAnimation }))[kind]
+	if idle then
+		prop:SetAttribute("IdleSwayDegrees", idle.swayDegrees)
+		prop:SetAttribute("IdlePeriodSeconds", idle.periodSeconds)
+		prop:SetAttribute("IdleHinge", idle.hinge)
+	end
+end
+
 -- One ProceduralModel named "<kind>-<n>" sharing the generator of its kind; `countByKind` numbers them in placement order.
 local function addProp(
 	model: Model,
@@ -379,12 +390,7 @@ local function addProp(
 	for name, value in record.attributes or ({} :: { [string]: string }) do
 		proceduralModel:SetAttribute(name, if string.match(name, "Color$") then Color3.fromHex(value) else value)
 	end
-	local idle = (arguments.idleAnimations or ({} :: { [string]: IdleAnimation }))[record.kind]
-	if idle then
-		proceduralModel:SetAttribute("IdleSwayDegrees", idle.swayDegrees)
-		proceduralModel:SetAttribute("IdlePeriodSeconds", idle.periodSeconds)
-		proceduralModel:SetAttribute("IdleHinge", idle.hinge)
-	end
+	setIdleSway(proceduralModel, record.kind)
 	local turn = CFrame.Angles(0, math.rad(record.yaw or 0), 0)
 	proceduralModel:PivotTo(CFrame.new(toVector3(record.pivot)) * turn)
 	proceduralModel.Parent = model
@@ -641,6 +647,11 @@ local function addHeroProps(
 		heroCountByKind[record.kind] = count
 		hero.Name = `{record.kind}-hero-{count}`
 		hero:SetAttribute(HERO_KIND_ATTRIBUTE_NAME, record.kind)
+		if record.fallback then
+			-- The set piece's seed offsets the sway phase, as it does for the ProceduralModel this mesh replaces.
+			hero:SetAttribute("Seed", record.fallback.seed)
+		end
+		setIdleSway(hero, record.kind)
 		hero.Parent = model
 	end
 	return failures

@@ -1251,7 +1251,10 @@ for _, descendant in map:GetDescendants() do
   end
 end
 local kinds = {}
-for _, model in animated do kinds[string.match(model.Name, "^(.-)%-%d+$") or model.Name] = true end
+for _, model in animated do
+  local heroKind = model:GetAttribute("RobloxKitHeroKind")
+  kinds[if typeof(heroKind) == "string" then heroKind else string.match(model.Name, "^(.-)%-%d+$") or model.Name] = true
+end
 check("an animated sign", kinds["sign"] == true, "sign")
 check("an animated lamp", kinds["lamp"] == true, "lamp")
 local before = {}
