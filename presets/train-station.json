@@ -2026,6 +2026,12 @@
       "hinge": "bottom"
     }
   },
+  "meshes": {
+    "pillar": {
+      "script": "src/hero-props/meshes/train-station/pillar.py",
+      "targets": [{ "replaces": "prop:pillar", "anchor": "bottom" }]
+    }
+  },
   "ambientEffects": [
     {
       "kind": "particles",

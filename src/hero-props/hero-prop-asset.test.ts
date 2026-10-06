@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { loadPresets } from "../style/load-preset.ts";
+import { scriptedMeshHash } from "./generate-scripted-mesh.ts";
 import { readHeroAssets } from "./hero-asset-store.ts";
 import { heroPropAsset, heroRecipeHash, type HeroPropUploadSources } from "./hero-prop-asset.ts";
 
@@ -72,4 +73,20 @@ await test("a failed upload records nothing and its error names the status but n
   assert.match(result.error, /403/);
   assert.ok(!result.error.includes(apiKey), "the API key never appears in the error text");
   assert.deepEqual(await readHeroAssets(sources.assetsFile), {});
+});
+
+await test("a declared mesh's recipe hash is its script hash, not a recipe's", async () => {
+  const declaration = {
+    script: "src/hero-props/meshes/train-station/pillar.py",
+    targets: [{ replaces: "prop:pillar" }],
+  };
+  const declared = { ...preset, meshes: { "train-car": declaration } };
+  assert.equal(
+    await heroRecipeHash(declared, "train-car"),
+    await scriptedMeshHash("train-car", declaration),
+  );
+  assert.notEqual(
+    await heroRecipeHash(declared, "train-car"),
+    await heroRecipeHash(preset, "train-car"),
+  );
 });

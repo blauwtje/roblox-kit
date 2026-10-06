@@ -8,6 +8,7 @@ import {
   type OpenCloudCredentialsLookup,
 } from "./open-cloud-credentials.ts";
 import { uploadReviewedHeroProp, type OpenCloudTransport } from "./open-cloud-upload.ts";
+import { scriptedMeshHash } from "./generate-scripted-mesh.ts";
 import { heroRecipeOf } from "./prop-recipes.ts";
 import { recipeHash } from "./recipe-hash.ts";
 
@@ -41,8 +42,11 @@ export type HeroPropAsset = { hash: string } & (
 /**
  * The recipe hash of the preset's hero prop of `kind` (its own, or a `prop-<kind>` recipe), repeating the
  * computation in `generateHeroProp`: the recipe and each part role's surface color, hashed with the generator's source.
+ * A declared mesh hashes its script instead, as in `scriptedMeshHash`.
  */
 export async function heroRecipeHash(preset: Preset, kind: string): Promise<string> {
+  const declaration = preset.meshes?.[kind];
+  if (declaration !== undefined) return scriptedMeshHash(kind, declaration);
   const recipe = heroRecipeOf(preset, kind);
   if (recipe === undefined) throw new Error(`The preset has no hero prop "${kind}".`);
   const roleColors: Record<string, string> = {};

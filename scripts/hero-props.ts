@@ -1,10 +1,13 @@
 import { fileURLToPath } from "node:url";
 import { generateHeroProp } from "../src/hero-props/generate-hero-prop.ts";
+import { generateScriptedMesh } from "../src/hero-props/generate-scripted-mesh.ts";
+import { loadPresets } from "../src/style/load-preset.ts";
 import { renderHeroProp } from "../src/hero-props/render-hero-prop.ts";
 import { writeHeroPropChecks } from "../src/hero-props/open-cloud-upload.ts";
 
 /**
- * `node scripts/hero-props.ts <preset> <kind>` generates the preset's hero prop of that kind with headless
+ * `node scripts/hero-props.ts <preset> <kind>` generates the preset's hero prop of that kind (or its declared
+ * Blender-scripted mesh, which wins) with headless
  * Blender into `.roblox-kit/hero-props/<preset>-<kind>-<hash>/model.glb` and prints its triangles and size,
  * then renders `front.png`, `side.png` and `three-quarter.png` beside it and writes the GLB's deterministic
  * checks (floating parts, inverted normals) into the checks file the upload reads; it exits 1 when the GLB
@@ -18,7 +21,8 @@ if (presetName === undefined || kind === undefined || extra.length > 0) {
 }
 
 try {
-  const generated = await generateHeroProp(presetName, kind);
+  const declared = (await loadPresets()).get(presetName)?.meshes?.[kind] !== undefined;
+  const generated = await (declared ? generateScriptedMesh : generateHeroProp)(presetName, kind);
   const [width, height, depth] = generated.structure.size;
   console.log(
     `${presetName}/${kind}: ${String(generated.structure.triangles)} triangles, ` +
