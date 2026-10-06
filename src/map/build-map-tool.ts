@@ -323,10 +323,10 @@ function rejectUnknownRoomTypes(spec: MapSpec, style: Preset | undefined): void 
 /** A prop with the generator attributes its preset surface role adds. */
 type StyledPropRecord = PropRecord & { attributes?: Record<string, string> };
 
-/** The prop with `SurfaceColor` and `SurfaceMaterial` from its kind's surface role; unchanged without a role. */
+/** The prop with `SurfaceColor` and `SurfaceMaterial` from its kind's surface role; unchanged without a role or when exempt. */
 function withSurface(prop: StyledPropRecord, style: Preset): StyledPropRecord {
   const role = style.propRules[prop.kind]?.surface;
-  if (role === undefined) {
+  if (role === undefined || role === "exempt") {
     return prop;
   }
   const { color, material } = style.surfaces[role];

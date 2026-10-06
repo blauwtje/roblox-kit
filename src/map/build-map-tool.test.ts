@@ -427,6 +427,7 @@ await test("a room type the style declares builds", async () => {
   );
   const overrides = {
     roomTypes: { platform: { setPieces: ["track-bed"], signLabel: "PLATFORM 1" } },
+    propRules: { "track-bed": { freeRotation: false, depth: 10, surface: "exempt" } },
   };
   const spec = { ...twoRoomSpec, rooms: typedRooms, style: { preset: "cozy-town", overrides } };
   await run(studio, spec);

@@ -4,6 +4,8 @@ import { heroParts, presetOverridesSchema, presetSchema } from "./preset-schema.
 
 const surface = { material: "Concrete", color: "#808080" };
 const light = { range: 40, brightness: 1, color: "#ffffff" };
+const slot = { color: "#808080", material: "Metal" };
+const propSlotNames = ["frame", "seat", "panel", "glass", "screen", "signage", "light"] as const;
 
 function validPreset() {
   return {
@@ -32,9 +34,14 @@ function validPreset() {
     lightingIntent: "bright and even",
     lightRoles: { zoneMarker: light, focal: light, hero: light },
     propKit: ["bench", "lamp"],
+    propSlots: Object.fromEntries(propSlotNames.map((name) => [name, slot])),
     propRules: {
-      bench: { heightRatio: { min: 0.4, max: 0.8 }, freeRotation: false },
+      bench: { heightRatio: { min: 0.4, max: 0.8 }, freeRotation: false, surface: "trim" },
+      lamp: { freeRotation: false, surface: "exempt" },
       pillar: { freeRotation: false },
+      "track-bed": { freeRotation: false, surface: "exempt" },
+      "platform-edge": { freeRotation: false, surface: "exempt" },
+      "departure-board": { freeRotation: false, surface: "exempt" },
     },
     sizeRules: {
       agentRadius: 2,
@@ -226,15 +233,58 @@ await test("presetSchema accepts a prop rule without a height ratio and rejects 
 });
 
 await test("presetSchema accepts a prop rule with a surface role and rejects an unknown role", () => {
-  for (const surface of ["floor", "wall", "trim", "ceiling", "accent"]) {
-    const preset = { ...validPreset(), propRules: { bench: { freeRotation: false, surface } } };
+  for (const surface of ["floor", "wall", "trim", "ceiling", "accent", "exempt"]) {
+    const preset = {
+      ...validPreset(),
+      propKit: ["bench"],
+      propRules: { bench: { freeRotation: false, surface } },
+    };
     assert.equal(presetSchema.safeParse(preset).success, true, surface);
   }
   const unknownRole = {
     ...validPreset(),
+    propKit: ["bench"],
     propRules: { bench: { freeRotation: false, surface: "roof" } },
   };
   assert.equal(presetSchema.safeParse(unknownRole).success, false);
+});
+
+await test("presetSchema requires a surface for every prop kit and set-piece kind", () => {
+  const noSurface = { freeRotation: false };
+  const kitKind = { ...validPreset(), propRules: { ...validPreset().propRules, lamp: noSurface } };
+  assert.equal(presetSchema.safeParse(kitKind).success, false);
+
+  const setPiece = {
+    ...validPreset(),
+    roomTypes: { shop: { setPieces: ["counter"], signLabel: "Shop" } },
+    propRules: { ...validPreset().propRules, counter: noSurface },
+  };
+  assert.equal(presetSchema.safeParse(setPiece).success, false);
+  setPiece.propRules.counter = { freeRotation: false, surface: "exempt" } as typeof noSurface;
+  assert.equal(presetSchema.safeParse(setPiece).success, true);
+
+  const missingRule = { ...validPreset(), propKit: ["bench", "lamp", "sofa"] };
+  assert.equal(presetSchema.safeParse(missingRule).success, false);
+});
+
+await test("presetSchema allows Neon only on the screen and light slots", () => {
+  const neon = { color: "#ff0000", material: "Neon" };
+  for (const name of propSlotNames) {
+    const preset = validPreset();
+    preset.propSlots = { ...preset.propSlots, [name]: neon };
+    const allowed = name === "screen" || name === "light";
+    assert.equal(presetSchema.safeParse(preset).success, allowed, name);
+  }
+});
+
+await test("presetSchema requires every prop slot and a hex color in it", () => {
+  const missing = validPreset();
+  delete (missing.propSlots as Record<string, unknown>)["glass"];
+  assert.equal(presetSchema.safeParse(missing).success, false);
+
+  const badColor = validPreset();
+  badColor.propSlots = { ...badColor.propSlots, frame: { color: "red", material: "Metal" } };
+  assert.equal(presetSchema.safeParse(badColor).success, false);
 });
 
 await test("presetSchema rejects a height range whose min exceeds its max or is not positive", () => {

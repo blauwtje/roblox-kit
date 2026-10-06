@@ -282,8 +282,11 @@ const propRule = z.strictObject({
   heightRatio: numberRange.optional(),
   /** False keeps the prop square to its wall or row, on the 90-degree grid. */
   freeRotation: z.boolean(),
-  /** The surface role whose color and material the prop's parts take; absent keeps the generator's own look. */
-  surface: surfaceRoleName.optional(),
+  /**
+   * The surface role whose color and material replace the prop's `frame` slot, or `"exempt"` to keep the slots.
+   * Optional here because overrides and non-kit kinds may omit it; `presetSchema` requires it for every `propKit` and `setPieces` kind.
+   */
+  surface: z.union([surfaceRoleName, z.literal("exempt")]).optional(),
   /** Studs the prop stands away from its wall, in place of the generator's own depth; the track bed and platform edge read it. */
   depth: z.number().positive().optional(),
 });
@@ -448,57 +451,98 @@ const roomType = z.strictObject({
   roomNames: z.array(z.string().min(1)).optional(),
 });
 
-/** One genre preset: palette, surface roles, lighting recipe and intent, light roles, prop kit and rules, room types and size rules. */
-export const presetSchema = z.strictObject({
-  palette: z.strictObject({
-    colors: z.array(hexColor).min(3).max(4),
-    accent: hexColor,
-  }),
-  surfaces: z.strictObject({
-    floor: surfaceRole,
-    wall: surfaceRole,
-    trim: surfaceRole,
-    ceiling: surfaceRole,
-    accent: surfaceRole,
-  }),
-  lighting,
-  /**
-   * Terrain materials drawn with a surface role's MaterialVariant, keyed by material name (`Concrete` to `wall`).
-   * An entry takes effect only when that role's variant has the same `baseMaterial`, like a part's variant.
-   */
-  terrainVariants: z.record(materialName, surfaceRoleName).optional(),
-  /** The look the lighting recipe aims for, which the image rubric scores a room against. */
-  lightingIntent: z.string().min(1),
-  /** Only the hero light casts shadows, so no role carries a shadows field. */
-  lightRoles: z.strictObject({
-    zoneMarker: lightRole,
-    focal: lightRole,
-    hero: lightRole,
-  }),
-  /** Fixtures that hold a zone-marker light in a repeating pattern; absent leaves one center light per room. */
-  lightFixtures: lightFixtures.optional(),
-  /** Names of the props this genre may place. */
-  propKit: z.array(z.string().min(1)).min(1),
-  /** Scale and rotation rules keyed by prop kind, for every kind a room of this genre can place. */
-  propRules: z.record(z.string().min(1), propRule),
-  /** Hero-prop recipes keyed by hero kind; absent leaves every room to its primitive set pieces. */
-  heroProps: z.record(z.string().min(1), heroProp).optional(),
-  /** Room types this genre offers, keyed by type name; a room without a type keeps the plain prop kit. */
-  roomTypes: z.record(z.string().min(1), roomType).optional(),
-  /** Ambient particles and beams with generated sprites, built after the lights; absent builds none. */
-  ambientEffects: z.array(ambientEffect).optional(),
-  /** Idle sway keyed by prop kind, run by a server Script in the map during play; absent animates nothing. */
-  idleAnimations: z.record(z.string().min(1), idleAnimation).optional(),
-  sizeRules: z.strictObject({
-    agentRadius: z.number().positive(),
-    agentHeight: z.number().positive(),
-    minDoorwayWidth: z.number().positive(),
-    minHallwayWidth: z.number().positive(),
-    minWallHeight: z.number().positive(),
-    /** Studs tall the avatar spans, classic to humanoid; a prop's height ratio is measured against it. */
-    avatarHeight: numberRange,
-  }),
+/** The color and material a prop generator takes for one slot. */
+const propSlot = z.strictObject({ color: hexColor, material: materialName });
+
+/** A slot that may not be Neon: a glowing prop part is a light or a screen. */
+const plainPropSlot = propSlot.refine(
+  (slot) => slot.material !== "Neon",
+  "Neon is allowed only on the screen and light slots",
+);
+
+/**
+ * The palette-bound look of a prop's parts, one entry per slot. Neon is allowed only on `screen` and `light`:
+ * a screen is a lit surface that shows an image, so unlike the other slots it glows.
+ */
+const propSlots = z.strictObject({
+  frame: plainPropSlot,
+  seat: plainPropSlot,
+  panel: plainPropSlot,
+  glass: plainPropSlot,
+  screen: propSlot,
+  signage: plainPropSlot,
+  light: propSlot,
 });
+
+/** One genre preset: palette, surface roles, lighting recipe and intent, light roles, prop kit and rules, room types and size rules. */
+export const presetSchema = z
+  .strictObject({
+    palette: z.strictObject({
+      colors: z.array(hexColor).min(3).max(4),
+      accent: hexColor,
+    }),
+    surfaces: z.strictObject({
+      floor: surfaceRole,
+      wall: surfaceRole,
+      trim: surfaceRole,
+      ceiling: surfaceRole,
+      accent: surfaceRole,
+    }),
+    lighting,
+    /**
+     * Terrain materials drawn with a surface role's MaterialVariant, keyed by material name (`Concrete` to `wall`).
+     * An entry takes effect only when that role's variant has the same `baseMaterial`, like a part's variant.
+     */
+    terrainVariants: z.record(materialName, surfaceRoleName).optional(),
+    /** The look the lighting recipe aims for, which the image rubric scores a room against. */
+    lightingIntent: z.string().min(1),
+    /** Only the hero light casts shadows, so no role carries a shadows field. */
+    lightRoles: z.strictObject({
+      zoneMarker: lightRole,
+      focal: lightRole,
+      hero: lightRole,
+    }),
+    /** Fixtures that hold a zone-marker light in a repeating pattern; absent leaves one center light per room. */
+    lightFixtures: lightFixtures.optional(),
+    /** Names of the props this genre may place. */
+    propKit: z.array(z.string().min(1)).min(1),
+    /** The color and material of each prop slot; a generator reads them as `<Slot>Color` and `<Slot>Material`. */
+    propSlots,
+    /** Scale and rotation rules keyed by prop kind, for every kind a room of this genre can place. */
+    propRules: z.record(z.string().min(1), propRule),
+    /** Hero-prop recipes keyed by hero kind; absent leaves every room to its primitive set pieces. */
+    heroProps: z.record(z.string().min(1), heroProp).optional(),
+    /** Room types this genre offers, keyed by type name; a room without a type keeps the plain prop kit. */
+    roomTypes: z.record(z.string().min(1), roomType).optional(),
+    /** Ambient particles and beams with generated sprites, built after the lights; absent builds none. */
+    ambientEffects: z.array(ambientEffect).optional(),
+    /** Idle sway keyed by prop kind, run by a server Script in the map during play; absent animates nothing. */
+    idleAnimations: z.record(z.string().min(1), idleAnimation).optional(),
+    sizeRules: z.strictObject({
+      agentRadius: z.number().positive(),
+      agentHeight: z.number().positive(),
+      minDoorwayWidth: z.number().positive(),
+      minHallwayWidth: z.number().positive(),
+      minWallHeight: z.number().positive(),
+      /** Studs tall the avatar spans, classic to humanoid; a prop's height ratio is measured against it. */
+      avatarHeight: numberRange,
+    }),
+  })
+  .superRefine((preset, context) => {
+    const kinds = new Set(preset.propKit);
+    for (const roomType of Object.values(preset.roomTypes ?? {})) {
+      for (const kind of roomType.setPieces) kinds.add(kind);
+    }
+    for (const kind of kinds) {
+      if (preset.propRules[kind]?.surface === undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["propRules", kind, "surface"],
+          message: `Prop kind "${kind}" is in the prop kit or a room type's set pieces and needs a surface role or "exempt"`,
+        });
+      }
+    }
+  });
 
 export type Preset = z.infer<typeof presetSchema>;
 

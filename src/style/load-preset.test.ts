@@ -8,6 +8,7 @@ import { loadPresets } from "./load-preset.ts";
 
 const surface = { material: "Concrete", color: "#808080" };
 const light = { range: 40, brightness: 1, color: "#ffffff" };
+const slot = { material: "Plastic", color: "#808080" };
 
 function validPreset(exposure = 0.5) {
   return {
@@ -36,9 +37,18 @@ function validPreset(exposure = 0.5) {
     lightingIntent: "bright, even",
     lightRoles: { zoneMarker: light, focal: light, hero: light },
     propKit: ["bench", "lamp"],
+    propSlots: {
+      frame: slot,
+      seat: slot,
+      panel: slot,
+      glass: slot,
+      screen: slot,
+      signage: slot,
+      light: slot,
+    },
     propRules: {
-      bench: { heightRatio: { min: 0.34, max: 0.75 }, freeRotation: false },
-      lamp: { heightRatio: { min: 1.03, max: 2.25 }, freeRotation: false },
+      bench: { heightRatio: { min: 0.34, max: 0.75 }, freeRotation: false, surface: "trim" },
+      lamp: { heightRatio: { min: 1.03, max: 2.25 }, freeRotation: false, surface: "trim" },
     },
     sizeRules: {
       agentRadius: 2,

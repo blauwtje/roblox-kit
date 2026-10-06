@@ -128,7 +128,8 @@
         "min": 0.34,
         "max": 0.75
       },
-      "freeRotation": false
+      "freeRotation": false,
+      "surface": "exempt"
     },
     "rail": {
       "heightRatio": {
@@ -143,14 +144,16 @@
         "min": 1.15,
         "max": 2.5
       },
-      "freeRotation": false
+      "freeRotation": false,
+      "surface": "exempt"
     },
     "clock": {
       "heightRatio": {
         "min": 1.26,
         "max": 2.75
       },
-      "freeRotation": false
+      "freeRotation": false,
+      "surface": "exempt"
     },
     "ticket-machine": {
       "heightRatio": {
@@ -165,21 +168,54 @@
         "max": 0.25
       },
       "freeRotation": false,
-      "depth": 10
+      "depth": 10,
+      "surface": "exempt"
     },
     "platform-edge": {
       "heightRatio": {
         "min": 0.05,
         "max": 0.13
       },
-      "freeRotation": false
+      "freeRotation": false,
+      "surface": "exempt"
     },
     "ticket-counter": {
       "heightRatio": {
         "min": 0.92,
         "max": 2
       },
-      "freeRotation": false
+      "freeRotation": false,
+      "surface": "exempt"
+    }
+  },
+  "propSlots": {
+    "frame": {
+      "color": "#1f7a55",
+      "material": "SmoothPlastic"
+    },
+    "seat": {
+      "color": "#2c4a7c",
+      "material": "SmoothPlastic"
+    },
+    "panel": {
+      "color": "#f6f1e3",
+      "material": "SmoothPlastic"
+    },
+    "glass": {
+      "color": "#f6f1e3",
+      "material": "Glass"
+    },
+    "screen": {
+      "color": "#f2a900",
+      "material": "Neon"
+    },
+    "signage": {
+      "color": "#2c4a7c",
+      "material": "SmoothPlastic"
+    },
+    "light": {
+      "color": "#f6f1e3",
+      "material": "Neon"
     }
   },
   "heroProps": {

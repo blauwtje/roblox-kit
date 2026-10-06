@@ -69,15 +69,86 @@
   },
   "propKit": ["bench", "lamp", "rail"],
   "propRules": {
-    "bench": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
-    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "counter": { "heightRatio": { "min": 0.4, "max": 0.88 }, "freeRotation": false },
-    "fireplace": { "heightRatio": { "min": 0.57, "max": 1.25 }, "freeRotation": false }
+    "bench": {
+      "heightRatio": {
+        "min": 0.34,
+        "max": 0.75
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "lamp": {
+      "heightRatio": {
+        "min": 1.03,
+        "max": 2.25
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "rail": {
+      "heightRatio": {
+        "min": 0.34,
+        "max": 0.75
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "counter": {
+      "heightRatio": {
+        "min": 0.4,
+        "max": 0.88
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "fireplace": {
+      "heightRatio": {
+        "min": 0.57,
+        "max": 1.25
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    }
+  },
+  "propSlots": {
+    "frame": {
+      "color": "#5c3329",
+      "material": "Wood"
+    },
+    "seat": {
+      "color": "#b98b5e",
+      "material": "Fabric"
+    },
+    "panel": {
+      "color": "#8a6a44",
+      "material": "WoodPlanks"
+    },
+    "glass": {
+      "color": "#e8d5b5",
+      "material": "Glass"
+    },
+    "screen": {
+      "color": "#5c3329",
+      "material": "SmoothPlastic"
+    },
+    "signage": {
+      "color": "#5c3329",
+      "material": "Wood"
+    },
+    "light": {
+      "color": "#f2b84b",
+      "material": "Neon"
+    }
   },
   "roomTypes": {
-    "shop": { "setPieces": ["counter"], "signLabel": "SHOP" },
-    "home": { "setPieces": ["fireplace"], "signLabel": "HOME" }
+    "shop": {
+      "setPieces": ["counter"],
+      "signLabel": "SHOP"
+    },
+    "home": {
+      "setPieces": ["fireplace"],
+      "signLabel": "HOME"
+    }
   },
   "sizeRules": {
     "agentRadius": 2,
@@ -85,6 +156,9 @@
     "minDoorwayWidth": 10,
     "minHallwayWidth": 10,
     "minWallHeight": 12,
-    "avatarHeight": { "min": 5, "max": 6.5 }
+    "avatarHeight": {
+      "min": 5,
+      "max": 6.5
+    }
   }
 }

@@ -122,7 +122,7 @@
     },
     "PostProcessing": {
       "ColorCorrection": {
-        "Brightness": 0.0,
+        "Brightness": 0,
         "Contrast": 0.12,
         "Saturation": 0.05,
         "TintColor": "#e2f1ff"
@@ -135,7 +135,7 @@
         "FarIntensity": 0.15,
         "FocusDistance": 60,
         "InFocusRadius": 40,
-        "NearIntensity": 0.0
+        "NearIntensity": 0
       },
       "Sky": {
         "StarCount": 0,
@@ -165,16 +165,90 @@
   },
   "propKit": ["pillar", "lamp", "stairs", "rail"],
   "propRules": {
-    "pillar": { "freeRotation": false },
-    "lamp": { "heightRatio": { "min": 1.03, "max": 2.25 }, "freeRotation": false },
-    "stairs": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "rail": { "heightRatio": { "min": 0.34, "max": 0.75 }, "freeRotation": false },
-    "control-console": { "heightRatio": { "min": 0.4, "max": 0.88 }, "freeRotation": false },
-    "crate-stack": { "heightRatio": { "min": 0.46, "max": 1.0 }, "freeRotation": false }
+    "pillar": {
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "lamp": {
+      "heightRatio": {
+        "min": 1.03,
+        "max": 2.25
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "stairs": {
+      "heightRatio": {
+        "min": 0.34,
+        "max": 0.75
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "rail": {
+      "heightRatio": {
+        "min": 0.34,
+        "max": 0.75
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "control-console": {
+      "heightRatio": {
+        "min": 0.4,
+        "max": 0.88
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    },
+    "crate-stack": {
+      "heightRatio": {
+        "min": 0.46,
+        "max": 1
+      },
+      "freeRotation": false,
+      "surface": "exempt"
+    }
+  },
+  "propSlots": {
+    "frame": {
+      "color": "#9aa7b4",
+      "material": "Metal"
+    },
+    "seat": {
+      "color": "#3a4656",
+      "material": "SmoothPlastic"
+    },
+    "panel": {
+      "color": "#e6ebf0",
+      "material": "SmoothPlastic"
+    },
+    "glass": {
+      "color": "#2ec4ff",
+      "material": "Glass"
+    },
+    "screen": {
+      "color": "#2ec4ff",
+      "material": "Neon"
+    },
+    "signage": {
+      "color": "#141b26",
+      "material": "SmoothPlastic"
+    },
+    "light": {
+      "color": "#2ec4ff",
+      "material": "Neon"
+    }
   },
   "roomTypes": {
-    "bridge": { "setPieces": ["control-console"], "signLabel": "BRIDGE" },
-    "cargo-bay": { "setPieces": ["crate-stack"], "signLabel": "CARGO BAY" }
+    "bridge": {
+      "setPieces": ["control-console"],
+      "signLabel": "BRIDGE"
+    },
+    "cargo-bay": {
+      "setPieces": ["crate-stack"],
+      "signLabel": "CARGO BAY"
+    }
   },
   "sizeRules": {
     "agentRadius": 2,
@@ -182,6 +256,9 @@
     "minDoorwayWidth": 10,
     "minHallwayWidth": 10,
     "minWallHeight": 12,
-    "avatarHeight": { "min": 5, "max": 6.5 }
+    "avatarHeight": {
+      "min": 5,
+      "max": 6.5
+    }
   }
 }
