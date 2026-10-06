@@ -210,7 +210,7 @@ await test("a style sends its palette colors and role variants; without a style,
   });
   const styledCode = String(styledConnection.requests[0]?.arguments["code"]);
   assert.ok(String(styledConnection.requests[0]?.arguments["code"]).includes('"phase":"shell"'));
-  assert.ok(styledCode.includes('"color":"#8a7f70"'));
+  assert.ok(styledCode.includes('"color":"#d9b86c"'));
   assert.ok(styledCode.includes('"wall":{"baseMaterial":"Brick","studsPerTile":8'));
 
   const plainStudio = phaseStudio();
@@ -624,7 +624,9 @@ await test("recorded assets are off by default: no hero props, trim meshes, vari
 await test("useRecordedAssets true keeps the variants' baked maps", async () => {
   const studio = phaseStudio();
   const tool = buildMapToolWith(await fakeHeroSources(false));
-  await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
+  // train-station has no MaterialVariants; horror-facility's carry baked maps.
+  const spec = { ...twoRoomSpec, style: { preset: "horror-facility" }, useRecordedAssets: true };
+  await tool.handler(tool.inputSchema.parse(spec), { studio });
   assert.ok(String(studio.requests[0]?.arguments["code"]).includes('"maps"'));
 });
 
