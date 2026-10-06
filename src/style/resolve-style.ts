@@ -1,5 +1,5 @@
 import { config } from "../config.ts";
-import type { MapSpec, RoomSpec } from "../map/map-spec.ts";
+import { extentOf, otherAxisOf, sideSteps, type MapSpec, type RoomSpec } from "../map/map-spec.ts";
 import { presetOverridesSchema, presetSchema, type Preset } from "./preset-schema.ts";
 
 /** What a map spec's `style` carries: a preset name and optional overrides of any subset of it. */
@@ -72,24 +72,11 @@ export function progressionFactor(progression: number, atDeepest: number): numbe
   return 1 + (atDeepest - 1) * progression;
 }
 
-type Door = RoomSpec["doors"][number];
-type Side = Door["side"];
-
-const sideFacing: Record<Side, { axis: "x" | "z"; sign: 1 | -1; opposite: Side }> = {
-  north: { axis: "z", sign: -1, opposite: "south" },
-  south: { axis: "z", sign: 1, opposite: "north" },
-  east: { axis: "x", sign: 1, opposite: "west" },
-  west: { axis: "x", sign: -1, opposite: "east" },
-};
-
-const otherAxis = { x: "z", z: "x" } as const;
-const extentOf = { x: "width", z: "depth" } as const;
-
 /** Whether a door of `a` and a door of `b` meet: the rooms stand face to face and the doors line up. */
 function roomsJoined(a: RoomSpec, b: RoomSpec): boolean {
   return a.doors.some((door) => {
-    const { axis, sign, opposite } = sideFacing[door.side];
-    const across = otherAxis[axis];
+    const { axis, sign, opposite } = sideSteps[door.side];
+    const across = otherAxisOf[axis];
     const wallA = a[axis] + (sign * a[extentOf[axis]]) / 2;
     const wallB = b[axis] - (sign * b[extentOf[axis]]) / 2;
     if (Math.abs(wallA - wallB) > config.overlapToleranceStuds) {

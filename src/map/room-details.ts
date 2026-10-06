@@ -354,11 +354,23 @@ function archParts(
   );
 }
 
+/** Whether the X/Z footprints of two boxes overlap, edges touching excluded. */
+function footprintsOverlap(
+  a: { position: Vector; size: Vector },
+  b: { position: Vector; size: Vector },
+): boolean {
+  return (
+    Math.abs(a.position.x - b.position.x) < (a.size.x + b.size.x) / 2 &&
+    Math.abs(a.position.z - b.position.z) < (a.size.z + b.size.z) / 2
+  );
+}
+
 /**
  * Baseboards, crowns, accent stripes, corner pillars and doorway arches for every room of a laid-out map,
  * painted from the preset's trim and accent surfaces; the accent stripe grows with the room's depth from the
  * spawn room (`roomProgression`). Each of `patternSurfaces` ("floor", "ceiling") also gets a wave-function-collapse
- * tile pattern in every room; none by default. Deterministic: the same inputs give the same parts.
+ * tile pattern in every room, leaving out the tiles over a spawn pad; none by default. Deterministic: the same
+ * inputs give the same parts.
  * `parts` are the parts `layoutMap` returned for `spec`.
  */
 export function buildRoomDetails(
@@ -368,6 +380,7 @@ export function buildRoomDetails(
   patternSurfaces: readonly PatternSurface[] = [],
 ): DetailPart[] {
   const details: DetailPart[] = [];
+  const spawns = parts.filter((part) => part.kind === "spawn");
   const progression = roomProgression(spec);
   for (const [roomIndex, room] of spec.rooms.entries()) {
     const measure = measureRoom(spec, room);
@@ -389,6 +402,7 @@ export function buildRoomDetails(
         seed: spec.seed ?? config.defaultSeed,
       });
       for (const tile of tiles) {
+        if (surface === "floor" && spawns.some((spawn) => footprintsOverlap(spawn, tile))) continue;
         details.push(decorativePart({ ...tile, kind: "tile" }, surfaces));
       }
     }

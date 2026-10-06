@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { config } from "../config.ts";
+import { trimRecipePrefix } from "../hero-props/prop-recipes.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
@@ -251,6 +252,7 @@ export function createCheckMapTool(
           maxIssuesPerKind: config.maxIssuesPerKind,
           floorNameSuffix: config.floorNameSuffix,
           wallNameInfix: config.wallNameInfix,
+          trimKindPrefix: trimRecipePrefix,
           agentRadiusStuds: agent.radius,
           agentHeightStuds: agent.height,
           maxPathStuds: config.maxPathStuds,

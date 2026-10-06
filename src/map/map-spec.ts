@@ -236,3 +236,17 @@ export type RelationMapSpec = z.output<typeof relationMapSpecSchema>;
 export type RelationRoomSpec = RelationMapSpec["rooms"][number];
 export type GraphMapSpec = z.output<typeof graphMapSpecSchema>;
 export type GraphRoomSpec = GraphMapSpec["rooms"][number];
+
+type DoorSide = RoomSpec["doors"][number]["side"];
+
+/** What walking out of a door on each side means: the axis it moves along, its sign (north is -Z, south +Z, east +X, west -X) and the side a door facing it sits on. */
+export const sideSteps: Record<DoorSide, { axis: "x" | "z"; sign: 1 | -1; opposite: DoorSide }> = {
+  north: { axis: "z", sign: -1, opposite: "south" },
+  south: { axis: "z", sign: 1, opposite: "north" },
+  east: { axis: "x", sign: 1, opposite: "west" },
+  west: { axis: "x", sign: -1, opposite: "east" },
+};
+
+export const otherAxisOf = { x: "z", z: "x" } as const;
+/** The `RoomSpec` size that runs along each axis. */
+export const extentOf = { x: "width", z: "depth" } as const;

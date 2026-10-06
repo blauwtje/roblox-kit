@@ -378,5 +378,21 @@
   "2f7bf5acba38": {
     "kind": "trim-quarter-round",
     "assetId": "113576242327605"
+  },
+  "c999f321c1c0": {
+    "kind": "sprite-dust",
+    "assetId": "132301251706613"
+  },
+  "f1811208f8c5": {
+    "kind": "sprite-steam",
+    "assetId": "103756364527051"
+  },
+  "d4b6acbaa4d0": {
+    "kind": "sprite-spark",
+    "assetId": "131413671764453"
+  },
+  "fb8a9ac51b3c": {
+    "kind": "sprite-glow",
+    "assetId": "89207008552510"
   }
 }

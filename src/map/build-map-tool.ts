@@ -360,10 +360,11 @@ async function buildMap(
   const spec = resolveRelations(input);
   const style = spec.style === undefined ? undefined : resolveStyle(presets, spec.style);
   rejectUnknownRoomTypes(spec, style);
-  // A style is the switch for the decor: ceilings, trim details and props come with a preset, never without.
+  // A style is the switch for the decor: ceilings, trim details, floor tile patterns and props come with a
+  // preset, never without. Ceilings get no tile pattern, so capture_zones' cutaway still opens every room.
   const layout = layoutMap(spec, style?.surfaces, { ceilings: style !== undefined });
   const details: DetailPart[] =
-    style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces);
+    style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces, ["floor"]);
   const facades = style === undefined ? [] : buildFacades(spec, layout.parts, style.surfaces);
   const placed = style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
   const heroes =

@@ -32,7 +32,7 @@ const spec = mapSpecSchema.parse({
 });
 
 const layout = layoutMap(spec, surfaces, { ceilings: true });
-const details = buildRoomDetails(spec, layout.parts, surfaces);
+const details = buildRoomDetails(spec, layout.parts, surfaces, ["floor"]);
 const props = placeProps(spec, ["bench", "lamp"], 1);
 const lights = [{ zone: "start" }, { zone: "hall" }];
 const effects = ambientEffectsOf(
@@ -92,7 +92,7 @@ await test("each phase holds the parts of its kind", () => {
   assert.deepEqual(kindsOf("shell"), new Set(["wall"]));
   assert.deepEqual(kindsOf("floors and ceilings"), new Set(["floor", "spawn", "ceiling"]));
   assert.deepEqual(kindsOf("openings"), new Set(["arch"]));
-  assert.deepEqual(kindsOf("surfaces"), new Set(["trim", "stripe", "pillar"]));
+  assert.deepEqual(kindsOf("surfaces"), new Set(["trim", "stripe", "pillar", "tile"]));
   assert.deepEqual(byName["props"], props);
   assert.deepEqual(byName["lighting"], lights);
   assert.deepEqual(byName["ambient effects"], effects);

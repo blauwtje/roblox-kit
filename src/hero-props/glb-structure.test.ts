@@ -32,7 +32,17 @@ const twoMeshGltf = {
     { name: "body", primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] },
     { name: "roof", primitives: [{ attributes: { POSITION: 2 } }] },
   ],
-  materials: [{ name: "shell" }, { name: "glass" }],
+  materials: [
+    {
+      name: "shell",
+      normalTexture: { index: 1 },
+      pbrMetallicRoughness: {
+        baseColorTexture: { index: 0 },
+        metallicRoughnessTexture: { index: 2 },
+      },
+    },
+    { name: "glass", pbrMetallicRoughness: { baseColorTexture: { index: 3 } } },
+  ],
 };
 
 await test("reads the triangles, size and names of a GLB", () => {
@@ -42,6 +52,7 @@ await test("reads the triangles, size and names of a GLB", () => {
     size: [5, 2, 4],
     meshNames: ["body", "roof"],
     materialNames: ["shell", "glass"],
+    materialMaps: [["color", "normal", "roughness-metalness"], ["color"]],
   });
 });
 

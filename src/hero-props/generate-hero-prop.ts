@@ -28,7 +28,10 @@ export interface GeneratedHeroProp {
   structure: GlbStructure;
 }
 
-/** Problems of a generated GLB against its recipe: over budget, a role missing, or off size. */
+/** The maps every role's material must read: the baked color, normal, and packed roughness and metalness. */
+const requiredMaps = ["color", "normal", "roughness-metalness"];
+
+/** Problems of a generated GLB against its recipe: over budget, a role missing or without its texture maps, or off size. */
 function structureProblems(recipe: HeroPropRecipe, structure: GlbStructure): string[] {
   const problems: string[] = [];
   if (structure.triangles > recipe.triangleBudget) {
@@ -38,7 +41,15 @@ function structureProblems(recipe: HeroPropRecipe, structure: GlbStructure): str
   }
   for (const role of new Set(heroParts(recipe.operations).map((part) => part.shape.role))) {
     if (!structure.meshNames.includes(role)) problems.push(`no mesh named "${role}"`);
-    if (!structure.materialNames.includes(role)) problems.push(`no material named "${role}"`);
+    const materialIndex = structure.materialNames.indexOf(role);
+    if (materialIndex === -1) {
+      problems.push(`no material named "${role}"`);
+      continue;
+    }
+    const maps = structure.materialMaps[materialIndex] ?? [];
+    for (const map of requiredMaps) {
+      if (!maps.includes(map)) problems.push(`material "${role}" has no ${map} map`);
+    }
   }
   const { width, height, depth } = recipe.size;
   const axes = [

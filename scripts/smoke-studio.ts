@@ -464,7 +464,7 @@ async function styledSmokeMap() {
     throw new Error("The train-station preset is missing.");
   }
   const layout = layoutMap(smokeMapSpec, preset.surfaces, { ceilings: true });
-  const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces);
+  const details = buildRoomDetails(smokeMapSpec, layout.parts, preset.surfaces, ["floor"]);
   const { props, heroProps } = await heroPropsOf(
     smokeMapSpec,
     { name: "train-station", base: preset, style: preset },
@@ -827,7 +827,7 @@ async function probeProfileTrim(connection: StudioConnection): Promise<string> {
   return `${String(kinds.length)} profile meshes and ${String(boxes.length)} fallback boxes`;
 }
 
-/** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. */
+/** What the built map shows in Studio: palette colors on every floor and wall, the wall variant on the walls. Pattern tiles carry their own colors and are skipped. */
 const paintedMapLuau = `
 local model = workspace:WaitForChild("${config.mapsFolderName}"):WaitForChild("${smokeMapSpec.mapId}")
 local variant = game:GetService("MaterialService"):FindFirstChild("${smokeMapSpec.mapId}-wall")
@@ -836,7 +836,8 @@ for _, child in game:GetService("MaterialService"):GetChildren() do
   if child.Name == "${smokeMapSpec.mapId}-wall" then painted.wallVariantCount += 1 end
 end
 for _, part in model:GetChildren() do
-  local list = if string.find(part.Name, "floor", 1, true) then painted.floors elseif string.find(part.Name, "wall", 1, true) then painted.walls else nil
+  local isTile = string.find(part.Name, "-tile-", 1, true) ~= nil
+  local list = if isTile then nil elseif string.find(part.Name, "floor", 1, true) then painted.floors elseif string.find(part.Name, "wall", 1, true) then painted.walls else nil
   if list then table.insert(list, part.Color:ToHex()) end
   if list == painted.walls then table.insert(painted.wallVariants, part.MaterialVariant) end
 end
@@ -1077,7 +1078,10 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     output.counts.placement +
     output.counts.sizeRule +
     output.counts.scale +
-    output.counts.rotation;
+    output.counts.rotation +
+    output.counts.untextured +
+    output.counts.unlit +
+    output.counts.unbevelled;
   expectEqual("check_map issues + omitted", output.issues.length + output.issuesOmitted, counted);
   expectEqual("check_map passed", output.passed, counted === 0);
   // A clean map: any issue here is a finding, not something to tolerate.
@@ -1089,6 +1093,9 @@ async function probeCheckMap(connection: StudioConnection): Promise<string> {
     sizeRule: 0,
     scale: 0,
     rotation: 0,
+    untextured: 0,
+    unlit: 0,
+    unbevelled: 0,
   });
   expectEqual(
     "check_map sceneStats zones",

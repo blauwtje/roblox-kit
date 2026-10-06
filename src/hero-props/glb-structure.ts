@@ -48,7 +48,20 @@ const gltfSchema = z.object({
       }),
     )
     .default([]),
-  materials: z.array(z.object({ name: z.string().optional() })).default([]),
+  materials: z
+    .array(
+      z.object({
+        name: z.string().optional(),
+        normalTexture: z.object({ index: z.number().int() }).optional(),
+        pbrMetallicRoughness: z
+          .object({
+            baseColorTexture: z.object({ index: z.number().int() }).optional(),
+            metallicRoughnessTexture: z.object({ index: z.number().int() }).optional(),
+          })
+          .optional(),
+      }),
+    )
+    .default([]),
 });
 
 type Gltf = z.infer<typeof gltfSchema>;
@@ -61,6 +74,18 @@ export interface GlbStructure {
   size: [number, number, number];
   meshNames: string[];
   materialNames: string[];
+  /** Per material, parallel to `materialNames`, the texture maps it reads: "color", "normal" and "roughness-metalness" (glTF packs roughness in green and metalness in blue of one image). */
+  materialMaps: string[][];
+}
+
+function mapsOf(material: Gltf["materials"][number]): string[] {
+  const maps: string[] = [];
+  if (material.pbrMetallicRoughness?.baseColorTexture !== undefined) maps.push("color");
+  if (material.normalTexture !== undefined) maps.push("normal");
+  if (material.pbrMetallicRoughness?.metallicRoughnessTexture !== undefined) {
+    maps.push("roughness-metalness");
+  }
+  return maps;
 }
 
 /** The parsed JSON chunk and, when the file has one, the BIN chunk's bytes. */
@@ -146,7 +171,7 @@ function sizeOf(gltf: Gltf): [number, number, number] {
   ];
 }
 
-/** Reads the triangle count, size and mesh and material names of a GLB from its JSON chunk. */
+/** Reads the triangle count, size, mesh and material names and material texture maps of a GLB from its JSON chunk. */
 export function readGlbStructure(glb: Uint8Array): GlbStructure {
   const gltf = gltfSchema.parse(readChunks(glb).json);
   let triangles = 0;
@@ -160,6 +185,7 @@ export function readGlbStructure(glb: Uint8Array): GlbStructure {
     size: sizeOf(gltf),
     meshNames: gltf.meshes.map((mesh) => mesh.name ?? ""),
     materialNames: gltf.materials.map((material) => material.name ?? ""),
+    materialMaps: gltf.materials.map(mapsOf),
   };
 }
 

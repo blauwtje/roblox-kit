@@ -558,6 +558,8 @@ await test("check-map.luau sends doorway clearance boxes from the spec and repor
   const code = String(studio.requests[0]?.arguments["code"]);
   assert.match(code, /"doorways":\[\{"room":"a","side":"east","min":\{/);
   assert.match(code, /"wallNameInfix":"-wall-"/);
+  // A trim profile Model runs along a wall and through door frames, so it is no prop to place.
+  assert.match(code, /"trimKindPrefix":"trim-"/);
   const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
   assert.ok(source.includes("no floor under its center or footprint corners"));
   assert.ok(source.includes("overlaps the wall part"));

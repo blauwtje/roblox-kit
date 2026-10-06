@@ -10,6 +10,8 @@ type Arguments = {
 	maxIssuesPerKind: number,
 	floorNameSuffix: string,
 	wallNameInfix: string,
+	-- The kind prefix of a trim profile Model: a run of wall trim, not a prop, so no placement rule applies.
+	trimKindPrefix: string,
 	agentRadiusStuds: number,
 	agentHeightStuds: number,
 	maxPathStuds: number,
@@ -322,13 +324,18 @@ end
 local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
 
 -- The pose and size a placed prop is checked at: a ProceduralModel's declared Size about its pivot, or a hero
--- Model's bounding box; nil for any other child.
+-- Model's bounding box; nil for a trim profile Model and any other child.
 local function placedBox(child: Instance): (CFrame?, Vector3?)
 	if child:IsA("ProceduralModel") then
 		return child:GetPivot(), child.Size
 	end
-	if child:IsA("Model") and child:GetAttribute(HERO_KIND_ATTRIBUTE_NAME) ~= nil then
-		return child:GetBoundingBox()
+	local heroKind = if child:IsA("Model") then child:GetAttribute(HERO_KIND_ATTRIBUTE_NAME) else nil
+	if typeof(heroKind) == "string" then
+		local prefix = arguments.trimKindPrefix
+		if string.sub(heroKind, 1, #prefix) == prefix then
+			return nil, nil
+		end
+		return (child :: Model):GetBoundingBox()
 	end
 	return nil, nil
 end

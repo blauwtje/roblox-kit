@@ -1,7 +1,16 @@
 import { config } from "../config.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { createSeededRandom } from "../shared/seeded-random.ts";
-import type { GraphMapSpec, GraphRoomSpec, MapSpec, RoomSpec, TerrainFill } from "./map-spec.ts";
+import {
+  extentOf,
+  otherAxisOf,
+  sideSteps,
+  type GraphMapSpec,
+  type GraphRoomSpec,
+  type MapSpec,
+  type RoomSpec,
+  type TerrainFill,
+} from "./map-spec.ts";
 
 export interface Vector {
   x: number;
@@ -231,7 +240,7 @@ function assertRoomFits(room: RoomSpec, style: RoomStyle): void {
 }
 
 type Door = RoomSpec["doors"][number];
-type Axis = "x" | "z";
+type Axis = keyof typeof otherAxisOf;
 
 /** A room the graph solver has given a center, with the doors it holds so far. */
 interface Placement {
@@ -240,15 +249,6 @@ interface Placement {
   z: number;
   doors: Door[];
 }
-
-const sideSteps: Record<Side, { axis: Axis; sign: 1 | -1; opposite: Side }> = {
-  north: { axis: "z", sign: -1, opposite: "south" },
-  south: { axis: "z", sign: 1, opposite: "north" },
-  east: { axis: "x", sign: 1, opposite: "west" },
-  west: { axis: "x", sign: -1, opposite: "east" },
-};
-const otherAxisOf = { x: "z", z: "x" } as const;
-const extentOf = { x: "width", z: "depth" } as const;
 
 interface GraphContext {
   spec: GraphMapSpec;

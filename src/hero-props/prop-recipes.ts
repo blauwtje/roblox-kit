@@ -322,9 +322,12 @@ function profilePointsOf(kind: TrimProfileKind) {
   }
 }
 
+/** Prefix of a trim profile mesh's recipe key, which is also the kind of its built Model. */
+export const trimRecipePrefix = "trim-";
+
 /** The recipe key of a trim profile mesh: `trim-<profile>`. */
 export function trimRecipeKind(kind: TrimProfileKind): string {
-  return `trim-${kind}`;
+  return `${trimRecipePrefix}${kind}`;
 }
 
 /** One Blender recipe per trim profile, keyed `trim-<profile>`: the profile extruded one stud along z, scaled along each run at build. */

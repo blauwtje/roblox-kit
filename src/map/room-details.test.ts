@@ -243,3 +243,27 @@ await test("a profile with a recorded asset becomes a mesh with its box as the f
     assert.deepEqual(Object.keys(mesh.surfaces), ["trim"]);
   }
 });
+
+await test("floor tiles come only when asked for and leave the spawn pad free", () => {
+  const spec = mapSpecSchema.parse({
+    ...closedRoom,
+    rooms: [{ ...closedRoom.rooms[0], spawn: true }],
+  });
+  const { parts } = layoutMap(spec);
+  const spawn = parts.find((part) => part.kind === "spawn");
+  assert.ok(spawn, "the room has a spawn pad");
+  assert.equal(
+    buildRoomDetails(spec, parts, surfaces).filter((detail) => detail.kind === "tile").length,
+    0,
+  );
+  const tiles = buildRoomDetails(spec, parts, surfaces, ["floor"]).filter(
+    (detail) => detail.kind === "tile",
+  );
+  assert.ok(tiles.length > 0, "the floor gets a tile pattern");
+  for (const tile of tiles) {
+    const clear =
+      Math.abs(tile.position.x - spawn.position.x) >= (tile.size.x + spawn.size.x) / 2 ||
+      Math.abs(tile.position.z - spawn.position.z) >= (tile.size.z + spawn.size.z) / 2;
+    assert.ok(clear, `${tile.name} covers the spawn pad`);
+  }
+});

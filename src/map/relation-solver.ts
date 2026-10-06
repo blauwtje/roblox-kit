@@ -1,27 +1,16 @@
 import { config } from "../config.ts";
 import { createSeededRandom } from "../shared/seeded-random.ts";
-import type { MapSpec, RelationMapSpec, RelationRoomSpec, RoomSpec } from "./map-spec.ts";
+import {
+  extentOf,
+  otherAxisOf,
+  sideSteps,
+  type MapSpec,
+  type RelationMapSpec,
+  type RelationRoomSpec,
+  type RoomSpec,
+} from "./map-spec.ts";
 
-type Side = RoomSpec["doors"][number]["side"];
 type RelatedRoom = Extract<RelationRoomSpec, { relation: object }>;
-type Axis = "x" | "z";
-
-interface Direction {
-  /** The axis a room set in this direction moves along. */
-  axis: Axis;
-  sign: 1 | -1;
-  opposite: Side;
-}
-
-const directions: Record<Side, Direction> = {
-  north: { axis: "z", sign: -1, opposite: "south" },
-  south: { axis: "z", sign: 1, opposite: "north" },
-  east: { axis: "x", sign: 1, opposite: "west" },
-  west: { axis: "x", sign: -1, opposite: "east" },
-};
-
-const extentOfAxis = { x: "width", z: "depth" } as const;
-const otherAxis = { x: "z", z: "x" } as const;
 
 /** One related room with what its hallway needs that does not depend on where the room ends up. */
 interface Link {
@@ -114,9 +103,9 @@ function placeRelated(
 ): Placement | undefined {
   const { room, hallwayName, hallwayDoorWidth } = link;
   const { relation, ...roomShape } = room;
-  const { axis, sign, opposite } = directions[relation.direction];
-  const perpendicular = otherAxis[axis];
-  const extent = extentOfAxis[axis];
+  const { axis, sign, opposite } = sideSteps[relation.direction];
+  const perpendicular = otherAxisOf[axis];
+  const extent = extentOf[axis];
 
   const targetEdge = target[axis] + (sign * target[extent]) / 2;
   const unsnappedCenter = targetEdge + sign * (relation.hallwayLength + room[extent] / 2);
@@ -127,7 +116,7 @@ function placeRelated(
     snapToGrid(target[perpendicular], Math.round) + pose.lateralSteps * config.gridStuds;
   const doorOffset = target[perpendicular] - perpendicularCenter;
   const thickness = spec.wallThickness ?? config.defaultWallThicknessStuds;
-  const reach = room[extentOfAxis[perpendicular]] / 2 - thickness - hallwayDoorWidth / 2;
+  const reach = room[extentOf[perpendicular]] / 2 - thickness - hallwayDoorWidth / 2;
   if (pose.lateralSteps !== 0 && Math.abs(doorOffset) > reach) {
     return undefined;
   }
@@ -140,7 +129,7 @@ function placeRelated(
     [perpendicular]: perpendicularCenter,
   } as RoomSpec;
   const alongSize = { [extent]: hallwayLength };
-  const acrossSize = { [extentOfAxis[perpendicular]]: relation.hallwayWidth };
+  const acrossSize = { [extentOf[perpendicular]]: relation.hallwayWidth };
   const hallway = {
     name: hallwayName,
     ...alongSize,
