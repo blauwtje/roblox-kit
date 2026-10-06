@@ -29,6 +29,7 @@ from mathutils import Matrix, Vector
 
 CYLINDER_SEGMENTS = 16
 BEVEL_SEGMENTS = 2
+SHARP_EDGE_DEGREES = 40
 MAP_SIZE = 512
 BAKE_SAMPLES = 16
 # Studs: the noise scale is one blotch per stud, wear reaches this far from an edge, occlusion this far from a corner.
@@ -140,13 +141,23 @@ ADD_SHAPE = {
 
 
 def bevel_piece(piece, width):
+    """Bevels only the sharp edges: those whose two faces meet at more than SHARP_EDGE_DEGREES.
+
+    The side edges of round shapes stay smooth, and `clamp_overlap` keeps a bevel from passing the edge next to it.
+    """
+    sharp = []
+    for edge in piece.edges:
+        angle = edge.calc_face_angle(None)
+        if angle is not None and math.degrees(angle) > SHARP_EDGE_DEGREES:
+            sharp.append(edge)
     bmesh.ops.bevel(
         piece,
-        geom=list(piece.edges),
+        geom=sharp,
         offset=width,
         offset_type="OFFSET",
         segments=BEVEL_SEGMENTS,
         affect="EDGES",
+        clamp_overlap=True,
     )
 
 
