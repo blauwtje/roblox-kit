@@ -11,6 +11,8 @@ import { buildMapTool, buildMapToolWith, propsOf } from "./build-map-tool.ts";
 import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import { mapSpecSchema } from "./map-spec.ts";
 import { loadPresets } from "../style/load-preset.ts";
+import { materialMapSize } from "../style/preset-schema.ts";
+import { spriteHashes, spriteKind, spriteSizePixels } from "../lighting/ambient-sprites.ts";
 
 const studios = [{ id: "studio-a", name: "Place A" }];
 
@@ -668,6 +670,59 @@ await test("useRecordedAssets is a documented boolean that defaults to false", (
   assert.equal(buildMapTool.inputSchema.parse(twoRoomSpec).useRecordedAssets, false);
   assert.throws(() => buildMapTool.inputSchema.parse({ ...twoRoomSpec, useRecordedAssets: "yes" }));
   assert.match(buildMapTool.description, /useRecordedAssets/);
+});
+
+await test("texturePixels is 0 with recorded assets off", async () => {
+  const result = await run(styledStudio(), {
+    ...twoRoomSpec,
+    style: { preset: "horror-facility" },
+  });
+  assert.equal(buildMapTool.outputSchema.parse(result.structuredContent).texturePixels, 0);
+});
+
+await test("texturePixels sums distinct material-map images at the map size when recorded assets are on", async () => {
+  const preset = (await loadPresets()).get("horror-facility");
+  assert.ok(preset !== undefined);
+  const images = new Set(
+    Object.values(preset.surfaces).flatMap((surface) => Object.values(surface.variant?.maps ?? {})),
+  );
+  assert.ok(images.size > 0);
+  const result = await run(styledStudio(), {
+    ...twoRoomSpec,
+    style: { preset: "horror-facility" },
+    useRecordedAssets: true,
+  });
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.equal(structured.texturePixels, images.size * materialMapSize ** 2);
+});
+
+await test("texturePixels counts each recorded sprite once at the sprite size", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "build-map-sprites-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  const hashes = await spriteHashes();
+  const assets = Object.fromEntries(
+    Object.entries(hashes).map(([sprite, hash], index) => [
+      hash,
+      { kind: spriteKind(sprite as keyof typeof hashes), assetId: String(100 + index) },
+    ]),
+  );
+  await writeFile(assetsFile, JSON.stringify(assets));
+  const tool = buildMapToolWith({ assetsFile });
+  const spec = {
+    ...twoRoomSpec,
+    useRecordedAssets: true,
+    style: { preset: "train-station" },
+    rooms: twoRoomSpec.rooms.map((room) =>
+      room.name === "hall" ? { ...room, roomType: "platform" } : room,
+    ),
+  };
+  const studio = styledStudio();
+  const result = await tool.handler(tool.inputSchema.parse(spec), { studio });
+  const ambient = requestArguments(studio, 7) as { effects: { texture?: string }[] };
+  const textures = new Set(ambient.effects.map((effect) => effect.texture));
+  assert.ok(textures.size > 0 && !textures.has(undefined));
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.equal(structured.texturePixels, textures.size * spriteSizePixels ** 2);
 });
 
 await test("a recorded hero asset is sent to the props phase in the slot of the set piece it replaces", async () => {

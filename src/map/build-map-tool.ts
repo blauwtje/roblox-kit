@@ -9,7 +9,7 @@ import type { ToolContext, ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
-import type { IdleAnimation, Preset } from "../style/preset-schema.ts";
+import { materialMapSize, type IdleAnimation, type Preset } from "../style/preset-schema.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 import { lintPalette } from "../style/palette-lint.ts";
 import { findLookIssues } from "./look-lint.ts";
@@ -28,7 +28,7 @@ import {
   missingSpriteWarnings,
   type AmbientEffectRecord,
 } from "./ambient-effects.ts";
-import { recordedSprites } from "../lighting/ambient-sprites.ts";
+import { recordedSprites, spriteSizePixels } from "../lighting/ambient-sprites.ts";
 import { heroAssetsFile } from "../hero-props/hero-asset-store.ts";
 import { terrainChunks } from "./terrain-heightmap.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
@@ -84,6 +84,8 @@ const buildMapOutput = z.strictObject({
         .optional(),
     }),
   ),
+  /** Pixels of the plan's distinct material-map images (at the baked map size) and ambient sprites, each counted once; 0 with recorded assets off. */
+  texturePixels: z.number().int(),
 });
 
 /** What `build-map.luau` reports after a phase: the parts in the Model; the shell phase also says whether it replaced a map. */
@@ -160,6 +162,18 @@ function variantsOf(
     variants[role] = useRecordedAssets ? surface.variant : { ...surface.variant, maps: undefined };
   }
   return variants;
+}
+
+/** The pixels of the distinct material-map images of `variants` and of the distinct sprite textures of `effects`. */
+function texturePixelsOf(
+  variants: Record<string, Variant>,
+  effects: AmbientEffectRecord[],
+): number {
+  const mapImages = new Set(
+    Object.values(variants).flatMap((variant) => Object.values(variant.maps ?? {})),
+  );
+  const sprites = new Set(effects.flatMap((effect) => effect.texture ?? []));
+  return mapImages.size * materialMapSize ** 2 + sprites.size * spriteSizePixels ** 2;
 }
 
 /** The generator source of each prop kind in use, read from `luau/props/<kind>.luau`. */
@@ -554,6 +568,7 @@ async function buildMap(
     zones: zonesOf([...layout.parts, ...details, ...facades]),
     warnings,
     lookIssues,
+    texturePixels: texturePixelsOf(variants, effects),
   });
 }
 
