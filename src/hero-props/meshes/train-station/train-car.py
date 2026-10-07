@@ -40,6 +40,7 @@ HALF_DEPTH = 4.2  # the roof's half width; the footboards reach 4.3
 SIDE_Y = 3.9  # the body's side faces
 WHEEL_Y = 2.85  # the gauge, 5.7 apart
 WHEEL_Z = 1.5  # flange radius 1.5, so the flanges touch z 0
+SPRING_LEAF = 0.35 / 3  # three leaves fill the 0.35 between the axlebox top (2.1) and the sideframe underside (2.45)
 DECK_Z = 4.0  # the underframe's centre; the body stands on its top face at 4.4
 BODY_TOP = 11.0
 BODY_LENGTH = 50.4
@@ -170,7 +171,7 @@ def bogies():
     for bogie in (-16, 16):
         for side in (-1, 1):
             box(f"sideframe-{bogie}-{side}", (bogie, side * 3.35, 2.65), (8.0, 0.25, 0.4), IRON, 0.04)
-        box(f"bolster-{bogie}", (bogie, 0, 3.25), (1.6, 6.7, 0.7), IRON, 0.04)
+        box(f"bolster-{bogie}", (bogie, 0, 3.225), (1.6, 6.7, 0.75), IRON, 0.04)
         for x in (bogie - 3, bogie + 3):
             cylinder(f"axle-{x}", (x, 0, WHEEL_Z), 0.3, 2 * WHEEL_Y + 0.8, "y", IRON, 12)
             for side in (-1, 1):
@@ -179,8 +180,8 @@ def bogies():
                 box(f"axlebox-{x}-{side}", (x, side * 3.35, WHEEL_Z + 0.1), (0.9, 0.4, 1.0), IRON, 0.05)
                 cylinder(f"axlecap-{x}-{side}", (x, side * 3.58, WHEEL_Z + 0.1), 0.25, 0.06, "y", BRASS, 12)
                 for leaf, length in enumerate((2.6, 2.0, 1.4)):
-                    z = WHEEL_Z + 0.7 + 0.1 * leaf
-                    strip_box(f"spring-{x}-{side}-{leaf}", (x, side * 3.35, z), (length, 0.25, 0.1), STEEL)
+                    z = WHEEL_Z + 0.6 + SPRING_LEAF * (leaf + 0.5)
+                    strip_box(f"spring-{x}-{side}-{leaf}", (x, side * 3.35, z), (length, 0.25, SPRING_LEAF), STEEL)
 
 
 def underframe():
@@ -247,7 +248,7 @@ def roofline():
         strip_box(f"rain-strip-{side}", (0, side * 4.0, 11.5), (51, 0.12, 0.12), IRON)
     for index in range(COMPARTMENTS):
         x = compartment_x(index)
-        cylinder(f"vent-stem-{index}", (x, 0, 12.0), 0.3, 0.3, "z", IRON, 12)
+        cylinder(f"vent-stem-{index}", (x, 0, 12.025), 0.3, 0.35, "z", IRON, 12)
         cylinder(f"vent-cap-{index}", (x, 0, 12.35), 0.55, 0.3, "z", IRON, 16, 0.03)
 
 
