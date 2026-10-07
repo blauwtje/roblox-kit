@@ -869,7 +869,7 @@
           "shape": "along-length",
           "piece": "pillar",
           "spacing": 8,
-          "inset": 10
+          "inset": 9
         }
       ],
       "signLabel": "PLATFORM 1",

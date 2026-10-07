@@ -144,6 +144,30 @@ await test("the train station's concourse and ticket hall arrange at least two p
   }
 });
 
+await test("the platform's pillars, wider under its 24-high wall, keep the gaps to the platform edge and clock they had at 16 high", async () => {
+  const { preset, spec, seed, setPieces } = await placeBenchmarkSetPieces();
+  const { pieces } = placeArrangements(spec, preset.roomTypes, setPieces, seed);
+  const zGap = (first: (typeof pieces)[number], second: (typeof pieces)[number]): number =>
+    Math.abs(first.pivot.z - second.pivot.z) - (first.size.z + second.size.z) / 2;
+  const platformEdge = setPieces.find((piece) => piece.kind === "platform-edge");
+  const clock = setPieces.find((piece) => piece.kind === "clock");
+  const pillars = pieces.filter(
+    (piece) => piece.kind === "pillar" && Math.abs(piece.pivot.z - 450) <= 15,
+  );
+  assert.ok(platformEdge !== undefined && clock !== undefined && pillars.length === 4);
+  for (const pillar of pillars) {
+    assert.equal(pillar.size.z, 3, "the pillar is 3 wide under the 24-high wall");
+    assert.ok(
+      4 <= zGap(pillar, platformEdge),
+      `pillar ${String(zGap(pillar, platformEdge))} from the edge`,
+    );
+    assert.ok(
+      1.4 <= zGap(pillar, clock) + 1e-9,
+      `pillar ${String(zGap(pillar, clock))} from the clock`,
+    );
+  }
+});
+
 await test("the platform's train car stands on its track bed, which keeps its rails and spans the car", async () => {
   const { preset, setPieces } = await placeBenchmarkSetPieces();
   assert.deepEqual(preset.meshes?.["train-car"], {
