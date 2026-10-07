@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { config } from "../src/config.ts";
 import { blenderPath } from "../src/hero-props/blender-path.ts";
+import { blenderOutputBytes } from "../src/hero-props/generate-hero-prop.ts";
 import { generateScriptedMesh } from "../src/hero-props/generate-scripted-mesh.ts";
 import { readGlbStructure, type GlbStructure } from "../src/hero-props/glb-structure.ts";
 
@@ -18,8 +19,6 @@ import { readGlbStructure, type GlbStructure } from "../src/hero-props/glb-struc
 const execFileAsync = promisify(execFile);
 /** How far apart two bounds may be, in studs, and still count as the same size. */
 const boundsTolerance = 0.01;
-/** Blender prints its whole log on stdout; the buffer only has to hold it. */
-const blenderOutputBytes = 10 * 1024 * 1024;
 
 /** Runs the original script into a temp folder and reads the one GLB it exports, from the maps folder or `<out prefix>.glb`. */
 async function originalStructure(script: string): Promise<GlbStructure> {

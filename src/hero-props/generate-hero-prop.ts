@@ -17,7 +17,7 @@ const generatorScript = new URL("./generate-hero-prop.py", import.meta.url);
 const recipeFileName = "recipe.json";
 const glbFileName = "model.glb";
 /** Blender prints its whole log on stdout; the buffer only has to hold it. */
-const blenderOutputBytes = 10 * 1024 * 1024;
+export const blenderOutputBytes = 10 * 1024 * 1024;
 
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 
@@ -29,7 +29,7 @@ export interface GeneratedHeroProp {
 }
 
 /** The maps every role's material must read: the baked color, normal, and packed roughness and metalness. */
-const requiredMaps = ["color", "normal", "roughness-metalness"];
+export const requiredMaps = ["color", "normal", "roughness-metalness"];
 
 /** Problems of a generated GLB against its recipe: over budget, a role missing or without its texture maps, or off size. */
 function structureProblems(recipe: HeroPropRecipe, structure: GlbStructure): string[] {

@@ -7,19 +7,15 @@ import { loadPresets } from "../style/load-preset.ts";
 import type { MeshDeclaration } from "../style/preset-schema.ts";
 import { blenderPath } from "./blender-path.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
-import type { GeneratedHeroProp } from "./generate-hero-prop.ts";
+import { blenderOutputBytes, requiredMaps, type GeneratedHeroProp } from "./generate-hero-prop.ts";
 import { recipeHash } from "./recipe-hash.ts";
 
 const execFileAsync = promisify(execFile);
 
 const repositoryRoot = new URL("../../", import.meta.url);
 const sharedScript = new URL("./meshes/shared.py", import.meta.url);
-/** Blender prints its whole log on stdout; the buffer only has to hold it. */
-const blenderOutputBytes = 10 * 1024 * 1024;
 /** Most triangles a scripted mesh may hold; the same limit the recipe-built hero props keep. */
 const maxScriptedMeshTriangles = 20000;
-/** The maps every material must read: the baked color, normal, and packed roughness and metalness. */
-const requiredMaps = ["color", "normal", "roughness-metalness"];
 
 /** The recipe hash of a declared mesh: its script path hashed with the script's source and `shared.py`'s, so a change to either names a new output. */
 export async function scriptedMeshHash(
