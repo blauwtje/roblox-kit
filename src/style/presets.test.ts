@@ -13,7 +13,7 @@ import { doorwayClearanceBoxes, findDoorways } from "../map/size-rules.ts";
 import { zoneShots } from "../map/zone-cameras.ts";
 import { config } from "../config.ts";
 import { loadPresets } from "./load-preset.ts";
-import { lintPalette, oklabLightness } from "./palette-lint.ts";
+import { lintPalette, oklabDistance, oklabLightness } from "./palette-lint.ts";
 import {
   heroParts,
   roleTexelDensity,
@@ -157,6 +157,23 @@ await test("the platform's train car stands on its track bed, which keeps its ra
   // The car's modelled footprint (train-car.py): 52 studs long, 8.6 across at its widest.
   assert.ok(52 <= trackBed.size.x, `track bed ${String(trackBed.size.x)} studs long`);
   assert.ok(8.6 <= trackBed.size.z, "the car stands within the track bed's depth");
+});
+
+await test("the track bed's sleepers take the timber seat slot, which reads apart from the frame-slot rails", async () => {
+  const source = await readFile(
+    new URL("../../luau/props/track-bed.luau", import.meta.url),
+    "utf8",
+  );
+  assert.ok(!source.includes('"Signage"'), "the sleepers do not read the signage slot");
+  assert.match(source, /sleeper = slotLook\(params\.Attributes, "Seat"\)/);
+  const slots = (await loadPresets()).get("train-station")?.propSlots;
+  assert.ok(slots !== undefined);
+  const gap = oklabDistance(slots.seat.color, slots.frame.color);
+  assert.ok(
+    0.05 <= gap,
+    `seat ${slots.seat.color} is ${gap.toFixed(3)} from the rails ${slots.frame.color}`,
+  );
+  assert.notEqual(slots.seat.material, slots.frame.material);
 });
 
 await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {
