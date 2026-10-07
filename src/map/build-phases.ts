@@ -37,7 +37,7 @@ export interface BuildPhase<Light> {
 
 /**
  * Groups a layout into the seven ordered phases, every part in exactly one phase:
- * walls are the shell; floors, spawns and ceilings form the second phase; doorway arches are the openings;
+ * walls and the headers over lower doors are the shell; floors, spawns and ceilings form the second phase; doorway arches are the openings;
  * the other details (baseboards, crowns, stripes, pillars) and the facades of exterior rooms are the surfaces; then props, lights and ambient effects.
  * A phase with nothing to build stays in the array with no parts.
  */
@@ -46,7 +46,7 @@ export function groupBuildPhases<Light>(inputs: BuildPhaseInputs<Light>): BuildP
   const partsOfKind = (kinds: PartRecord["kind"][]) =>
     parts.filter((part) => kinds.includes(part.kind));
   const groups: Record<BuildPhaseName, BuildPhase<Light>["parts"]> = {
-    shell: partsOfKind(["wall"]),
+    shell: partsOfKind(["wall", "header"]),
     "floors and ceilings": partsOfKind(["floor", "spawn", "ceiling"]),
     openings: details.filter((detail) => detail.kind === "arch"),
     surfaces: [...details.filter((detail) => detail.kind !== "arch"), ...facades],

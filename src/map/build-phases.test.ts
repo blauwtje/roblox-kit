@@ -112,3 +112,30 @@ await test("a layout without decor keeps all seven phases, the empty ones with n
   assert.ok((counts["shell"] ?? 0) > 0);
   assert.ok((counts["floors and ceilings"] ?? 0) > 0);
 });
+
+await test("the wall above a door into a lower room is built with the shell", () => {
+  const tallSpec = mapSpecSchema.parse({
+    mapId: "tall",
+    rooms: [
+      {
+        name: "tall",
+        x: 0,
+        z: 0,
+        width: 40,
+        depth: 40,
+        wallHeight: 24,
+        doors: [{ side: "north", offset: 0, height: 16 }],
+      },
+    ],
+  });
+  const tallLayout = layoutMap(tallSpec, surfaces);
+  const header = tallLayout.parts.filter((part) => part.kind === "header");
+  assert.equal(header.length, 1);
+  const shell = groupBuildPhases({
+    parts: tallLayout.parts,
+    details: [],
+    props: [],
+    lights: [],
+  })[0];
+  assert.ok(shell?.name === "shell" && header.every((part) => shell.parts.includes(part)));
+});
