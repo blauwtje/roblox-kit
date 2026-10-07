@@ -581,12 +581,21 @@ const benchmarkSpec = JSON.parse(
 const trainStation = (await loadPresets()).get("train-station");
 assert.ok(trainStation !== undefined);
 const trainCarHash = await heroRecipeHash(trainStation, "train-car");
+const ticketCounterHash = await heroRecipeHash(trainStation, "ticket-counter");
 
-/** A temporary hero-assets.json, recording the train car when `recorded`. */
-async function fakeHeroSources(recorded: boolean): Promise<HeroPropSources> {
+/** A temporary hero-assets.json, recording the train car when `recorded`, and the ticket counter when `counterRecorded`. */
+async function fakeHeroSources(
+  recorded: boolean,
+  counterRecorded = false,
+): Promise<HeroPropSources> {
   const directory = await mkdtemp(join(tmpdir(), "build-map-heroes-"));
   const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
-  const assets = recorded ? { [trainCarHash]: { kind: "train-car", assetId: "987654" } } : {};
+  const assets = {
+    ...(recorded ? { [trainCarHash]: { kind: "train-car", assetId: "987654" } } : {}),
+    ...(counterRecorded
+      ? { [ticketCounterHash]: { kind: "ticket-counter", assetId: "987655" } }
+      : {}),
+  };
   await writeFile(assetsFile, JSON.stringify(assets));
   return { assetsFile };
 }
@@ -797,6 +806,77 @@ await test("a reviewed but unrecorded train-car mesh makes no Open Cloud call", 
     structured.warnings.filter((warning) => warning.includes("train-car")),
     [],
   );
+});
+
+await test("a recorded ticket-counter mesh takes the set piece's slot, which it carries as its fallback", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(false, true));
+  const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
+  const propsPhase = requestArguments(studio, propsPhaseIndex);
+  type Slot = { kind: string; pivot: object; size: object };
+  const heroProps = propsPhase["heroProps"] as (Slot & Record<string, unknown>)[];
+  const counters = heroProps.filter((hero) => hero.kind === "ticket-counter");
+  assert.equal(counters.length, 1);
+  const [hero] = counters;
+  assert.ok(hero !== undefined);
+  assert.equal(hero["assetId"], "987655");
+  assert.equal(hero["fit"], "none");
+  const props = propsPhase["props"] as Slot[];
+  assert.ok(
+    !props.some((prop) => prop.kind === "ticket-counter"),
+    "the set piece gives up its slot",
+  );
+  const fallback = hero["fallback"] as Slot | undefined;
+  assert.equal(fallback?.kind, "ticket-counter", "the mesh carries the set piece it replaced");
+  assert.deepEqual(fallback.size, hero.size, "the mesh is placed at the set piece's size");
+  assert.ok(
+    "ticket-counter" in (propsPhase["generators"] as object),
+    "the fallback kind has a generator",
+  );
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.deepEqual(
+    structured.warnings.filter((warning) => warning.includes("ticket-counter")),
+    [],
+  );
+  assert.equal(structured.phases[propsPhaseIndex]?.partCount, props.length + heroProps.length);
+});
+
+await test("without a recorded ticket-counter mesh the set piece stays, with no warning", async () => {
+  const studio = phaseStudio();
+  const tool = buildMapToolWith(await fakeHeroSources(false, false));
+  const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
+  const propsPhase = requestArguments(studio, propsPhaseIndex);
+  const props = propsPhase["props"] as { kind: string }[];
+  assert.ok(props.some((prop) => prop.kind === "ticket-counter"));
+  const heroProps = (propsPhase["heroProps"] ?? []) as { kind: string }[];
+  assert.ok(!heroProps.some((hero) => hero.kind === "ticket-counter"));
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  assert.deepEqual(
+    structured.warnings.filter((warning) => warning.includes("ticket-counter")),
+    [],
+  );
+});
+
+await test("a ticket-counter mesh that fails to load names its asset id and error and builds its set piece instead", async () => {
+  const studio = new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      const props = code.includes('"phase":"props"');
+      const text = props
+        ? '{"partCount":14,"heroLoadFailures":[{"kind":"ticket-counter","assetId":"987655","error":"HTTP 403"}]}'
+        : code.includes('"phase":"')
+          ? '{"partCount":14}'
+          : '{"snapshotTaken":false}';
+      return { content: [{ type: "text", text }] };
+    },
+  });
+  const tool = buildMapToolWith(await fakeHeroSources(false, true));
+  const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
+  const structured = buildMapTool.outputSchema.parse(result.structuredContent);
+  const failure = structured.warnings.filter((warning) => warning.includes("failed to load"));
+  assert.equal(failure.length, 1);
+  assert.match(failure[0] ?? "", /ticket-counter \(asset 987655\) failed to load: HTTP 403/);
+  assert.match(failure[0] ?? "", /its ticket-counter set piece is built instead\.$/);
 });
 
 await test("a hero asset that fails to load becomes a warning naming its asset id and error", async () => {

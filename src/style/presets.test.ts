@@ -406,7 +406,7 @@ await test("the train station lays the concourse spawn pad flush, in the floor's
   assert.equal(spawn.material, floor.material);
 });
 
-await test("the ticket hall's ticket counter is the declared mesh in place of its ticket-counter set piece", async () => {
+await test("the ticket hall's ticket counter is the declared mesh in place of its set piece and fits its span", async () => {
   const { preset, setPieces } = await placeBenchmarkSetPieces();
   const targets = preset.meshes?.["ticket-counter"]?.targets ?? [];
   assert.deepEqual(
@@ -415,7 +415,14 @@ await test("the ticket hall's ticket counter is the declared mesh in place of it
   );
   // A declared mesh wins over a hero prop replacing the same set piece, so the room type names none.
   assert.equal(preset.roomTypes?.["ticket-hall"]?.heroProps, undefined);
-  assert.ok(setPieces.some((piece) => piece.kind === "ticket-counter"));
+  const setPiece = setPieces.find((piece) => piece.kind === "ticket-counter");
+  assert.ok(setPiece !== undefined);
+  // The mesh's modelled bounds (ticket-counter.py): 14 studs wide, 7.87 high, and placed at the set piece's size.
+  assert.ok(14 <= setPiece.size.x, `counter 14 studs wide, set piece ${String(setPiece.size.x)}`);
+  assert.ok(
+    7.87 <= setPiece.size.y,
+    `counter 7.87 studs high, set piece ${String(setPiece.size.y)}`,
+  );
 });
 
 type Axis = "x" | "y" | "z";
