@@ -185,7 +185,7 @@
         "max": 0.13
       },
       "freeRotation": false,
-      "surface": "trim"
+      "surface": "exempt"
     },
     "departure-board": {
       "heightRatio": {

@@ -577,3 +577,10 @@ await test("train-station has a Granite floor, Limestone walls, Metal trim and n
     assert.equal(surface.variant, undefined, `${role} variant`);
   }
 });
+
+await test("the train station's queue rails keep the bronze frame slot instead of taking the trim role", async () => {
+  const rule = (await loadPresets()).get("train-station")?.propRules["rail"];
+  assert.ok(rule !== undefined);
+  assert.equal(rule.surface, "exempt");
+  assert.deepEqual(rule.heightRatio, { min: 0.34, max: 0.75 });
+});
