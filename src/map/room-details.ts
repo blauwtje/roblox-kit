@@ -306,6 +306,7 @@ function archParts(
 ): DetailPart[] {
   const { archJambWidthStuds, archLintelHeightStuds, archDepthStuds, archLipStuds } =
     detailDimensions;
+  const openingHeight = door.height ?? measure.wallHeight;
   const runsAlongX = door.side === "north" || door.side === "south";
   const towardCenter = door.side === "south" || door.side === "east" ? -1 : 1;
   const wallSign = -towardCenter;
@@ -317,8 +318,8 @@ function archParts(
     piece: jambSign < 0 ? "left" : "right",
     along: door.offset + jambSign * jambOffset,
     length: archJambWidthStuds,
-    height: measure.wallHeight,
-    centerHeight: measure.wallHeight / 2,
+    height: openingHeight,
+    centerHeight: openingHeight / 2,
     roll: -90,
   }));
   const lintel = {
@@ -326,7 +327,7 @@ function archParts(
     along: door.offset,
     length: measure.doorWidth - 2 * archLipStuds,
     height: archLintelHeightStuds,
-    centerHeight: measure.wallHeight - archLintelHeightStuds / 2,
+    centerHeight: openingHeight - archLintelHeightStuds / 2,
     roll: 0,
   };
   return [...jambs, lintel].map((piece) =>

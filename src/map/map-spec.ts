@@ -22,6 +22,8 @@ const doorSchema = z.strictObject({
   side: z.enum(["north", "south", "east", "west"]),
   /** Distance of the door center from the wall center along the wall. */
   offset: stud.default(0),
+  /** Clear height of the opening; the wall closes above it. Absent leaves the gap as tall as the wall. */
+  height: positiveStud.optional(),
 });
 
 const roomShape = {

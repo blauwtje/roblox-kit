@@ -24,7 +24,7 @@ export interface PartRecord {
   name: string;
   /** The zone (room name) the part belongs to. */
   room: string;
-  kind: "floor" | "wall" | "spawn" | "ceiling";
+  kind: "floor" | "wall" | "header" | "spawn" | "ceiling";
   /** The style surface the part is painted from. */
   role: SurfaceRole;
   /** A #rrggbb color: the style's color for `role`, or the shipped default without a style. */
@@ -92,6 +92,11 @@ interface Interval {
   end: number;
 }
 
+/** A door gap with the clear height of its opening, when that is lower than the wall. */
+interface DoorGap extends Interval {
+  height?: number | undefined;
+}
+
 const sides: Side[] = ["north", "south", "east", "west"];
 
 /** Room settings win over map settings, which win over the style's surface material, which wins over the config defaults. */
@@ -121,10 +126,14 @@ function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): R
 }
 
 /** The door gaps of one side, sorted, each checked to lie inside the wall and clear of the others. */
-function doorGaps(room: RoomSpec, side: Side, wallLength: number, doorWidth: number): Interval[] {
+function doorGaps(room: RoomSpec, side: Side, wallLength: number, doorWidth: number): DoorGap[] {
   const gaps = room.doors
     .filter((door) => door.side === side)
-    .map((door) => ({ start: door.offset - doorWidth / 2, end: door.offset + doorWidth / 2 }))
+    .map((door) => ({
+      start: door.offset - doorWidth / 2,
+      end: door.offset + doorWidth / 2,
+      height: door.height,
+    }))
     .sort((first, second) => first.start - second.start);
   let previousEnd = -wallLength / 2;
   for (const gap of gaps) {
@@ -163,29 +172,46 @@ function wallParts(room: RoomSpec, style: RoomStyle): PartRecord[] {
     const wallLength = runsAlongX ? room.width : room.depth - 2 * thickness;
     const towardPositive = side === "south" || side === "east";
     const sign = towardPositive ? 1 : -1;
-    const stretches = wallStretches(wallLength, doorGaps(room, side, wallLength, style.doorWidth));
-    for (const [index, stretch] of stretches.entries()) {
-      const length = stretch.end - stretch.start;
-      const alongCenter = (stretch.start + stretch.end) / 2;
-      const acrossOffset = sign * ((runsAlongX ? room.depth : room.width) / 2 - thickness / 2);
-      parts.push({
-        name: `${room.name}${config.wallNameInfix}${side}-${String(index + 1)}`,
+    const gaps = doorGaps(room, side, wallLength, style.doorWidth);
+    const acrossOffset = sign * ((runsAlongX ? room.depth : room.width) / 2 - thickness / 2);
+    const wallPiece = (
+      kind: "wall" | "header",
+      name: string,
+      span: Interval,
+      bottom: number,
+      top: number,
+    ): PartRecord => {
+      const alongCenter = (span.start + span.end) / 2;
+      const length = span.end - span.start;
+      return {
+        name: `${room.name}${config.wallNameInfix}${side}-${name}`,
         room: room.name,
-        kind: "wall",
+        kind,
         role: "wall",
         color: style.wallColor,
         position: {
           x: room.x + (runsAlongX ? alongCenter : acrossOffset),
-          y: style.wallHeight / 2,
+          y: (bottom + top) / 2,
           z: room.z + (runsAlongX ? acrossOffset : alongCenter),
         },
         size: {
           x: runsAlongX ? length : thickness,
-          y: style.wallHeight,
+          y: top - bottom,
           z: runsAlongX ? thickness : length,
         },
         material: style.wallMaterial,
-      });
+      };
+    };
+    for (const [index, stretch] of wallStretches(wallLength, gaps).entries()) {
+      parts.push(wallPiece("wall", String(index + 1), stretch, 0, style.wallHeight));
+    }
+    // A door into a lower room leaves the wall above its opening standing.
+    for (const [index, gap] of gaps.entries()) {
+      if (gap.height !== undefined && gap.height < style.wallHeight) {
+        parts.push(
+          wallPiece("header", `header-${String(index + 1)}`, gap, gap.height, style.wallHeight),
+        );
+      }
     }
   }
   return parts;

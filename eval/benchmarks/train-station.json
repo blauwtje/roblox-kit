@@ -17,6 +17,7 @@
     {
       "name": "platform",
       "roomType": "platform",
+      "wallHeight": 24,
       "width": 60,
       "depth": 30,
       "relation": {

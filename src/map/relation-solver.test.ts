@@ -210,3 +210,33 @@ await test("overlapping placed rooms without relations still resolve unchanged",
   });
   assert.deepEqual(resolveRelations(spec).rooms, spec.rooms);
 });
+
+await test("a related room taller than the hallway gets a door as high as the hallway and a wall header above it", () => {
+  const spec = relationMapSpecSchema.parse({
+    mapId: "m",
+    doorWidth: 6,
+    wallHeight: 16,
+    rooms: [
+      hub,
+      { ...relatedRoom("tall", "hub", "east", 15, 20), wallHeight: 24 },
+      relatedRoom("same", "hub", "west", 15, 20),
+    ],
+  });
+  const resolved = resolveRelations(spec);
+  const doorsOf = (name: string) => resolved.rooms.find((room) => room.name === name)?.doors;
+  assert.deepEqual(doorsOf("tall"), [{ side: "west", offset: 0, height: 16 }]);
+  assert.deepEqual(doorsOf("same"), [{ side: "east", offset: 0 }]);
+  assert.deepEqual(
+    doorsOf("hub")?.map((door) => door.height),
+    [undefined, undefined],
+  );
+  const parts = layoutMap(resolved).parts;
+  const header = parts.find((part) => part.name === "tall-wall-west-header-1");
+  assert.ok(header);
+  assert.equal(header.position.y, 20);
+  assert.deepEqual(header.size.y, 8);
+  assert.equal(
+    parts.some((part) => part.name.includes("-header-") && !part.name.startsWith("tall-")),
+    false,
+  );
+});

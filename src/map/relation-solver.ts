@@ -64,6 +64,18 @@ function addDoor(placed: Map<string, RoomSpec>, roomName: string, door: Door): v
   placed.set(roomName, { ...room, doors: [...room.doors, door] });
 }
 
+/** The door, with the hallway's wall height as its clear height when the room's walls are taller than that. */
+function doorIntoHallway(
+  spec: RelationMapSpec,
+  resolution: Resolution,
+  roomName: string,
+  door: Door,
+): Door {
+  const hallwayHeight = spec.wallHeight ?? config.defaultWallHeightStuds;
+  const roomHeight = resolution.placed.get(roomName)?.wallHeight ?? hallwayHeight;
+  return roomHeight > hallwayHeight ? { ...door, height: hallwayHeight } : door;
+}
+
 /** Checks what a related room's hallway needs whatever the room's pose: a free name and a door that fits. */
 function linkOf(resolution: Resolution, room: RelatedRoom, taken: Set<string>): Link {
   const { spec, roomsByName } = resolution;
@@ -341,8 +353,16 @@ export function resolveRelations(spec: RelationMapSpec): MapSpec {
     const { relation } = (resolution.links[index] as Link).room;
     resolution.placed.set(placement.room.name, placement.room);
     hallways.push(placement.hallway);
-    addDoor(resolution.placed, relation.to, placement.targetDoor);
-    addDoor(resolution.placed, placement.room.name, placement.roomDoor);
+    addDoor(
+      resolution.placed,
+      relation.to,
+      doorIntoHallway(spec, resolution, relation.to, placement.targetDoor),
+    );
+    addDoor(
+      resolution.placed,
+      placement.room.name,
+      doorIntoHallway(spec, resolution, placement.room.name, placement.roomDoor),
+    );
   }
   const rooms = resolution.order.map((name) => resolution.placed.get(name) as RoomSpec);
   return { ...spec, rooms: [...rooms, ...hallways] };
