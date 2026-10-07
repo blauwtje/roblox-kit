@@ -554,5 +554,9 @@
   "56fcfd658e0f": {
     "kind": "train-car",
     "assetId": "137669787957055"
+  },
+  "70313bde2e0f": {
+    "kind": "ticket-counter",
+    "assetId": "125360312908808"
   }
 }
