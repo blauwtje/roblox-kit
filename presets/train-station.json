@@ -26,6 +26,7 @@
     }
   },
   "flatSurfaces": true,
+  "patternSurfaces": [],
   "flushSpawn": true,
   "lighting": {
     "LightingStyle": "Realistic",
@@ -136,7 +137,7 @@
         "max": 0.38
       },
       "freeRotation": false,
-      "surface": "accent"
+      "surface": "exempt"
     },
     "pillar": {
       "heightRatio": {
