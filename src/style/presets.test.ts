@@ -30,6 +30,8 @@ const builtInMaterials = new Set([
   "Concrete",
   "DiamondPlate",
   "Fabric",
+  "Granite",
+  "Limestone",
   "Marble",
   "Metal",
   "Neon",
@@ -545,12 +547,12 @@ await test("every bundled preset keeps floor, wall, ceiling and trim apart in OK
   }
 });
 
-await test("train-station has a Marble floor, CeramicTiles walls, Metal trim and no textures", async () => {
+await test("train-station has a Granite floor, Limestone walls, Metal trim and no textures", async () => {
   const presets = await loadPresets();
   const preset = presets.get("train-station");
   assert.ok(preset !== undefined);
-  assert.equal(preset.surfaces.floor.material, "Marble");
-  assert.equal(preset.surfaces.wall.material, "CeramicTiles");
+  assert.equal(preset.surfaces.floor.material, "Granite");
+  assert.equal(preset.surfaces.wall.material, "Limestone");
   assert.equal(preset.surfaces.trim.material, "Metal");
   for (const [role, surface] of Object.entries(preset.surfaces)) {
     assert.equal(surface.texture, undefined, `${role} texture`);

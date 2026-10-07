@@ -5,11 +5,11 @@
   },
   "surfaces": {
     "floor": {
-      "material": "Marble",
+      "material": "Granite",
       "color": "#7d776d"
     },
     "wall": {
-      "material": "CeramicTiles",
+      "material": "Limestone",
       "color": "#dcd5c2"
     },
     "trim": {
