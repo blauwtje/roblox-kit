@@ -159,21 +159,29 @@ await test("the platform's train car stands on its track bed, which keeps its ra
   assert.ok(8.6 <= trackBed.size.z, "the car stands within the track bed's depth");
 });
 
-await test("the track bed's sleepers take the timber seat slot, which reads apart from the frame-slot rails", async () => {
+await test("the bench keeps its dark wood seat, and the track bed's sleepers are neither navy nor the rail colour", async () => {
   const source = await readFile(
     new URL("../../luau/props/track-bed.luau", import.meta.url),
     "utf8",
   );
+  const preset = (await loadPresets()).get("train-station");
+  const slots = preset?.propSlots;
+  assert.ok(preset !== undefined && slots !== undefined);
+  assert.equal(slots.seat.color, "#4a3b2a");
+  assert.equal(slots.seat.material, "Wood");
   assert.ok(!source.includes('"Signage"'), "the sleepers do not read the signage slot");
-  assert.match(source, /sleeper = slotLook\(params\.Attributes, "Seat"\)/);
-  const slots = (await loadPresets()).get("train-station")?.propSlots;
-  assert.ok(slots !== undefined);
-  const gap = oklabDistance(slots.seat.color, slots.frame.color);
+  assert.ok(!source.includes('"Seat"'), "the sleepers keep their own timber tone, not the bench's");
+  const sleeper = /^local SLEEPER_COLOR = Color3\.fromHex\("(#[0-9a-f]{6})"\)$/m.exec(source)?.[1];
+  assert.ok(sleeper !== undefined, "SLEEPER_COLOR is a named hex constant");
+  assert.match(source, /sleeper: Look = \{ Color = SLEEPER_COLOR/);
+  const rails = slots.frame.color;
+  const railGap = oklabDistance(sleeper, rails);
   assert.ok(
-    0.05 <= gap,
-    `seat ${slots.seat.color} is ${gap.toFixed(3)} from the rails ${slots.frame.color}`,
+    0.05 <= railGap,
+    `sleepers ${sleeper} are ${railGap.toFixed(3)} from the rails ${rails}`,
   );
-  assert.notEqual(slots.seat.material, slots.frame.material);
+  const navyGap = oklabDistance(sleeper, preset.palette.accent);
+  assert.ok(0.15 <= navyGap, `sleepers ${sleeper} are ${navyGap.toFixed(3)} from the navy accent`);
 });
 
 await test("the track bed's ballast reads as grey gravel, not the cream panel slab", async () => {

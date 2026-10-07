@@ -3,8 +3,9 @@
 -- Params.Size is (length, height, width); the rails run along X, 5.7 studs apart (narrower when the bed is), with
 -- their tops at the top of Size, so a car stood on the bed's top rests on them; the output stays inside Size.
 -- The sleeper spacing varies slightly per Seed so repeated track beds do not look stamped.
--- The sleepers and rails take the `seat` (the timber) and `frame` slots, read as `<Slot>Color` and `<Slot>Material`
--- attributes; the ballast is grey gravel, the `seat` color shaded toward the `frame` color and pebble-textured.
+-- The rails take the `frame` slot, read as `<Slot>Color` and `<Slot>Material` attributes. The sleepers are timber and
+-- the ballast pebble-textured gravel, each with its own constant color rather than a slot: the `seat` slot is the
+-- bench's dark wood, which is the rails' own color, and the `accent` slot is navy.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -22,8 +23,10 @@ local RAIL_WIDTH = 0.25
 local RAIL_GAUGE = 5.7
 local MINIMUM_SLEEPER_SPACING = 1.6
 local MAXIMUM_SLEEPER_SPACING = 2.2
--- How far the ballast shades from the seat color toward the frame color, so the timber sleepers read against it.
-local BALLAST_SHADING = 0.4
+-- A warm timber tone lighter than the rails, so the sleepers read against both the rails and the ballast.
+local SLEEPER_COLOR = Color3.fromHex("#86683f")
+local SLEEPER_MATERIAL = Enum.Material.Wood
+local BALLAST_COLOR = Color3.fromHex("#695f52")
 
 type Look = { Color: Color3, Material: Enum.Material }
 
@@ -54,8 +57,6 @@ end
 local Generator = {}
 Generator.Attributes = {
 	Seed = 0,
-	SeatColor = DEFAULT_COLOR,
-	SeatMaterial = DEFAULT_MATERIAL,
 	FrameColor = DEFAULT_COLOR,
 	FrameMaterial = DEFAULT_MATERIAL,
 }
@@ -64,12 +65,9 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local size = params.Size
 	local random = Random.new(params.Attributes.Seed)
 	local bottom = -size.Y / 2
-	local sleeper = slotLook(params.Attributes, "Seat")
+	local sleeper: Look = { Color = SLEEPER_COLOR, Material = SLEEPER_MATERIAL }
 	local steel = slotLook(params.Attributes, "Frame")
-	local ballast: Look = {
-		Color = sleeper.Color:Lerp(steel.Color, BALLAST_SHADING),
-		Material = Enum.Material.Pebble,
-	}
+	local ballast: Look = { Color = BALLAST_COLOR, Material = Enum.Material.Pebble }
 	local ballastHeight = size.Y * BALLAST_HEIGHT_RATIO
 	local sleeperHeight = size.Y * SLEEPER_HEIGHT_RATIO
 	local railHeight = size.Y * RAIL_HEIGHT_RATIO
