@@ -66,6 +66,16 @@ await test("presetSchema accepts a complete preset", () => {
   assert.equal(presetSchema.safeParse(validPreset()).success, true);
 });
 
+await test("presetSchema accepts patternSurfaces of floor and ceiling, and rejects other roles", () => {
+  const preset = validPreset();
+  assert.equal(presetSchema.safeParse({ ...preset, patternSurfaces: [] }).success, true);
+  assert.equal(
+    presetSchema.safeParse({ ...preset, patternSurfaces: ["floor", "ceiling"] }).success,
+    true,
+  );
+  assert.equal(presetSchema.safeParse({ ...preset, patternSurfaces: ["wall"] }).success, false);
+});
+
 await test("presetSchema rejects ExposureCompensation outside -5 to 5", () => {
   for (const exposure of [5.1, -5.1, 9]) {
     const preset = validPreset();

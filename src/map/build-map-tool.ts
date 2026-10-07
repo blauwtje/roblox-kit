@@ -499,7 +499,9 @@ async function buildMap(
     flushSpawn: style?.flushSpawn,
   });
   const details: DetailPart[] =
-    style === undefined ? [] : buildRoomDetails(spec, layout.parts, style.surfaces, ["floor"]);
+    style === undefined
+      ? []
+      : buildRoomDetails(spec, layout.parts, style.surfaces, style.patternSurfaces ?? ["floor"]);
   const facades = style === undefined ? [] : buildFacades(spec, layout.parts, style.surfaces);
   const placed = style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
   const heroes =

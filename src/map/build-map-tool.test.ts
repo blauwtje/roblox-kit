@@ -201,6 +201,21 @@ await test("a style with overrides and a seed builds like the same spec without 
   assert.equal(buildMapTool.outputSchema.parse(result.structuredContent).partCount, 14);
 });
 
+await test("a preset's patternSurfaces picks which surfaces get tiles, and absent keeps the floor", async () => {
+  const tilesIn = async (overrides: object) => {
+    const studio = styledStudio();
+    const result = await run(studio, { ...twoRoomSpec, style: { preset: "cozy-town", overrides } });
+    assert.equal(result.isError, undefined);
+    return studio.requests
+      .map((request) => String(request.arguments["code"]))
+      .join("")
+      .match(/"start-(floor|ceiling)-tile-/g);
+  };
+  assert.ok((await tilesIn({}))?.every((name) => name.includes("floor")));
+  assert.ok((await tilesIn({}))?.length);
+  assert.equal(await tilesIn({ patternSurfaces: [] }), null);
+});
+
 await test("a style sends its palette colors and role variants; without a style, defaults and no variants", async () => {
   const styledConnection = styledStudio();
   await run(styledConnection, {
