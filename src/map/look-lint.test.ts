@@ -105,3 +105,31 @@ await test("props covering over 40% of a room's floor, or none of a large one, a
   assert.ok(kindsOf([]).includes("density"));
   assert.ok(!kindsOf([prop({ size: { x: 12, y: 2.5, z: 10 } })]).includes("density"));
 });
+
+await test("the track bed, the platform edge and what stands on the track bed are left out of the density share", () => {
+  const platform = specOf({ width: 60, depth: 30 });
+  const trackBed = prop({
+    kind: "track-bed",
+    pivot: { x: 0, y: 0.5, z: -9 },
+    size: { x: 53, y: 1, z: 10 },
+  });
+  const platformEdge = prop({
+    kind: "platform-edge",
+    pivot: { x: 0, y: 1, z: -3 },
+    size: { x: 53, y: 2, z: 2 },
+  });
+  const cargo = prop({
+    kind: "crate-stack",
+    pivot: { x: 0, y: 4, z: -9 },
+    size: { x: 40, y: 7, z: 7.8 },
+  });
+  const bench = prop({ pivot: { x: 0, y: 1.5, z: 8 }, size: { x: 12, y: 2.5, z: 10 } });
+  assert.ok(!kindsOf([trackBed, platformEdge, cargo, bench], platform).includes("density"));
+  // Any other set piece of the same footprint still counts.
+  const counter = prop({
+    kind: "counter",
+    pivot: { x: 0, y: 2, z: 5 },
+    size: { x: 53, y: 4, z: 12 },
+  });
+  assert.ok(kindsOf([trackBed, platformEdge, counter, bench], platform).includes("density"));
+});

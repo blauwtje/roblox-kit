@@ -99,6 +99,8 @@ export const config = Object.freeze({
     propDensity: { min: 0.02, max: 0.4 },
     /** Rooms with a smaller inner floor, in square studs, are not checked for density: hallways and closets stay bare. */
     densityMinRoomAreaSquareStuds: 400,
+    /** Architecture, not clutter on the walkable floor: these kinds, and any prop whose center stands on a track bed, are left out of the density share. */
+    densityExemptKinds: ["track-bed", "platform-edge"],
     /** Kinds with no one front: the platform edge faces its track on the wall, a sign shows on both faces, pillars and rails are the same all round. */
     facingExemptKinds: ["platform-edge", "sign", "pillar", "rail"],
     /** Floor, wall, ceiling and trim must differ pairwise by at least this in OKLab lightness (0 black to 1 white), or the room reads as one flat tone. */

@@ -218,8 +218,20 @@ function densityIssues(placed: PlacedProp[], spec: MapSpec): LookIssue[] {
     if (area < config.lookLint.densityMinRoomAreaSquareStuds) {
       continue;
     }
-    const covered = placed
-      .filter((entry) => entry.room === room)
+    const inRoomProps = placed.filter((entry) => entry.room === room);
+    const trackBeds = inRoomProps.filter(({ prop }) => prop.kind === "track-bed");
+    const onTrackBed = ({ box }: PlacedProp): boolean => {
+      const x = (box.minX + box.maxX) / 2;
+      const z = (box.minZ + box.maxZ) / 2;
+      return trackBeds.some(
+        (bed) => x >= bed.box.minX && x <= bed.box.maxX && z >= bed.box.minZ && z <= bed.box.maxZ,
+      );
+    };
+    const covered = inRoomProps
+      .filter(
+        (entry) =>
+          !config.lookLint.densityExemptKinds.includes(entry.prop.kind) && !onTrackBed(entry),
+      )
       .reduce((sum, { box }) => sum + (box.maxX - box.minX) * (box.maxZ - box.minZ), 0);
     const share = covered / area;
     if (share >= min && share <= max) {
