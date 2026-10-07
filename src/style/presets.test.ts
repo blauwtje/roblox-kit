@@ -171,9 +171,9 @@ await test("the bench keeps its dark wood seat, and the track bed's sleepers are
   assert.equal(slots.seat.material, "Wood");
   assert.ok(!source.includes('"Signage"'), "the sleepers do not read the signage slot");
   assert.ok(!source.includes('"Seat"'), "the sleepers keep their own timber tone, not the bench's");
-  const sleeper = /^local SLEEPER_COLOR = Color3\.fromHex\("(#[0-9a-f]{6})"\)$/m.exec(source)?.[1];
-  assert.ok(sleeper !== undefined, "SLEEPER_COLOR is a named hex constant");
-  assert.match(source, /sleeper: Look = \{ Color = SLEEPER_COLOR/);
+  assert.match(source, /sleeper = slotLook\(params\.Attributes, "Sleeper"\)/);
+  assert.equal(slots.sleeper?.material, "Wood");
+  const sleeper = slots.sleeper.color;
   const rails = slots.frame.color;
   const railGap = oklabDistance(sleeper, rails);
   assert.ok(
@@ -190,7 +190,10 @@ await test("the track bed's ballast reads as grey gravel, not the cream panel sl
     "utf8",
   );
   assert.ok(!/ballast = slotLook\(params\.Attributes, "Panel"\)/.test(source), "no panel slot");
-  assert.match(source, /Enum\.Material\.Pebble/);
+  assert.match(source, /ballast = slotLook\(params\.Attributes, "Ballast"\)/);
+  const slots = (await loadPresets()).get("train-station")?.propSlots;
+  assert.equal(slots?.ballast?.material, "Pebble");
+  assert.notEqual(slots.ballast.color, slots.panel.color);
 });
 
 await test("the lamp post keeps its frame slot, with a frame-slot shade and cap over the glowing bulb", async () => {

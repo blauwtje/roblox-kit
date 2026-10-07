@@ -512,7 +512,8 @@ const plainPropSlot = propSlot.refine(
 
 /**
  * The palette-bound look of a prop's parts, one entry per slot. Neon is allowed only on `screen` and `light`:
- * a screen is a lit surface that shows an image, so unlike the other slots it glows.
+ * a screen is a lit surface that shows an image, so unlike the other slots it glows. `sleeper` and `ballast`
+ * are optional: only the track bed reads them, and a preset without them leaves its parts at the defaults.
  */
 const propSlots = z.strictObject({
   frame: plainPropSlot,
@@ -522,13 +523,15 @@ const propSlots = z.strictObject({
   screen: propSlot,
   signage: plainPropSlot,
   light: propSlot,
+  sleeper: plainPropSlot.optional(),
+  ballast: plainPropSlot.optional(),
 });
 
 /** One genre preset: palette, surface roles, lighting recipe and intent, light roles, prop kit and rules, room types and size rules. */
 export const presetSchema = z
   .strictObject({
     palette: z.strictObject({
-      colors: z.array(hexColor).min(3).max(4),
+      colors: z.array(hexColor).min(3).max(6),
       accent: hexColor,
     }),
     surfaces: z.strictObject({

@@ -1,6 +1,6 @@
 {
   "palette": {
-    "colors": ["#7d776d", "#dcd5c2", "#4a3b2a", "#f6f1e3"],
+    "colors": ["#7d776d", "#dcd5c2", "#4a3b2a", "#f6f1e3", "#86683f", "#695f52"],
     "accent": "#1c2a44"
   },
   "surfaces": {
@@ -304,6 +304,14 @@
     "light": {
       "color": "#f6f1e3",
       "material": "Neon"
+    },
+    "sleeper": {
+      "color": "#86683f",
+      "material": "Wood"
+    },
+    "ballast": {
+      "color": "#695f52",
+      "material": "Pebble"
     }
   },
   "heroProps": {

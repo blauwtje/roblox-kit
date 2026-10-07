@@ -100,13 +100,21 @@ await test("presetSchema rejects a light Range over 120 and accepts 120", () => 
   assert.equal(presetSchema.safeParse(preset).success, false);
 });
 
-await test("presetSchema needs 3 or 4 palette colors and a hex color", () => {
+await test("presetSchema needs 3 to 6 palette colors and a hex color", () => {
   const twoColors = validPreset();
   twoColors.palette.colors = ["#111111", "#222222"];
   assert.equal(presetSchema.safeParse(twoColors).success, false);
-  const fiveColors = validPreset();
-  fiveColors.palette.colors = ["#111111", "#222222", "#333333", "#444444", "#555555"];
-  assert.equal(presetSchema.safeParse(fiveColors).success, false);
+  const sevenColors = validPreset();
+  sevenColors.palette.colors = [
+    "#111111",
+    "#222222",
+    "#333333",
+    "#444444",
+    "#555555",
+    "#666666",
+    "#777777",
+  ];
+  assert.equal(presetSchema.safeParse(sevenColors).success, false);
   const badColor = validPreset();
   badColor.palette.accent = "orange";
   assert.equal(presetSchema.safeParse(badColor).success, false);
