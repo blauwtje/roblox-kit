@@ -127,7 +127,7 @@ export const config = Object.freeze({
     signHeightStuds: 2.5,
     departureBoardAboveEyeStuds: 5,
     clockAboveEyeStuds: 6,
-    ticketCounterAboveEyeStuds: 3,
+    ticketCounterAboveEyeStuds: 5,
     ticketMachineAboveEyeStuds: 1,
     lampHeightRatio: 1.65,
     cellBarsHeightRatio: 1.65,

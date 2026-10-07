@@ -1,9 +1,9 @@
 """Station ticket counter: a period railway booking-office front for the ticket hall, three glazed windows over a ledge.
 
-Blender units = studs. Width along X (14), depth along Y (3), height along Z (7.87): floor at z 0, back at y -1.5,
+Blender units = studs. Width along X (14), depth along Y (3), height along Z (9.87): floor at z 0, back at y -1.5,
 customer face toward +Y. The GLB exporter turns Blender +Y into glTF -Z and Roblox imports glTF axes as they are,
 so the face lands on the mesh's local -Z, the customer side of the kit counter (luau/props/ticket-counter.luau),
-and the bounds match the kit counter's 14 x 7.87 x 3, so the recorded-mesh stretch leaves it unscaled.
+and the bounds match the kit counter's 14 x 9.87 x 3, so the recorded-mesh stretch leaves it unscaled.
 A green matchboarded counter carries a cream marble ledge with a brass nosing on carved brackets. Above it a green
 glazed screen of three round-headed windows (the kit's window count for 14 studs) stands between capped pilasters;
 each window has a brass arch bead, a brass ticket grille over its lower glass and an arched brass pass-through with
@@ -38,20 +38,20 @@ from shared import (  # noqa: E402
     triangle_count,
 )
 
-HALF_WIDTH, HALF_DEPTH, HEIGHT = 7.0, 1.5, 7.87
+HALF_WIDTH, HALF_DEPTH, HEIGHT = 7.0, 1.5, 9.87
 LEDGE_Z0, LEDGE_Z1 = 3.2, 3.5  # the counter ledge
-SCREEN_TOP = 6.4  # the glazed screen's top, under the head rail
-HEAD_Z1 = 6.55  # the head rail's top, where the fascia starts
-FASCIA_Z1 = 7.55  # the fascia's top, under the cornice
+SCREEN_TOP = 8.4  # the glazed screen's top, under the head rail
+HEAD_Z1 = 8.55  # the head rail's top, where the fascia starts
+FASCIA_Z1 = 9.55  # the fascia's top, under the cornice
 POST_HALF = 0.2
 POST_PITCH = (2 * HALF_WIDTH - 2 * POST_HALF) / 3
 POSTS = [-HALF_WIDTH + POST_HALF + index * POST_PITCH for index in range(4)]
 WINDOWS = [(POSTS[index] + POSTS[index + 1]) / 2 for index in range(3)]
 OPENING_HALF = POST_PITCH / 2 - POST_HALF
-SPRING_Z, RISE = 5.75, 0.55  # the window arch's springing line and rise
+SPRING_Z, RISE = 7.75, 0.55  # the window arch's springing line and rise
 SCREEN_Y0, SCREEN_Y1 = 0.15, 0.45  # the screen's frame members
 GLASS_Y0, GLASS_Y1 = 0.28, 0.32
-PRINT_X, PRINT_Z0, PRINT_Z1 = 6.88, 6.67, 7.43  # the fascia print area
+PRINT_X, PRINT_Z0, PRINT_Z1 = 6.88, 8.67, 9.43  # the fascia print area
 PRINT_SIZE = 4096
 FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
 CAP_RATIO = 0.662  # Times New Roman cap height per unit font size
@@ -390,6 +390,7 @@ def screen():
         prism(f"glass-{index}", [(left, LEDGE_Z1 + 0.12), (right, LEDGE_Z1 + 0.12)] + arch, "Y", GLASS_Y0, GLASS_Y1, "glass")
         box(f"sill-rail-{index}", left, right, SCREEN_Y0, SCREEN_Y1, LEDGE_Z1, LEDGE_Z1 + 0.12, "green", 0.02)
         box(f"transom-{index}", left, right, SCREEN_Y0, SCREEN_Y1 + 0.03, 5.22, 5.32, "green", 0.02)
+        box(f"upper-transom-{index}", left, right, SCREEN_Y0, SCREEN_Y1 + 0.03, 6.5, 6.6, "green", 0.02)
         # The ticket grille: brass bars between two rails, spear tips above the top rail.
         grille_z0, grille_z1 = 4.22, 5.22
         box(f"grille-low-{index}", left, right, 0.42, 0.52, grille_z0, grille_z0 + 0.07, "brass", 0.015)

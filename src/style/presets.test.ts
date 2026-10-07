@@ -417,11 +417,11 @@ await test("the ticket hall's ticket counter is the declared mesh in place of it
   assert.equal(preset.roomTypes?.["ticket-hall"]?.heroProps, undefined);
   const setPiece = setPieces.find((piece) => piece.kind === "ticket-counter");
   assert.ok(setPiece !== undefined);
-  // The mesh's modelled bounds (ticket-counter.py): 14 studs wide, 7.87 high, and placed at the set piece's size.
+  // The mesh's modelled bounds (ticket-counter.py): 14 studs wide, 9.87 high, and placed at the set piece's size.
   assert.ok(14 <= setPiece.size.x, `counter 14 studs wide, set piece ${String(setPiece.size.x)}`);
   assert.ok(
-    7.87 <= setPiece.size.y,
-    `counter 7.87 studs high, set piece ${String(setPiece.size.y)}`,
+    9.87 <= setPiece.size.y,
+    `counter 9.87 studs high, set piece ${String(setPiece.size.y)}`,
   );
 });
 
