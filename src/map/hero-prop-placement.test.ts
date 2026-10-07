@@ -13,6 +13,7 @@ import { propsOf } from "./build-map-tool.ts";
 import { readHeroAssets } from "../hero-props/hero-asset-store.ts";
 import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
 import { declaredTrimOf, heroPropsOf } from "./hero-prop-placement.ts";
+import { withTrainCarRecipe } from "../hero-props/train-car-recipe-fixture.ts";
 import { layoutMap } from "./map-layout.ts";
 import { buildRoomDetails } from "./room-details.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
@@ -21,8 +22,10 @@ import { doorwayClearanceBoxes } from "./size-rules.ts";
 import { resolveRelations } from "./relation-solver.ts";
 
 const presets = await loadPresets();
-const base = presets.get("train-station");
-assert.ok(base !== undefined);
+const realBase = presets.get("train-station");
+assert.ok(realBase !== undefined);
+/** The recipe-route fixture: the old train-car recipe on the platform, without the declared train-car mesh. */
+const base = withTrainCarRecipe(realBase);
 
 /** The style with every room type's hero props cut to the train car, so other hero props the preset gains stay out of these tests. */
 function trainCarOnly(style: Preset): Preset {
@@ -184,7 +187,7 @@ await test("the surfaces come from the resolved style while the hash stays the b
   const sources = await fakeSources({ recorded: true });
   const result = await heroPropsOf(
     spec,
-    { ...preset, style: trainCarOnly(style) },
+    { ...preset, style: trainCarOnly(withTrainCarRecipe(style)) },
     placed.props,
     sources,
   );
@@ -520,4 +523,46 @@ await test("a declared arch-trim mesh replaces each doorway arch and each crown 
 
   const none = await declaredTrimOf(details, { base }, await declaredSources([]));
   assert.deepEqual(none, { details, declaredTrim: [] });
+});
+
+await test("the real preset stands its recorded train-car mesh on the platform's track bed and keeps the bed", async () => {
+  const trainCarMesh = await heroRecipeHash(realBase, "train-car");
+  const directory = await mkdtemp(join(tmpdir(), "hero-onto-"));
+  const assetsFile = pathToFileURL(join(directory, "hero-assets.json"));
+  try {
+    await writeFile(
+      assetsFile,
+      JSON.stringify({ [trainCarMesh]: { kind: "train-car", assetId: "424242" } }),
+    );
+    const real = { name: "train-station", base: realBase, style: realBase };
+    const result = await heroPropsOf(spec, real, placed.props, { assetsFile });
+    const trackBeds = placed.props.filter((prop) => prop.kind === "track-bed");
+    assert.equal(trackBeds.length, 1);
+    const [trackBed] = trackBeds;
+    assert.ok(trackBed !== undefined);
+    assert.ok(result.props.includes(trackBed), "the track bed stays");
+    const cars = result.heroProps.filter((hero) => hero.kind === "train-car");
+    assert.equal(cars.length, 1);
+    assert.deepEqual(
+      { ...cars[0], size: undefined },
+      {
+        kind: "train-car",
+        assetId: "424242",
+        pivot: {
+          x: trackBed.pivot.x,
+          y: trackBed.pivot.y + trackBed.size.y / 2,
+          z: trackBed.pivot.z,
+        },
+        yaw: trackBed.yaw ?? 0,
+        size: undefined,
+        surfaces: {},
+        bevels: {},
+        fit: "none",
+        anchor: "bottom",
+      },
+    );
+    assert.ok(!result.warnings.some((warning) => warning.includes("train-car")));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

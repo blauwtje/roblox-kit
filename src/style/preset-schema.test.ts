@@ -756,7 +756,10 @@ await test("presetSchema takes declared meshes with their targets and placement"
   const meshes = {
     bench: {
       script: "src/hero-props/meshes/train-station/bench.py",
-      targets: [{ replaces: "prop:bench", anchor: "bottom" }],
+      targets: [
+        { replaces: "prop:bench", anchor: "bottom" },
+        { replaces: "onto:prop:track-bed", anchor: "bottom" },
+      ],
     },
     "ticket-machine": {
       script: "src/hero-props/meshes/train-station/ticket-machine.py",
@@ -795,6 +798,8 @@ await test("presetSchema rejects a bad mesh declaration", () => {
     { ...mesh, targets: [{ ...target, replaces: "bench" }] },
     { ...mesh, targets: [{ ...target, replaces: "band:cornice" }] },
     { ...mesh, targets: [{ ...target, replaces: "prop:" }] },
+    { ...mesh, targets: [{ ...target, replaces: "onto:arch" }] },
+    { ...mesh, targets: [{ ...target, replaces: "onto:prop:" }] },
     { ...mesh, targets: [{ ...target, anchor: "top" }] },
     { ...mesh, targets: [{ ...target, yaw: "180" }] },
     { ...mesh, targets: [{ ...target, glow: { diameter: 0, drop: 0.5 } }] },

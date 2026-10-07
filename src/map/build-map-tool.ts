@@ -527,7 +527,10 @@ async function buildMap(
       : [...findLookIssues(spec, placed.props, style), ...lintPalette(style)];
   const heroSurfaces = heroProps.flatMap((hero) => Object.values(hero.surfaces));
   // A hero prop whose asset fails to load builds its fallback set piece, so its kind needs a generator too.
-  const generators = await generatorsOf([...props, ...heroProps.map((hero) => hero.fallback)]);
+  const fallbacks = heroProps.flatMap((hero) =>
+    hero.fallback === undefined ? [] : [hero.fallback],
+  );
+  const generators = await generatorsOf([...props, ...fallbacks]);
   const variants = variantsOf(style, input.useRecordedAssets);
   const pendantMesh =
     style === undefined ||
@@ -566,7 +569,7 @@ async function buildMap(
     heroProps,
     trimMeshes,
     pendantMeshes,
-    idle: await idleOf(style, [...props, ...heroProps.map((hero) => hero.fallback)]),
+    idle: await idleOf(style, [...props, ...fallbacks]),
     materials: materialsOf(
       [...layout.parts, ...details, ...facades, ...heroSurfaces],
       layout.terrainFills,
@@ -622,7 +625,14 @@ async function buildMap(
         }
       }
       for (const failure of built.heroLoadFailures ?? []) {
-        const fallback = heroProps.find((hero) => hero.assetId === failure.assetId)?.fallback.kind;
+        const hero = heroProps.find((candidate) => candidate.assetId === failure.assetId);
+        if (hero !== undefined && hero.fallback === undefined) {
+          warnings.push(
+            `Hero prop ${failure.kind} (asset ${failure.assetId}) failed to load: ${failure.error}; nothing is built in its place.`,
+          );
+          continue;
+        }
+        const fallback = hero?.fallback?.kind;
         if (
           fallback === undefined &&
           pendantMeshes.some((mesh) => mesh.assetId === failure.assetId)

@@ -574,7 +574,7 @@ await test("build-map.luau is strict, guards its build with a recording and chec
   assert.ok(source.indexOf("assertMaterialsExist()") < source.indexOf("TryBeginRecording"));
 });
 
-/** The train-station benchmark, whose platform lists the train-car hero prop in place of its track bed. */
+/** The train-station benchmark, whose platform track bed carries the declared train-car mesh. */
 const benchmarkSpec = JSON.parse(
   await readFile(new URL("../../eval/benchmarks/train-station.json", import.meta.url), "utf8"),
 ) as object;
@@ -740,33 +740,35 @@ await test("texturePixels counts each recorded sprite once at the sprite size", 
   assert.equal(structured.texturePixels, textures.size * spriteSizePixels ** 2);
 });
 
-await test("a recorded hero asset is sent to the props phase in the slot of the set piece it replaces", async () => {
+await test("a recorded train-car mesh stands on the track bed in the props phase, with no fallback", async () => {
   const studio = phaseStudio();
   const tool = buildMapToolWith(await fakeHeroSources(true));
   const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
   const propsPhase = requestArguments(studio, propsPhaseIndex);
-  const heroProps = propsPhase["heroProps"] as { kind: string; assetId: string; size: object }[];
+  type Placed = { kind: string; pivot: { y: number }; size: { y: number } };
+  const heroProps = propsPhase["heroProps"] as (Placed & Record<string, unknown>)[];
   const trainCars = heroProps.filter((hero) => hero.kind === "train-car");
   assert.equal(trainCars.length, 1);
   const [hero] = trainCars;
   assert.ok(hero !== undefined);
-  assert.equal(hero.kind, "train-car");
-  assert.equal(hero.assetId, "987654");
-  assert.deepEqual(hero.size, { x: 40, y: 7.8, z: 7 });
-  const props = propsPhase["props"] as { kind: string }[];
-  assert.ok(!props.some((prop) => prop.kind === "track-bed"), "the track bed gives up its slot");
-  const record = hero as { fallback?: { kind: string } };
-  assert.equal(record.fallback?.kind, "track-bed", "the hero carries the set piece it replaced");
-  assert.ok(
-    "track-bed" in (propsPhase["generators"] as object),
-    "the fallback kind has a generator",
+  assert.equal(hero["assetId"], "987654");
+  assert.equal(hero["anchor"], "bottom");
+  assert.equal(hero["fit"], "none");
+  assert.equal(
+    hero["fallback"],
+    undefined,
+    "the track bed stays, so there is nothing to fall back to",
   );
+  const props = propsPhase["props"] as Placed[];
+  const trackBed = props.find((prop) => prop.kind === "track-bed");
+  assert.ok(trackBed !== undefined, "the track bed keeps its slot");
+  assert.equal(hero.pivot.y, trackBed.pivot.y + trackBed.size.y / 2, "the car stands on its top");
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
   assert.ok(!structured.warnings.some((warning) => warning.includes("hero prop train-car")));
   assert.equal(structured.phases[propsPhaseIndex]?.partCount, props.length + heroProps.length);
 });
 
-await test("without a recorded hero asset the set piece stays and the result says why", async () => {
+await test("without a recorded train-car mesh the track bed stays bare, with no warning", async () => {
   const studio = phaseStudio();
   const tool = buildMapToolWith(await fakeHeroSources(false));
   const result = await tool.handler(tool.inputSchema.parse(recordedBenchmarkSpec), { studio });
@@ -776,18 +778,13 @@ await test("without a recorded hero asset the set piece stays and the result say
   const props = propsPhase["props"] as { kind: string }[];
   assert.ok(props.some((prop) => prop.kind === "track-bed"));
   const structured = buildMapTool.outputSchema.parse(result.structuredContent);
-  const heroWarnings = structured.warnings.filter((warning) =>
-    warning.includes("hero prop train-car"),
+  assert.deepEqual(
+    structured.warnings.filter((warning) => warning.includes("train-car")),
+    [],
   );
-  assert.equal(heroWarnings.length, 1);
-  assert.match(
-    heroWarnings[0] ?? "",
-    /keeps its track-bed set piece instead of hero prop train-car/,
-  );
-  assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
 });
 
-await test("a reviewed but unrecorded hero prop makes no Open Cloud call and returns the clone warning", async () => {
+await test("a reviewed but unrecorded train-car mesh makes no Open Cloud call", async () => {
   const studio = phaseStudio();
   const tool = buildMapToolWith(await fakeHeroSources(false));
   let result: Awaited<ReturnType<typeof tool.handler>> | undefined;
@@ -796,11 +793,10 @@ await test("a reviewed but unrecorded hero prop makes no Open Cloud call and ret
   });
   assert.equal(fetchCalls, 0, "no Open Cloud call is made");
   const structured = buildMapTool.outputSchema.parse(result?.structuredContent);
-  const heroWarnings = structured.warnings.filter((warning) =>
-    warning.includes("hero prop train-car"),
+  assert.deepEqual(
+    structured.warnings.filter((warning) => warning.includes("train-car")),
+    [],
   );
-  assert.equal(heroWarnings.length, 1);
-  assert.match(heroWarnings[0] ?? "", /generate and upload it from a clone of the roblox-kit repo/);
 });
 
 await test("a hero asset that fails to load becomes a warning naming its asset id and error", async () => {
@@ -822,7 +818,7 @@ await test("a hero asset that fails to load becomes a warning naming its asset i
   const failure = structured.warnings.filter((warning) => warning.includes("failed to load"));
   assert.equal(failure.length, 1);
   assert.match(failure[0] ?? "", /train-car \(asset 987654\) failed to load: HTTP 403/);
-  assert.match(failure[0] ?? "", /track-bed set piece is built instead/);
+  assert.match(failure[0] ?? "", /nothing is built in its place/);
 });
 
 await test("build-map.luau loads each hero asset in pcall and builds the fallback set piece on failure", async () => {

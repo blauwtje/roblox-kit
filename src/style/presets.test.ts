@@ -144,19 +144,19 @@ await test("the train station's concourse and ticket hall arrange at least two p
   }
 });
 
-await test("the platform's train car replaces its track bed and fits the track bed's span", async () => {
+await test("the platform's train car stands on its track bed, which keeps its rails and spans the car", async () => {
   const { preset, setPieces } = await placeBenchmarkSetPieces();
-  const trainCar = preset.heroProps?.["train-car"];
-  assert.ok(trainCar !== undefined);
-  assert.equal(trainCar.replaces, "track-bed");
-  assert.deepEqual(preset.roomTypes?.["platform"]?.heroProps, ["train-car"]);
+  assert.deepEqual(preset.meshes?.["train-car"], {
+    script: "src/hero-props/meshes/train-station/train-car.py",
+    targets: [{ replaces: "onto:prop:track-bed", anchor: "bottom" }],
+  });
+  assert.equal(preset.heroProps?.["train-car"], undefined);
+  assert.equal(preset.roomTypes?.["platform"]?.heroProps, undefined);
   const trackBed = setPieces.find((piece) => piece.kind === "track-bed");
   assert.ok(trackBed !== undefined);
-  assert.ok(
-    trainCar.size.width <= trackBed.size.x,
-    `car ${String(trainCar.size.width)} studs long, track bed ${String(trackBed.size.x)}`,
-  );
-  assert.ok(trainCar.size.depth <= trackBed.size.z, "the car stands within the track bed's depth");
+  // The car's modelled footprint (train-car.py): 40 studs long, 7.8 across at its widest.
+  assert.ok(40 <= trackBed.size.x, `track bed ${String(trackBed.size.x)} studs long`);
+  assert.ok(7.8 <= trackBed.size.z, "the car stands within the track bed's depth");
 });
 
 await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {

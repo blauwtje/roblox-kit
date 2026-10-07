@@ -748,9 +748,10 @@ async function probeMapDecor(connection: StudioConnection): Promise<string> {
     // A hero prop's replaced set piece keeps its generator, for when the asset fails to load.
     [
       ...new Set(
-        [...props, ...heroProps.map((hero) => hero.fallback)].map(
-          (prop) => `${prop.kind}-generator`,
-        ),
+        [
+          ...props,
+          ...heroProps.flatMap((hero) => (hero.fallback === undefined ? [] : [hero.fallback])),
+        ].map((prop) => `${prop.kind}-generator`),
       ),
     ].sort(),
   );

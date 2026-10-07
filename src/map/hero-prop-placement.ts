@@ -22,7 +22,8 @@ type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, strin
  * One hero prop for `build-map.luau`: the uploaded asset loaded in the slot of the set piece it replaces.
  * `pivot` is the center of its box, `size` the recipe's width, height and depth in studs (x, y, z), `yaw`
  * the replaced piece's turn about Y, and `surfaces` the color and material of each role a MeshPart is named after.
- * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load.
+ * `fallback` is the replaced set piece, which `build-map.luau` builds instead when the asset fails to load; a mesh
+ * that stands on a piece it leaves in place (an `onto:prop:<kind>` target) has none.
  * `bevels` is the bevel in studs of each role's mesh (the smallest of its shapes, 0 when a shape has none), which `build-map.luau` sets on the MeshPart for `check_map`.
  * `fit` "stretch" (a prop kind's mesh) scales the asset to `size` on each axis, in place of scaling it evenly to `size.x`;
  * "none" (a declared mesh) keeps the asset's modelled size, and then `anchor` says what `pivot` is: the
@@ -36,7 +37,7 @@ export interface HeroPropRecord {
   size: Vector;
   surfaces: Record<string, { color: string; material: string }>;
   bevels: Record<string, number>;
-  fallback: PlacedProp;
+  fallback?: PlacedProp;
   fit?: "stretch" | "none";
   anchor?: "bottom" | "center";
   part?: string;
@@ -260,10 +261,33 @@ function declaredRecord(assetId: string, target: MeshTarget, piece: PlacedProp):
   };
 }
 
+/** The record that stands a declared mesh on top of a piece it leaves in place, turned by the piece's yaw and the target's. */
+function standingRecord(
+  meshKind: string,
+  assetId: string,
+  target: MeshTarget,
+  piece: PlacedProp,
+): HeroPropRecord {
+  const { x, y, z } = piece.pivot;
+  return {
+    kind: meshKind,
+    assetId,
+    pivot: { x, y: y + piece.size.y / 2, z },
+    yaw: ((piece.yaw ?? 0) + (target.yaw ?? 0)) % 360,
+    size: piece.size,
+    surfaces: {},
+    bevels: {},
+    fit: "none",
+    anchor: "bottom",
+    ...(target.part === undefined ? {} : { part: target.part }),
+  };
+}
+
 /**
  * Each prop a declared mesh replaces (a `prop:<kind>` target, and its `label` when it has one) as that mesh at its
- * modelled size, ahead of any `heroProps` entry or `prop-<kind>` recipe for the piece. A mesh with no recorded
- * asset leaves its pieces in place, with no warning.
+ * modelled size, ahead of any `heroProps` entry or `prop-<kind>` recipe for the piece. A prop an `onto:prop:<kind>`
+ * target names stays and gets the mesh stood on its top, with no fallback. A mesh with no recorded asset leaves its
+ * pieces in place, with no warning.
  */
 async function declaredMeshesOf<Prop extends PlacedProp>(
   preset: HeroPreset,
@@ -284,6 +308,14 @@ async function declaredMeshesOf<Prop extends PlacedProp>(
         )
         .map((target) => ({ meshKind, target })),
     )[0];
+    for (const [meshKind, { targets }] of declarations) {
+      for (const target of targets) {
+        if (target.replaces !== `onto:prop:${prop.kind}`) continue;
+        if (target.label !== undefined && prop.attributes?.Label !== target.label) continue;
+        const assetId = await cachedAssetId(assetIds, meshKind, preset.base, meshKind, sources);
+        if (assetId !== undefined) heroProps.push(standingRecord(meshKind, assetId, target, prop));
+      }
+    }
     if (match === undefined) {
       kept.push(prop);
       continue;

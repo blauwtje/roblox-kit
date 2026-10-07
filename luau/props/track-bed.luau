@@ -1,6 +1,7 @@
 --!strict
 -- ProceduralModel generator source for a railway track bed: a ballast bed with two steel rails on sleepers.
--- Params.Size is (length, height, width); the rails run along X and the output stays inside Size.
+-- Params.Size is (length, height, width); the rails run along X, 5.7 studs apart (narrower when the bed is), with
+-- their tops at the top of Size, so a car stood on the bed's top rests on them; the output stays inside Size.
 -- The sleeper spacing varies slightly per Seed so repeated track beds do not look stamped.
 -- The ballast, sleepers and rails take the `panel`, `signage` and `frame` slots, read as `<Slot>Color` and
 -- `<Slot>Material` attributes.
@@ -15,9 +16,10 @@ local BALLAST_HEIGHT_RATIO = 0.4
 local SLEEPER_HEIGHT_RATIO = 0.2
 local SLEEPER_LENGTH_RATIO = 0.8
 local SLEEPER_THICKNESS = 0.6
-local RAIL_HEIGHT_RATIO = 0.3
+local RAIL_HEIGHT_RATIO = 0.4
 local RAIL_WIDTH = 0.25
-local RAIL_GAUGE_RATIO = 0.5
+-- The station train car's wheel gauge, center to center, so its wheels stand on the rails.
+local RAIL_GAUGE = 5.7
 local MINIMUM_SLEEPER_SPACING = 1.6
 local MAXIMUM_SLEEPER_SPACING = 2.2
 
@@ -69,7 +71,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local sleeperHeight = size.Y * SLEEPER_HEIGHT_RATIO
 	local railHeight = size.Y * RAIL_HEIGHT_RATIO
 	local sleeperTop = bottom + ballastHeight + sleeperHeight
-	local gauge = size.Z * RAIL_GAUGE_RATIO
+	local gauge = math.min(RAIL_GAUGE, size.Z - RAIL_WIDTH)
 
 	addPart(
 		targetContainer,

@@ -135,13 +135,13 @@ const idleAnimation = z.strictObject({
 
 export type IdleAnimation = z.infer<typeof idleAnimation>;
 
-/** What a declared mesh replaces: a prop kind, the doorway arch, a crown or baseboard band, or the pendant fixture. */
+/** What a declared mesh replaces: a prop kind, the doorway arch, a crown or baseboard band, or the pendant fixture; or, as `onto:prop:<kind>`, the prop it stands on top of and leaves in place. */
 const meshTarget = z.strictObject({
   replaces: z
     .string()
     .regex(
-      /^(prop:[a-z][a-z0-9-]*|arch|band:(crown|baseboard)|fixture:pendant)$/,
-      'expected "prop:<kind>", "arch", "band:crown", "band:baseboard" or "fixture:pendant"',
+      /^((onto:)?prop:[a-z][a-z0-9-]*|arch|band:(crown|baseboard)|fixture:pendant)$/,
+      'expected "prop:<kind>", "onto:prop:<kind>", "arch", "band:crown", "band:baseboard" or "fixture:pendant"',
     ),
   /** The MeshPart of the uploaded Model to place; absent places the whole Model. */
   part: z.string().min(1).optional(),
