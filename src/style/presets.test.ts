@@ -176,6 +176,23 @@ await test("the track bed's sleepers take the timber seat slot, which reads apar
   assert.notEqual(slots.seat.material, slots.frame.material);
 });
 
+await test("the track bed's ballast reads as grey gravel, not the cream panel slab", async () => {
+  const source = await readFile(
+    new URL("../../luau/props/track-bed.luau", import.meta.url),
+    "utf8",
+  );
+  assert.ok(!/ballast = slotLook\(params\.Attributes, "Panel"\)/.test(source), "no panel slot");
+  assert.match(source, /Enum\.Material\.Pebble/);
+});
+
+await test("the lamp post keeps its frame slot, with a frame-slot shade and cap over the glowing bulb", async () => {
+  const source = await readFile(new URL("../../luau/props/lamp.luau", import.meta.url), "utf8");
+  assert.equal((await loadPresets()).get("train-station")?.propRules["lamp"]?.surface, "exempt");
+  assert.match(source, /"Shade",[^;]*?\bframe\b\s*\)/s);
+  assert.match(source, /"Cap",[^;]*?\bframe\b\s*\)/s);
+  assert.match(source, /"Head",[^;]*?\bbulb\b\s*\)/s);
+});
+
 await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {
   const { preset, setPieces } = await placeBenchmarkSetPieces();
   const board = preset.heroProps?.["departure-board"];

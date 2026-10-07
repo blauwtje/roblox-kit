@@ -3,8 +3,8 @@
 -- Params.Size is (length, height, width); the rails run along X, 5.7 studs apart (narrower when the bed is), with
 -- their tops at the top of Size, so a car stood on the bed's top rests on them; the output stays inside Size.
 -- The sleeper spacing varies slightly per Seed so repeated track beds do not look stamped.
--- The ballast, sleepers and rails take the `panel`, `seat` (the timber) and `frame` slots, read as `<Slot>Color` and
--- `<Slot>Material` attributes.
+-- The sleepers and rails take the `seat` (the timber) and `frame` slots, read as `<Slot>Color` and `<Slot>Material`
+-- attributes; the ballast is grey gravel, the `seat` color shaded toward the `frame` color and pebble-textured.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
 	Size: Vector3,
@@ -22,6 +22,8 @@ local RAIL_WIDTH = 0.25
 local RAIL_GAUGE = 5.7
 local MINIMUM_SLEEPER_SPACING = 1.6
 local MAXIMUM_SLEEPER_SPACING = 2.2
+-- How far the ballast shades from the seat color toward the frame color, so the timber sleepers read against it.
+local BALLAST_SHADING = 0.4
 
 type Look = { Color: Color3, Material: Enum.Material }
 
@@ -52,8 +54,6 @@ end
 local Generator = {}
 Generator.Attributes = {
 	Seed = 0,
-	PanelColor = DEFAULT_COLOR,
-	PanelMaterial = DEFAULT_MATERIAL,
 	SeatColor = DEFAULT_COLOR,
 	SeatMaterial = DEFAULT_MATERIAL,
 	FrameColor = DEFAULT_COLOR,
@@ -64,9 +64,12 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local size = params.Size
 	local random = Random.new(params.Attributes.Seed)
 	local bottom = -size.Y / 2
-	local ballast = slotLook(params.Attributes, "Panel")
 	local sleeper = slotLook(params.Attributes, "Seat")
 	local steel = slotLook(params.Attributes, "Frame")
+	local ballast: Look = {
+		Color = sleeper.Color:Lerp(steel.Color, BALLAST_SHADING),
+		Material = Enum.Material.Pebble,
+	}
 	local ballastHeight = size.Y * BALLAST_HEIGHT_RATIO
 	local sleeperHeight = size.Y * SLEEPER_HEIGHT_RATIO
 	local railHeight = size.Y * RAIL_HEIGHT_RATIO

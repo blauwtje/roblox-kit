@@ -1,8 +1,8 @@
 --!strict
--- ProceduralModel generator source for a lamp post: a base, a pole and a head with a PointLight.
+-- ProceduralModel generator source for a lamp post: a base, a pole and a head: a glowing bulb with a PointLight under a shade and cap.
 -- Params.Size is (width, height, depth); the output is centered on the pivot and stays inside Size.
 -- The head width varies slightly per Seed so repeated lamps do not look stamped.
--- Colors and materials come from the `frame` slot, and the bulb from the `light` slot, read as `<Slot>Color` and
+-- Colors and materials come from the `frame` slot (base, pole, shade and cap), and the bulb from the `light` slot, read as `<Slot>Color` and
 -- `<Slot>Material` attributes.
 -- Every part is decorative: it never collides, fires touch events or answers spatial queries.
 type GeneratorParams = {
@@ -15,6 +15,11 @@ local BASE_HEIGHT_RATIO = 0.06
 local HEAD_HEIGHT_RATIO = 0.14
 local POLE_WIDTH_RATIO = 0.2
 local MINIMUM_HEAD_WIDTH_RATIO = 0.8
+-- The head's height splits into the bulb, the shade over it and the cap on top; the bulb is narrower than the shade.
+local BULB_HEIGHT_RATIO = 0.6
+local SHADE_HEIGHT_RATIO = 0.25
+local BULB_WIDTH_RATIO = 0.7
+local CAP_WIDTH_RATIO = 0.5
 
 type Look = { Color: Color3, Material: Enum.Material }
 
@@ -80,12 +85,30 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		Vector3.new(0, bottom + baseHeight + poleHeight / 2, 0),
 		frame
 	)
+	local headBottom = bottom + baseHeight + poleHeight
+	local bulbHeight = headHeight * BULB_HEIGHT_RATIO
+	local shadeHeight = headHeight * SHADE_HEIGHT_RATIO
+	local capHeight = headHeight - bulbHeight - shadeHeight
 	local head = addPart(
 		targetContainer,
 		"Head",
-		Vector3.new(headWidth, headHeight, headDepth),
-		Vector3.new(0, bottom + baseHeight + poleHeight + headHeight / 2, 0),
+		Vector3.new(headWidth * BULB_WIDTH_RATIO, bulbHeight, headDepth * BULB_WIDTH_RATIO),
+		Vector3.new(0, headBottom + bulbHeight / 2, 0),
 		bulb
+	)
+	addPart(
+		targetContainer,
+		"Shade",
+		Vector3.new(headWidth, shadeHeight, headDepth),
+		Vector3.new(0, headBottom + bulbHeight + shadeHeight / 2, 0),
+		frame
+	)
+	addPart(
+		targetContainer,
+		"Cap",
+		Vector3.new(headWidth * CAP_WIDTH_RATIO, capHeight, headDepth * CAP_WIDTH_RATIO),
+		Vector3.new(0, headBottom + bulbHeight + shadeHeight + capHeight / 2, 0),
+		frame
 	)
 
 	local light = Instance.new("PointLight")
