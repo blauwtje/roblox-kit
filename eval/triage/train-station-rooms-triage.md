@@ -201,3 +201,7 @@ Fresh `look` build: no density, walkway, doorway or scale warning. Shares comput
 
 - platform: inner floor 1624 sq studs (400 minimum), props cover 109.7 sq studs = 6.75%, inside the 2% to 40% band in `src/config.ts`.
 - concourse 11.36%, ticket hall 19.09%; both hallways are 130 sq studs, under the minimum, so not checked.
+
+## Scale sheet (Task 22)
+
+Reshot from the 17 eye camera (`capture_zones` view `eye`, `cutaway: false`) after the Task 17 bench change, header grounding (`5bae7c8`) and palette slots (`6675b77`). Each shot carries a 5.8-stud R15 figure placed ahead of the camera and removed afterwards; `benchmark-train-station` was parked and restored. Sheet: `docs/specs/train-station-look-files/22-scale-sheet.jpg` (17 reference on top; concourse, platform, ticket hall below), with the single shots `22a`, `22b`, `22c` beside it. `check_map look`: floating 0, placement 21 (arch, pendant and train-car, as triaged). Waiting for the owner to accept the sheet.
