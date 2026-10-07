@@ -154,9 +154,9 @@ await test("the platform's train car stands on its track bed, which keeps its ra
   assert.equal(preset.roomTypes?.["platform"]?.heroProps, undefined);
   const trackBed = setPieces.find((piece) => piece.kind === "track-bed");
   assert.ok(trackBed !== undefined);
-  // The car's modelled footprint (train-car.py): 40 studs long, 7.8 across at its widest.
-  assert.ok(40 <= trackBed.size.x, `track bed ${String(trackBed.size.x)} studs long`);
-  assert.ok(7.8 <= trackBed.size.z, "the car stands within the track bed's depth");
+  // The car's modelled footprint (train-car.py): 52 studs long, 8.6 across at its widest.
+  assert.ok(52 <= trackBed.size.x, `track bed ${String(trackBed.size.x)} studs long`);
+  assert.ok(8.6 <= trackBed.size.z, "the car stands within the track bed's depth");
 });
 
 await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {

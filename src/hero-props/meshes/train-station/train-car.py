@@ -1,8 +1,9 @@
 """Station train car: a green period compartment carriage with a lit amber window band, on its own wheels.
 
 Blender units = studs, Z up (glTF/Roblox Y up). The car runs along X and is centered on x and y with the wheel
-flanges on z 0, so its bounds are the kit train car's 40 x 7 x 7.8 (X, Y, Z) and an `anchor: "bottom"` fit
-leaves it unscaled. It carries no rails or sleepers: the kit track bed's rails sit 2.5 studs apart (half its
+flanges on z 0, so its bounds are 52 x 8.6 x 12.5 (X, Y, Z) and an `anchor: "bottom"` fit leaves it unscaled.
+At 1 stud = 0.3 m that is a 15.6 m carriage whose roof stands about 12.7 studs above the rail head, about twice
+a 5 to 6.5 stud avatar. It carries no rails or sleepers: the kit track bed's rails sit 2.5 studs apart (half its
 5 stud depth) and this car's wheels 5.7 apart, so model rails could not line up with them. Eight compartments
 a side, each a hinged door (droplight, brass lever handle, grab handle, hinges) between two quarter lights,
 under gold panel lining on the green body; a footboard; an arched roof with rain strips and one torpedo vent
@@ -34,14 +35,16 @@ from shared import (  # noqa: E402
     unwrap,
 )
 
-HALF_LENGTH = 20.0
-HALF_DEPTH = 3.5
-TOP = 7.8
-SIDE_Y = 3.2  # the body's side faces
-WHEEL_Y = 2.85
-WHEEL_Z = 1.0  # flange radius 1.0, so the flanges touch z 0
-COMPARTMENTS = 8
-PITCH = 4.6
+HALF_LENGTH = 26.0
+HALF_DEPTH = 4.2  # the roof's half width; the footboards reach 4.3
+SIDE_Y = 3.9  # the body's side faces
+WHEEL_Y = 2.85  # the gauge, 5.7 apart
+WHEEL_Z = 1.5  # flange radius 1.5, so the flanges touch z 0
+DECK_Z = 4.0  # the underframe's centre; the body stands on its top face at 4.4
+BODY_TOP = 11.0
+BODY_LENGTH = 50.4
+PITCH = 6.0
+COMPARTMENTS = round((BODY_LENGTH - 2.4) / PITCH)
 
 BODY, CREAM, GLASS, IRON, BRASS, STEEL, WOOD, DOOR, LINING = range(9)
 # (two tone-ramp stops, roughness, metalness) per paint value.
@@ -126,15 +129,15 @@ def cylinder(name, center, radius, length, axis, paint, vertices=16, bevel=0.0):
 
 
 def roof():
-    """An arched roof slab: a flat underside at z 6.95 and a crown at z 7.55, extruded along X."""
+    """An arched roof slab: a flat underside at z 11.0 and a crown at z 12.0, extruded along X."""
     mesh = bmesh.new()
     steps = 14
     arch = [
-        (-HALF_DEPTH + 2 * HALF_DEPTH * i / steps, 7.2 + 0.35 * (1 - (-1 + 2 * i / steps) ** 2))
+        (-HALF_DEPTH + 2 * HALF_DEPTH * i / steps, 11.4 + 0.6 * (1 - (-1 + 2 * i / steps) ** 2))
         for i in range(steps + 1)
     ]
     verts = [mesh.verts.new((-HALF_LENGTH, y, z)) for y, z in arch]
-    verts += [mesh.verts.new((-HALF_LENGTH, y, 6.95)) for y in (HALF_DEPTH, -HALF_DEPTH)]
+    verts += [mesh.verts.new((-HALF_LENGTH, y, BODY_TOP)) for y in (HALF_DEPTH, -HALF_DEPTH)]
     face = mesh.faces.new(verts)
     extruded = bmesh.ops.extrude_face_region(mesh, geom=[face])
     bmesh.ops.translate(mesh, verts=[v for v in extruded["geom"] if isinstance(v, bmesh.types.BMVert)], vec=(2 * HALF_LENGTH, 0, 0))
@@ -151,97 +154,101 @@ def strip_box(name, center, size, paint):
 
 
 def lining(name, x0, x1, z0, z1, side):
-    """A gold lining rectangle 0.05 wide, standing 0.03 proud of the body side."""
-    y = side * (SIDE_Y + 0.015)
+    """A gold lining rectangle 0.06 wide, standing 0.04 proud of the body side."""
+    y = side * (SIDE_Y + 0.02)
     for index, z in enumerate((z0, z1)):
-        strip_box(f"{name}-h{index}", ((x0 + x1) / 2, y, z), (x1 - x0 + 0.05, 0.03, 0.05), LINING)
+        strip_box(f"{name}-h{index}", ((x0 + x1) / 2, y, z), (x1 - x0 + 0.06, 0.04, 0.06), LINING)
     for index, x in enumerate((x0, x1)):
-        strip_box(f"{name}-v{index}", (x, y, (z0 + z1) / 2), (0.05, 0.03, z1 - z0), LINING)
+        strip_box(f"{name}-v{index}", (x, y, (z0 + z1) / 2), (0.06, 0.04, z1 - z0), LINING)
+
+
+def compartment_x(index):
+    return -PITCH * (COMPARTMENTS - 1) / 2 + PITCH * index
 
 
 def bogies():
-    for bogie in (-12, 12):
+    for bogie in (-16, 16):
         for side in (-1, 1):
-            box(f"sideframe-{bogie}-{side}", (bogie, side * 3.25, 1.85), (6.2, 0.2, 0.3), IRON, 0.04)
-        box(f"bolster-{bogie}", (bogie, 0, 2.15), (1.2, 6.3, 0.5), IRON, 0.04)
-        for x in (bogie - 2, bogie + 2):
-            cylinder(f"axle-{x}", (x, 0, WHEEL_Z), 0.2, 2 * WHEEL_Y + 0.6, "y", IRON, 12)
+            box(f"sideframe-{bogie}-{side}", (bogie, side * 3.35, 2.65), (8.0, 0.25, 0.4), IRON, 0.04)
+        box(f"bolster-{bogie}", (bogie, 0, 3.25), (1.6, 6.7, 0.7), IRON, 0.04)
+        for x in (bogie - 3, bogie + 3):
+            cylinder(f"axle-{x}", (x, 0, WHEEL_Z), 0.3, 2 * WHEEL_Y + 0.8, "y", IRON, 12)
             for side in (-1, 1):
-                cylinder(f"wheel-{x}-{side}", (x, side * WHEEL_Y, WHEEL_Z), 0.9, 0.37, "y", IRON, 28, 0.03)
-                cylinder(f"flange-{x}-{side}", (x, side * (WHEEL_Y - 0.2), WHEEL_Z), 1.0, 0.1, "y", IRON, 28, 0.02)
-                box(f"axlebox-{x}-{side}", (x, side * 3.25, WHEEL_Z + 0.1), (0.6, 0.3, 0.7), IRON, 0.05)
-                cylinder(f"axlecap-{x}-{side}", (x, side * 3.42, WHEEL_Z + 0.1), 0.18, 0.04, "y", BRASS, 12)
-                for leaf, length in enumerate((1.8, 1.4, 1.0)):
-                    z = WHEEL_Z + 0.5 + 0.08 * leaf
-                    strip_box(f"spring-{x}-{side}-{leaf}", (x, side * 3.25, z), (length, 0.18, 0.08), STEEL)
+                cylinder(f"wheel-{x}-{side}", (x, side * WHEEL_Y, WHEEL_Z), 1.4, 0.45, "y", IRON, 28, 0.04)
+                cylinder(f"flange-{x}-{side}", (x, side * (WHEEL_Y - 0.2), WHEEL_Z), 1.5, 0.12, "y", IRON, 28, 0.02)
+                box(f"axlebox-{x}-{side}", (x, side * 3.35, WHEEL_Z + 0.1), (0.9, 0.4, 1.0), IRON, 0.05)
+                cylinder(f"axlecap-{x}-{side}", (x, side * 3.58, WHEEL_Z + 0.1), 0.25, 0.06, "y", BRASS, 12)
+                for leaf, length in enumerate((2.6, 2.0, 1.4)):
+                    z = WHEEL_Z + 0.7 + 0.1 * leaf
+                    strip_box(f"spring-{x}-{side}-{leaf}", (x, side * 3.35, z), (length, 0.25, 0.1), STEEL)
 
 
 def underframe():
-    box("deck", (0, 0, 2.7), (38, 5.2, 0.6), IRON, 0.1)
+    box("deck", (0, 0, DECK_Z), (50, 7.6, 0.8), IRON, 0.1)
     for side in (-1, 1):
-        box(f"solebar-{side}", (0, side * 2.9, 2.7), (38.4, 0.2, 0.6), IRON, 0.04)
-        box(f"footboard-{side}", (0, side * 3.3, 2.72), (36.8, 0.3, 0.08), WOOD, 0.02)
+        box(f"solebar-{side}", (0, side * 3.8, DECK_Z), (50.4, 0.2, 0.8), IRON, 0.04)
+        box(f"footboard-{side}", (0, side * 4.1, DECK_Z), (48, 0.4, 0.1), WOOD, 0.02)
         for index in range(COMPARTMENTS + 1):
             x = -PITCH * COMPARTMENTS / 2 + PITCH * index
-            strip_box(f"footboard-bracket-{side}-{index}", (x, side * 3.15, 2.6), (0.08, 0.5, 0.2), IRON)
+            strip_box(f"footboard-bracket-{side}-{index}", (x, side * 3.95, DECK_Z - 0.2), (0.1, 0.7, 0.3), IRON)
     for end in (-1, 1):
-        box(f"headstock-{end}", (end * 19.4, 0, 2.7), (0.4, 6.2, 0.6), IRON, 0.05)
-        for y in (-1.9, 1.9):
-            box(f"buffer-plate-{end}-{y}", (end * 19.66, y, 2.7), (0.12, 0.7, 0.7), IRON, 0.03)
-            cylinder(f"buffer-sleeve-{end}-{y}", (end * 19.78, y, 2.7), 0.28, 0.12, "x", IRON, 16, 0.02)
-            cylinder(f"buffer-ram-{end}-{y}", (end * 19.89, y, 2.7), 0.16, 0.1, "x", STEEL, 12)
-            cylinder(f"buffer-head-{end}-{y}", (end * 19.95, y, 2.7), 0.45, 0.1, "x", STEEL, 20, 0.02)
-        box(f"hook-{end}", (end * 19.72, 0, 2.6), (0.4, 0.15, 0.3), IRON, 0.03)
-        cylinder(f"coupling-screw-{end}", (end * 19.85, 0, 2.5), 0.07, 0.3, "x", IRON, 8)
+        box(f"headstock-{end}", (end * 25.4, 0, DECK_Z), (0.4, 7.6, 0.8), IRON, 0.05)
+        for y in (-2.6, 2.6):
+            box(f"buffer-plate-{end}-{y}", (end * 25.66, y, DECK_Z), (0.12, 1.0, 1.0), IRON, 0.03)
+            cylinder(f"buffer-sleeve-{end}-{y}", (end * 25.78, y, DECK_Z), 0.4, 0.12, "x", IRON, 16, 0.02)
+            cylinder(f"buffer-ram-{end}-{y}", (end * 25.89, y, DECK_Z), 0.22, 0.1, "x", STEEL, 12)
+            cylinder(f"buffer-head-{end}-{y}", (end * 25.95, y, DECK_Z), 0.65, 0.1, "x", STEEL, 20, 0.02)
+        box(f"hook-{end}", (end * 25.72, 0, DECK_Z - 0.1), (0.4, 0.2, 0.4), IRON, 0.03)
+        cylinder(f"coupling-screw-{end}", (end * 25.85, 0, DECK_Z - 0.3), 0.1, 0.3, "x", IRON, 8)
 
 
 def compartment_side(index, side):
-    cx = -PITCH * (COMPARTMENTS - 1) / 2 + PITCH * index
+    cx = compartment_x(index)
     y = side * SIDE_Y
     # The hinged door: a slightly proud leaf with a droplight, a lined lower panel, hinges and two handles.
-    box(f"door-{index}-{side}", (cx, y + side * 0.03, 4.85), (1.3, 0.06, 3.4), DOOR, 0.02)
-    strip_box(f"droplight-{index}-{side}", (cx, y + side * 0.07, 5.85), (0.8, 0.04, 0.95), GLASS)
-    lining(f"door-lining-{index}-{side}", cx - 0.5, cx + 0.5, 3.4, 4.9, side * 1.02)
-    for z in (3.6, 6.0):
-        strip_box(f"hinge-{index}-{side}-{z}", (cx - 0.62, y + side * 0.07, z), (0.12, 0.06, 0.25), IRON)
-    cylinder(f"handle-boss-{index}-{side}", (cx + 0.5, y + side * 0.09, 4.95), 0.08, 0.1, "y", BRASS, 10)
-    cylinder(f"handle-lever-{index}-{side}", (cx + 0.38, y + side * 0.13, 4.95), 0.045, 0.3, "x", BRASS, 8)
-    cylinder(f"grab-{index}-{side}", (cx + 0.735, y + side * 0.13, 4.6), 0.05, 1.0, "z", BRASS, 8)
-    for z in (4.15, 5.05):
-        strip_box(f"grab-stay-{index}-{side}-{z}", (cx + 0.735, y + side * 0.07, z), (0.06, 0.12, 0.06), BRASS)
+    box(f"door-{index}-{side}", (cx, y + side * 0.04, 7.3), (2.1, 0.08, 5.2), DOOR, 0.02)
+    strip_box(f"droplight-{index}-{side}", (cx, y + side * 0.09, 8.7), (1.4, 0.05, 1.3), GLASS)
+    lining(f"door-lining-{index}-{side}", cx - 0.85, cx + 0.85, 5.0, 7.6, side * 1.02)
+    for z in (5.2, 9.4):
+        strip_box(f"hinge-{index}-{side}-{z}", (cx - 0.98, y + side * 0.09, z), (0.16, 0.08, 0.35), IRON)
+    cylinder(f"handle-boss-{index}-{side}", (cx + 0.8, y + side * 0.12, 7.2), 0.12, 0.12, "y", BRASS, 10)
+    cylinder(f"handle-lever-{index}-{side}", (cx + 0.58, y + side * 0.17, 7.2), 0.07, 0.5, "x", BRASS, 8)
+    cylinder(f"grab-{index}-{side}", (cx + 1.2, y + side * 0.17, 7.2), 0.07, 1.8, "z", BRASS, 8)
+    for z in (6.4, 8.0):
+        strip_box(f"grab-stay-{index}-{side}-{z}", (cx + 1.2, y + side * 0.09, z), (0.08, 0.16, 0.08), BRASS)
     # A quarter light either side of the door, each panel lined above and below the waist.
-    for offset in (-1.5, 1.5):
+    for offset in (-2.1, 2.1):
         x = cx + offset
-        strip_box(f"frame-{index}-{side}-{offset}", (x, y + side * 0.02, 5.75), (1.28, 0.05, 1.45), DOOR)
-        strip_box(f"glass-{index}-{side}-{offset}", (x, y + side * 0.04, 5.75), (1.1, 0.05, 1.25), GLASS)
-        lining(f"upper-{index}-{side}-{offset}", x - 0.68, x + 0.68, 4.95, 6.65, side)
-        lining(f"lower-{index}-{side}-{offset}", x - 0.68, x + 0.68, 3.3, 4.75, side)
+        strip_box(f"frame-{index}-{side}-{offset}", (x, y + side * 0.03, 8.4), (1.4, 0.06, 2.4), DOOR)
+        strip_box(f"glass-{index}-{side}-{offset}", (x, y + side * 0.05, 8.4), (1.2, 0.06, 2.0), GLASS)
+        lining(f"upper-{index}-{side}-{offset}", x - 0.78, x + 0.78, 7.0, 9.8, side)
+        lining(f"lower-{index}-{side}-{offset}", x - 0.78, x + 0.78, 4.8, 6.8, side)
 
 
 def body():
-    box("body", (0, 0, 5.0), (38.4, 6.4, 4.0), BODY, 0.1)
+    box("body", (0, 0, (DECK_Z + 0.4 + BODY_TOP) / 2), (BODY_LENGTH, 2 * SIDE_Y, BODY_TOP - DECK_Z - 0.4), BODY, 0.1)
     for side in (-1, 1):
         for index in range(COMPARTMENTS):
             compartment_side(index, side)
-        for rail, z in enumerate((3.12, 6.82)):
-            strip_box(f"rail-lining-{side}-{rail}", (0, side * (SIDE_Y + 0.015), z), (37.2, 0.03, 0.05), LINING)
+        for rail, z in enumerate((4.6, 10.7)):
+            strip_box(f"rail-lining-{side}-{rail}", (0, side * (SIDE_Y + 0.02), z), (48.6, 0.04, 0.06), LINING)
     for end in (-1, 1):
-        box(f"end-door-{end}", (end * 19.25, 0, 4.5), (0.1, 2.2, 3.0), DOOR, 0.02)
-        box(f"end-glass-{end}", (end * 19.3, 0, 5.2), (0.1, 1.4, 1.0), GLASS, 0.02)
-        for y in (-1.3, 1.3):
-            cylinder(f"end-grab-{end}-{y}", (end * 19.27, y, 4.5), 0.07, 2.4, "z", BRASS, 8)
-        for y in (-2.4, 2.4):
-            strip_box(f"end-lamp-{end}-{y}", (end * 19.3, y, 6.5), (0.2, 0.3, 0.35), IRON)
+        box(f"end-door-{end}", (end * 25.25, 0, 7.3), (0.1, 3.0, 5.2), DOOR, 0.02)
+        box(f"end-glass-{end}", (end * 25.3, 0, 8.9), (0.1, 2.0, 1.6), GLASS, 0.02)
+        for y in (-1.8, 1.8):
+            cylinder(f"end-grab-{end}-{y}", (end * 25.27, y, 7.3), 0.09, 4.0, "z", BRASS, 8)
+        for y in (-3.2, 3.2):
+            strip_box(f"end-lamp-{end}-{y}", (end * 25.3, y, 10.2), (0.2, 0.4, 0.5), IRON)
 
 
 def roofline():
     roof()
     for side in (-1, 1):
-        strip_box(f"rain-strip-{side}", (0, side * 3.3, 7.26), (39, 0.08, 0.08), IRON)
+        strip_box(f"rain-strip-{side}", (0, side * 4.0, 11.5), (51, 0.12, 0.12), IRON)
     for index in range(COMPARTMENTS):
-        x = -PITCH * (COMPARTMENTS - 1) / 2 + PITCH * index
-        cylinder(f"vent-stem-{index}", (x, 0, 7.6), 0.2, 0.2, "z", IRON, 12)
-        cylinder(f"vent-cap-{index}", (x, 0, 7.75), 0.36, 0.1, "z", IRON, 16, 0.03)
+        x = compartment_x(index)
+        cylinder(f"vent-stem-{index}", (x, 0, 12.0), 0.3, 0.3, "z", IRON, 12)
+        cylinder(f"vent-cap-{index}", (x, 0, 12.35), 0.55, 0.3, "z", IRON, 16, 0.03)
 
 
 def join_car():
