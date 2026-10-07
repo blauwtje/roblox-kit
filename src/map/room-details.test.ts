@@ -14,6 +14,7 @@ import { buildRoomDetails, detailDimensions } from "./room-details.ts";
 import type { DetailPart } from "./room-details.ts";
 
 const surfaces = {
+  wall: { color: "#334455", material: "Concrete" },
   trim: { color: "#112233", material: "Wood" },
   accent: { color: "#aa5500", material: "Neon" },
 };
@@ -76,12 +77,16 @@ await test("a closed room gets a baseboard, crown and stripe per wall and four p
   assert.equal(countOf("arch"), 0);
 });
 
-await test("trim and pillars take the trim surface, stripes take the accent surface", () => {
+await test("trim takes the trim surface, pillars the wall surface, stripes the accent surface", () => {
+  const roleOf: Partial<Record<DetailPart["kind"], DetailPart["role"]>> = {
+    stripe: "accent",
+    pillar: "wall",
+  };
   for (const detail of detailsOf(doorRoom)) {
-    const surface = detail.kind === "stripe" ? surfaces.accent : surfaces.trim;
-    assert.equal(detail.color, surface.color, detail.name);
-    assert.equal(detail.material, surface.material, detail.name);
-    assert.equal(detail.role, detail.kind === "stripe" ? "accent" : "trim", detail.name);
+    const role = roleOf[detail.kind] ?? "trim";
+    assert.equal(detail.color, surfaces[role].color, detail.name);
+    assert.equal(detail.material, surfaces[role].material, detail.name);
+    assert.equal(detail.role, role, detail.name);
   }
 });
 

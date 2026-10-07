@@ -10,7 +10,7 @@ import type { PatternSurface } from "./surface-patterns.ts";
 type Side = RoomSpec["doors"][number]["side"];
 
 /** The preset surfaces the details are painted from. */
-export type DetailSurfaces = Pick<Preset["surfaces"], "trim" | "accent">;
+export type DetailSurfaces = Pick<Preset["surfaces"], "wall" | "trim" | "accent">;
 
 /**
  * One decorative axis-aligned part. It never collides, fires touch events or answers spatial queries,
@@ -18,7 +18,7 @@ export type DetailSurfaces = Pick<Preset["surfaces"], "trim" | "accent">;
  */
 export interface DetailPart extends Omit<PartRecord, "kind" | "role"> {
   kind: "trim" | "stripe" | "pillar" | "arch" | "tile";
-  role: "trim" | "accent";
+  role: "wall" | "trim" | "accent";
   /** The profile mesh that stands in for this box when its asset is recorded; the box is the fallback. */
   profile?: TrimProfile;
   canCollide: false;
@@ -283,7 +283,7 @@ function pillarParts(room: RoomSpec, measure: RoomMeasure, surfaces: DetailSurfa
           name: `${room.name}-pillar-${corner.name}`,
           room: room.name,
           kind: "pillar",
-          role: "trim",
+          role: "wall",
           position: {
             x: room.x + corner.signX * (halfWidth - pillarSize / 2),
             y: measure.wallHeight / 2,

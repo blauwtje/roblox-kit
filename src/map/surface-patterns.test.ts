@@ -96,6 +96,7 @@ await test("buildRoomDetails adds tile details only for the surfaces asked", () 
   });
   const { parts } = layoutMap(spec);
   const surfaces = {
+    wall: { color: "#334455", material: "Concrete" },
     trim: { color: "#112233", material: "Wood" },
     accent: { color: "#aa5500", material: "Neon" },
   } as const;

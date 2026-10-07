@@ -9,7 +9,7 @@ import { buildRoomDetails } from "./room-details.ts";
 
 const surfaces = {
   floor: { color: "#111111" },
-  wall: { color: "#222222" },
+  wall: { color: "#222222", material: "Concrete" },
   ceiling: { color: "#333333" },
   trim: { color: "#444444", material: "Wood" },
   accent: { color: "#555555", material: "Neon" },

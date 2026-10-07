@@ -6,7 +6,7 @@ import { mapSpecSchema } from "./map-spec.ts";
 
 const surfaces = {
   floor: { color: "#111111" },
-  wall: { color: "#222222" },
+  wall: { color: "#222222", material: "Concrete" },
   trim: { color: "#333333", material: "Wood" },
   accent: { color: "#444444", material: "Brick" },
 };
