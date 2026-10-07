@@ -194,3 +194,10 @@ Sum checks: 12 + 24 + 16 + 1 = 53; 90 + 9 = 99 (about 100 gap-like entries and t
 | facing | concourse   | bench at (21, 393) faces away from the center of room "concourse".                               | predates branch  | same entry on origin/main rebuild |
 | facing | concourse   | bench at (21, 400) faces away from the center of room "concourse".                               | predates branch  | same entry on origin/main rebuild |
 | facing | concourse   | bench at (21, 407) faces away from the center of room "concourse".                               | predates branch  | same entry on origin/main rebuild |
+
+## Platform look-lint share (Task 21)
+
+Fresh `look` build: no density, walkway, doorway or scale warning. Shares computed with the density loop of `src/map/look-lint.ts` (the lint prints only out-of-band rooms):
+
+- platform: inner floor 1624 sq studs (400 minimum), props cover 109.7 sq studs = 6.75%, inside the 2% to 40% band in `src/config.ts`.
+- concourse 11.36%, ticket hall 19.09%; both hallways are 130 sq studs, under the minimum, so not checked.
