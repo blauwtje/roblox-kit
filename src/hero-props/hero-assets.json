@@ -542,5 +542,13 @@
   "e71d4aca9eb5": {
     "kind": "pillar",
     "assetId": "119951924235625"
+  },
+  "83b5d5a65c9d": {
+    "kind": "ticket-counter",
+    "assetId": "124875938890574"
+  },
+  "ec7c82e22bfb": {
+    "kind": "train-car",
+    "assetId": "97211665122302"
   }
 }

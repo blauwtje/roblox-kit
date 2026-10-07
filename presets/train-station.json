@@ -1974,7 +1974,6 @@
     },
     "ticket-hall": {
       "setPieces": ["ticket-counter"],
-      "heroProps": ["ticket-counter"],
       "arrangements": [
         {
           "shape": "along-walls",
@@ -2054,6 +2053,10 @@
           "glow": { "diameter": 0.8, "drop": 0.54 }
         }
       ]
+    },
+    "ticket-counter": {
+      "script": "src/hero-props/meshes/train-station/ticket-counter.py",
+      "targets": [{ "replaces": "prop:ticket-counter", "anchor": "center" }]
     },
     "arch-trim": {
       "script": "src/hero-props/meshes/train-station/arch-trim.py",

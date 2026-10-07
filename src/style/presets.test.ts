@@ -406,22 +406,16 @@ await test("the train station lays the concourse spawn pad flush, in the floor's
   assert.equal(spawn.material, floor.material);
 });
 
-await test("the ticket hall's ticket counter replaces its ticket-counter set piece and fits its span", async () => {
+await test("the ticket hall's ticket counter is the declared mesh in place of its ticket-counter set piece", async () => {
   const { preset, setPieces } = await placeBenchmarkSetPieces();
-  const counter = preset.heroProps?.["ticket-counter"];
-  assert.ok(counter !== undefined);
-  assert.equal(counter.replaces, "ticket-counter");
-  assert.deepEqual(preset.roomTypes?.["ticket-hall"]?.heroProps, ["ticket-counter"]);
-  const setPiece = setPieces.find((piece) => piece.kind === "ticket-counter");
-  assert.ok(setPiece !== undefined);
-  assert.ok(
-    counter.size.width <= setPiece.size.x,
-    `counter ${String(counter.size.width)} studs wide`,
+  const targets = preset.meshes?.["ticket-counter"]?.targets ?? [];
+  assert.deepEqual(
+    targets.map((target) => target.replaces),
+    ["prop:ticket-counter"],
   );
-  assert.ok(
-    counter.size.height <= setPiece.size.y,
-    `counter ${String(counter.size.height)} studs high`,
-  );
+  // A declared mesh wins over a hero prop replacing the same set piece, so the room type names none.
+  assert.equal(preset.roomTypes?.["ticket-hall"]?.heroProps, undefined);
+  assert.ok(setPieces.some((piece) => piece.kind === "ticket-counter"));
 });
 
 type Axis = "x" | "y" | "z";
