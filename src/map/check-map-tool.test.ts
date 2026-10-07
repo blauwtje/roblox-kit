@@ -256,6 +256,38 @@ await test("check-map.luau reports a part as floating when none of five downward
   assert.ok(floatingSource.includes('kind = "floating"'));
 });
 
+await test("check-map.luau grounds a part that spans between grounded parts at its two opposite ends", async () => {
+  const source = await readFile(new URL("../../luau/check-map.luau", import.meta.url), "utf8");
+  const endSource = source.slice(
+    source.indexOf("local function endSupports("),
+    source.indexOf("local function findFloating("),
+  );
+  // Both horizontal axes are probed with a slab on each end face, the part itself left out of what it touches.
+  assert.ok(endSource.includes("{ Vector3.xAxis, Vector3.zAxis }"));
+  assert.ok(endSource.includes("for _, sign in { -1, 1 } do"));
+  assert.ok(
+    endSource.includes("workspace:GetPartBoundsInBox(CFrame.new(slabCenter), slabSize, params)"),
+  );
+  assert.ok(endSource.includes("if other ~= box.part then"));
+  assert.ok(endSource.includes("#ends[1] > 0 and #ends[2] > 0"));
+  const floatingSource = source.slice(
+    source.indexOf("local function findFloating("),
+    source.indexOf("local function isWithinFootprint("),
+  );
+  // Only collidable map parts count as ends, and only parts nothing below grounds are probed.
+  assert.ok(floatingSource.includes("overlapParams.FilterDescendantsInstances = { model }"));
+  assert.ok(floatingSource.includes("overlapParams.RespectCanCollide = true"));
+  assert.ok(
+    floatingSource.indexOf("spreadGrounding()") < floatingSource.indexOf("endSupports(box"),
+  );
+  // A span needs a grounded part on both ends, not one, so a part stuck to a single wall still floats.
+  assert.ok(
+    floatingSource.includes(
+      "anyGrounded(span.first, grounded) and anyGrounded(span.second, grounded)",
+    ),
+  );
+});
+
 await test("check_map samples the scene from each zone's camera after the settle time", async () => {
   const studio = studioReturning(checkedMap());
   const result = await setup(studio).run({ mapId: "arena" });

@@ -462,3 +462,33 @@ await test("without flushSpawn the pad stays raised in the accent surface", () =
   });
   assert.deepEqual(partNamed(parts, "start-spawn").position, { x: 0, y: 0.5, z: 0 });
 });
+
+await test("a header over a lower door spans between the wall stretches beside it, which carry it", () => {
+  const { parts } = layoutOf({
+    mapId: "tall",
+    rooms: [
+      {
+        name: "tall",
+        x: 0,
+        z: 0,
+        width: 40,
+        depth: 40,
+        wallHeight: 24,
+        doors: [{ side: "north", offset: 0, height: 16 }],
+      },
+    ],
+  });
+  const header = partNamed(parts, `tall${config.wallNameInfix}north-header-1`);
+  const west = partNamed(parts, `tall${config.wallNameInfix}north-1`);
+  const east = partNamed(parts, `tall${config.wallNameInfix}north-2`);
+  // check_map grounds a part nothing below carries when grounded parts touch both of its opposite end faces.
+  assert.equal(header.position.x - header.size.x / 2, west.position.x + west.size.x / 2);
+  assert.equal(header.position.x + header.size.x / 2, east.position.x - east.size.x / 2);
+  assert.equal(header.position.y - header.size.y / 2, 16);
+  for (const stretch of [west, east]) {
+    assert.equal(stretch.position.y - stretch.size.y / 2, 0);
+    assert.ok(stretch.position.y + stretch.size.y / 2 >= header.position.y + header.size.y / 2);
+    assert.equal(stretch.position.z, header.position.z);
+    assert.equal(stretch.size.z, header.size.z);
+  }
+});

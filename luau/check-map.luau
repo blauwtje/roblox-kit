@@ -216,9 +216,58 @@ local function rayOrigins(bounds: Bounds): { Vector3 }
 	}
 end
 
+-- The collidable map parts touching both end faces of a box along one horizontal axis.
+type Span = { first: { BasePart }, second: { BasePart } }
+
+-- For each horizontal axis, the map parts touching the box's two opposite end faces, kept only when both ends touch
+-- something: a header over a doorway is carried by the wall on each side, not by anything below it. Each probe is a
+-- slab twice the tolerance thick on the end face, pulled in by the tolerance on the other two axes so a part that only
+-- meets the box along an edge does not count.
+local function endSupports(box: Box, params: OverlapParams): { Span }
+	local tolerance = arguments.overlapToleranceStuds
+	local center = (box.min + box.max) / 2
+	local size = box.max - box.min
+	local spans: { Span } = {}
+	for _, axis in { Vector3.xAxis, Vector3.zAxis } do
+		local shrunk = size - Vector3.one * 2 * tolerance
+		local otherHorizontal = if axis == Vector3.xAxis then shrunk.Z else shrunk.X
+		if shrunk.Y <= 0 or otherHorizontal <= 0 then
+			continue
+		end
+		local across = (Vector3.one - axis) * shrunk
+		local slabSize = across + axis * 2 * tolerance
+		local ends: { { BasePart } } = {}
+		for _, sign in { -1, 1 } do
+			local slabCenter = center + axis * sign * size:Dot(axis) / 2
+			local touching: { BasePart } = {}
+			for _, other in workspace:GetPartBoundsInBox(CFrame.new(slabCenter), slabSize, params) do
+				if other ~= box.part then
+					table.insert(touching, other)
+				end
+			end
+			table.insert(ends, touching)
+		end
+		if #ends[1] > 0 and #ends[2] > 0 then
+			table.insert(spans, { first = ends[1], second = ends[2] })
+		end
+	end
+	return spans
+end
+
+local function anyGrounded(parts: { BasePart }, grounded: { [BasePart]: boolean }): boolean
+	for _, part in parts do
+		if grounded[part] then
+			return true
+		end
+	end
+	return false
+end
+
 -- A collidable part is supported when one of its five downward rays hits Terrain, a part outside the map, or a map
 -- part that is itself grounded, within the tolerance below its bottom face; ground parts are grounded. Grounding
 -- spreads upward from the ground through the parts the rays hit, so a stack resting on a floating part floats too.
+-- A part nothing below carries is also grounded when it spans between grounded map parts touching its two opposite
+-- end faces, like a wall header over a doorway between the wall stretches beside it.
 -- Decorative parts (CanCollide false, CanQuery false) hang on walls instead of resting on the ground, so they are
 -- neither checked nor hit.
 local function findFloating(model: Model, boxes: { Box })
@@ -260,17 +309,52 @@ local function findFloating(model: Model, boxes: { Box })
 			end
 		end
 	end
-	while #pending > 0 do
-		local support = table.remove(pending) :: BasePart
-		if restingOn[support] == nil then
-			continue
-		end
-		for _, resting in restingOn[support] do
-			if not grounded[resting] then
-				grounded[resting] = true
-				table.insert(pending, resting)
+	local function spreadGrounding()
+		while #pending > 0 do
+			local support = table.remove(pending) :: BasePart
+			if restingOn[support] == nil then
+				continue
+			end
+			for _, resting in restingOn[support] do
+				if not grounded[resting] then
+					grounded[resting] = true
+					table.insert(pending, resting)
+				end
 			end
 		end
+	end
+	spreadGrounding()
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Include
+	overlapParams.FilterDescendantsInstances = { model }
+	overlapParams.RespectCanCollide = true
+	local spanning: { { part: BasePart, spans: { Span } } } = {}
+	for _, box in checked do
+		if not grounded[box.part] then
+			local spans = endSupports(box, overlapParams)
+			if #spans > 0 then
+				table.insert(spanning, { part = box.part, spans = spans })
+			end
+		end
+	end
+	-- Grounding a spanning part can ground what rests on it and, through that, another spanning part.
+	local changed = true
+	while changed do
+		changed = false
+		for _, entry in spanning do
+			if grounded[entry.part] then
+				continue
+			end
+			for _, span in entry.spans do
+				if anyGrounded(span.first, grounded) and anyGrounded(span.second, grounded) then
+					grounded[entry.part] = true
+					table.insert(pending, entry.part)
+					changed = true
+					break
+				end
+			end
+		end
+		spreadGrounding()
 	end
 	for _, box in checked do
 		local part = box.part
@@ -279,7 +363,7 @@ local function findFloating(model: Model, boxes: { Box })
 				kind = "floating",
 				parts = { part:GetFullName() },
 				position = toPosition(part.Position),
-				detail = `no part or terrain within {tolerance} studs below its center or footprint corners leads down to the ground`,
+				detail = `no part or terrain within {tolerance} studs below its center or footprint corners leads down to the ground, and it does not span between grounded parts at two opposite ends`,
 			})
 		end
 	end
