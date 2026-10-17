@@ -14,7 +14,7 @@ import {
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
 
-const featurePresets = ["train-station", "cozy-town"];
+const featurePresets = ["train-station", "cozy-town", "horror-facility"];
 
 /** Names in Enum.Material that these presets may use; "built-in Materials only" means no custom ones. */
 const builtInMaterials = new Set([
@@ -88,7 +88,11 @@ await test("every bundled preset meets the size rules check_map enforces", async
   }
 });
 
-const featureRoomSizes: Record<string, number> = { "train-station": 50, "cozy-town": 46 };
+const featureRoomSizes: Record<string, number> = {
+  "train-station": 50,
+  "cozy-town": 46,
+  "horror-facility": 18,
+};
 
 for (const name of featurePresets) {
   const size = featureRoomSizes[name] ?? 50;

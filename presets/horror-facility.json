@@ -163,6 +163,66 @@
       "color": "#d94a3d"
     }
   },
+  "lightFixtures": {
+    "kind": "sconce",
+    "spacing": 14,
+    "height": 8,
+    "size": {
+      "width": 1.5,
+      "height": 2,
+      "depth": 1
+    }
+  },
+  "idleAnimations": {
+    "lamp": {
+      "swayDegrees": 1.5,
+      "periodSeconds": 3,
+      "hinge": "bottom"
+    }
+  },
+  "ambientEffects": [
+    {
+      "kind": "particles",
+      "name": "dust",
+      "sprite": "dust",
+      "color": "#9fb8aa",
+      "heightStuds": 6,
+      "transparency": 0.7,
+      "lightEmission": 0.1,
+      "rate": 4,
+      "lifetimeSeconds": 9,
+      "sizeStuds": 0.2,
+      "speedStuds": 0.4
+    },
+    {
+      "kind": "particles",
+      "name": "steam",
+      "sprite": "steam",
+      "roomTypes": ["lab"],
+      "color": "#8a9690",
+      "heightStuds": 1,
+      "transparency": 0.6,
+      "lightEmission": 0,
+      "rate": 3,
+      "lifetimeSeconds": 5,
+      "sizeStuds": 3,
+      "speedStuds": 1.5
+    },
+    {
+      "kind": "particles",
+      "name": "sparks",
+      "sprite": "spark",
+      "roomTypes": ["cell-block"],
+      "color": "#ff7a4a",
+      "heightStuds": 10,
+      "transparency": 0.2,
+      "lightEmission": 1,
+      "rate": 1,
+      "lifetimeSeconds": 1.5,
+      "sizeStuds": 0.25,
+      "speedStuds": 3
+    }
+  ],
   "propKit": ["pillar", "lamp", "stairs"],
   "propRules": {
     "pillar": {
