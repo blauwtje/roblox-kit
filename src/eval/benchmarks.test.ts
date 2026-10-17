@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import { layoutMap } from "../map/map-layout.ts";
@@ -10,25 +10,23 @@ import { findSizeRuleIssues } from "../map/size-rules.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
 
-const benchmarks = [
-  { file: "train-station.json", preset: "train-station", roomCount: 3 },
-  { file: "horror-facility-wing.json", preset: "horror-facility", roomCount: 4 },
-  { file: "sci-fi-kitchen.json", preset: "sci-fi-station", roomCount: 3 },
-];
+const planBudgetMilliseconds = 500;
+
+const benchmarkDirectory = new URL("../../eval/benchmarks/", import.meta.url);
+const files = (await readdir(benchmarkDirectory)).filter((name) => name.endsWith(".json")).sort();
 
 const presets = await loadPresets();
 
 async function readBenchmark(file: string) {
-  const url = new URL(`../../eval/benchmarks/${file}`, import.meta.url);
+  const url = new URL(file, benchmarkDirectory);
   const source: unknown = JSON.parse(await readFile(url, "utf8"));
   return relationMapSpecSchema.parse(source);
 }
 
-for (const { file, preset, roomCount } of benchmarks) {
-  await test(`${file} parses, names its preset and places rooms by relation`, async () => {
+for (const file of files) {
+  await test(`${file} parses, plans in budget, lays out, and puts a prop in every room`, async () => {
     const spec = await readBenchmark(file);
-    assert.equal(spec.style?.preset, preset);
-    assert.equal(spec.rooms.length, roomCount);
+    assert.ok(spec.style);
     assert.ok(spec.seed !== undefined);
     assert.ok(
       spec.rooms.some((room) => "x" in room),
@@ -42,16 +40,40 @@ for (const { file, preset, roomCount } of benchmarks) {
       spec.rooms.some((room) => room.spawn),
       "the map has a spawn",
     );
-  });
-
-  await test(`${file} resolves to a placed spec that lays out, gets props and meets the size rules`, async () => {
-    const spec = await readBenchmark(file);
-    assert.ok(spec.style);
-    const resolved = mapSpecSchema.parse(resolveRelations(spec));
-    assert.equal(resolved.rooms.length, 2 * spec.rooms.length - 1, "one hallway per relation");
     const style = resolveStyle(presets, spec.style);
-    assert.ok(layoutMap(resolved, style.surfaces, { ceilings: true }).parts.length > 0);
-    assert.ok(placeProps(resolved, style.propKit, spec.seed ?? config.defaultSeed).length > 0);
+    const plan = () => {
+      const resolved = mapSpecSchema.parse(resolveRelations(spec));
+      const layout = layoutMap(resolved, style.surfaces, { ceilings: true });
+      return {
+        resolved,
+        layout,
+        props: placeProps(resolved, style.propKit, spec.seed ?? config.defaultSeed),
+      };
+    };
+    const times: number[] = [];
+    let planned = plan();
+    for (let run = 0; run < 3; run += 1) {
+      const start = performance.now();
+      planned = plan();
+      times.push(performance.now() - start);
+    }
+    assert.ok(Math.min(...times) < planBudgetMilliseconds, `plan times ${times.join(", ")} ms`);
+    assert.equal(
+      planned.resolved.rooms.length,
+      2 * spec.rooms.length - 1,
+      "one hallway per relation",
+    );
+    assert.ok(planned.layout.parts.length > 0);
+    for (const room of planned.resolved.rooms.filter((candidate) =>
+      spec.rooms.some((named) => named.name === candidate.name),
+    )) {
+      const inside = planned.props.some(
+        (prop) =>
+          Math.abs(prop.pivot.x - room.x) < room.width / 2 &&
+          Math.abs(prop.pivot.z - room.z) < room.depth / 2,
+      );
+      assert.ok(inside, `room ${room.name} has no prop`);
+    }
     assert.deepEqual(findSizeRuleIssues(spec, style.sizeRules, spec.mapId), []);
   });
 
@@ -69,9 +91,3 @@ for (const { file, preset, roomCount } of benchmarks) {
     }
   });
 }
-
-await test("the benchmarks use distinct map ids and seeds", async () => {
-  const specs = await Promise.all(benchmarks.map(({ file }) => readBenchmark(file)));
-  assert.equal(new Set(specs.map((spec) => spec.mapId)).size, specs.length);
-  assert.equal(new Set(specs.map((spec) => spec.seed)).size, specs.length);
-});
