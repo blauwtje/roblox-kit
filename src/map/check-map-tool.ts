@@ -5,6 +5,7 @@ import { runLuauBatch, runLuauFile } from "../luau/run-luau-file.ts";
 import type { ResourceDefinition, ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
+import { resolveName } from "../shared/resolve-name.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import {
@@ -151,12 +152,7 @@ function presetNamed(presetName: string | undefined): Preset | undefined {
   if (presetName === undefined) {
     return undefined;
   }
-  const preset = presets.get(presetName);
-  if (preset === undefined) {
-    const known = [...presets.keys()].join(", ");
-    throw new Error(`Unknown preset "${presetName}". Use one of: ${known}.`);
-  }
-  return preset;
+  return presets.get(resolveName(presetName, presets.keys(), "preset"));
 }
 
 /** The preset's agent size, or the config defaults without a preset. */

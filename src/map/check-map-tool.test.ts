@@ -296,7 +296,14 @@ await test("a bad request is refused before Studio is asked", async () => {
   const studio = new FakeStudioConnection([...studios, { id: "studio-b", name: "Place B" }]);
   const { run, tool } = setup(studio);
   await assert.rejects(run({ mapId: "arena" }), /Pass studioId as one of/);
-  await assert.rejects(run({ mapId: "arena", preset: "no-such-preset" }), /Unknown preset/);
+  await assert.rejects(
+    run({ mapId: "arena", preset: "no-such-preset" }),
+    /Unknown preset "no-such-preset".*valid names/,
+  );
+  await assert.rejects(
+    run({ mapId: "arena", preset: "NO SUCH PRESET" }),
+    /Unknown preset "NO SUCH PRESET"/,
+  );
   assert.throws(() => tool.inputSchema.parse({ mapId: "arena", extra: 1 }));
   assert.throws(() => tool.inputSchema.parse({ mapId: "arena", objectives: [{ name: "a" }] }));
   assert.equal(studio.requests.length, 0);

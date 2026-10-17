@@ -1,3 +1,4 @@
+import { resolveName } from "../shared/resolve-name.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { RelationMapSpec, RelationRoomSpec } from "./map-spec.ts";
 
@@ -42,6 +43,16 @@ function roomsOf(preset: Preset, roomTypes: string[]): RelationRoomSpec[] {
   });
 }
 
+function canonicalRoomType(room: RelationRoomSpec, preset: Preset): RelationRoomSpec {
+  if (room.roomType === undefined || preset.roomTypes === undefined) {
+    return room;
+  }
+  return {
+    ...room,
+    roomType: resolveName(room.roomType, Object.keys(preset.roomTypes), "room type"),
+  };
+}
+
 /**
  * Fills an absent `mapId` with the preset name and absent `rooms` with one room per preset room type.
  * Returns the same spec and no fills when both are given. Never turns on npcs, clutter, signage, motion
@@ -52,23 +63,26 @@ export function fillMapSpec<Input extends PartialMapSpec>(
   presets: ReadonlyMap<string, Preset>,
 ): { spec: Omit<Input, "mapId" | "rooms"> & RelationMapSpecParts; fills: string[] } {
   const fills: string[] = [];
-  const presetName = input.style?.preset;
   const names = [...presets.keys()].join(", ");
-  if (input.rooms === undefined && presetName === undefined) {
+  if (input.rooms === undefined && input.style?.preset === undefined) {
     throw new Error(`Give rooms or a style; the style presets are: ${names}`);
   }
+  const presetName =
+    input.style === undefined
+      ? undefined
+      : resolveName(input.style.preset, presets.keys(), "style preset");
+  const preset = presetName === undefined ? undefined : presets.get(presetName);
   let { mapId, rooms } = input;
-  if (rooms === undefined && presetName !== undefined) {
-    const preset = presets.get(presetName);
-    if (preset === undefined) {
-      throw new Error(`Unknown style preset "${presetName}"; the style presets are: ${names}`);
-    }
+  if (rooms === undefined && preset !== undefined && presetName !== undefined) {
     const roomTypes = Object.keys(preset.roomTypes ?? {});
     if (roomTypes.length === 0) {
       throw new Error(`Style preset "${presetName}" declares no room types; give rooms.`);
     }
     rooms = roomsOf(preset, roomTypes);
     fills.push(`rooms: one room per "${presetName}" room type (${roomTypes.join(", ")})`);
+  }
+  if (rooms !== undefined && preset !== undefined) {
+    rooms = rooms.map((room) => canonicalRoomType(room, preset));
   }
   if (mapId === undefined && presetName !== undefined) {
     mapId = presetName;
@@ -86,7 +100,11 @@ export function fillMapSpec<Input extends PartialMapSpec>(
     }
     seenNames.add(room.name);
   }
-  return { spec: { ...input, mapId, rooms }, fills };
+  const style =
+    input.style === undefined || presetName === undefined
+      ? input.style
+      : { ...input.style, preset: presetName };
+  return { spec: { ...input, style, mapId, rooms }, fills };
 }
 
 type RelationMapSpecParts = Pick<RelationMapSpec, "mapId" | "rooms">;

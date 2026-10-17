@@ -61,3 +61,28 @@ await test("a full spec passes unchanged with no fills", () => {
 await test("neither style nor rooms throws listing the preset names", () => {
   assert.throws(() => fillMapSpec(base, presets), new RegExp(presetName));
 });
+
+await test("preset and room type names match ignoring case, spaces and hyphens", () => {
+  const messy = presetName.toUpperCase().replaceAll("-", "  ");
+  const [type] = roomTypes;
+  assert.ok(type);
+  const room = { name: "a", width: 10, depth: 10, x: 0, z: 0, doors: [], spawn: true };
+  const { spec } = fillMapSpec(
+    {
+      ...base,
+      style: { preset: messy },
+      rooms: [{ ...room, roomType: ` ${type.toUpperCase()} ` }],
+    },
+    presets,
+  );
+  assert.equal(spec.style.preset, presetName);
+  assert.equal(spec.rooms[0]?.roomType, type);
+  assert.throws(
+    () =>
+      fillMapSpec(
+        { ...base, style: { preset: presetName }, rooms: [{ ...room, roomType: "nowhere" }] },
+        presets,
+      ),
+    /Unknown room type "nowhere"/,
+  );
+});
