@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { config } from "../config.ts";
+import { heroConfig } from "./hero-config.ts";
 import { checkGlbParts, readGlbParts, readGlbStructure } from "./glb-structure.ts";
 
 const GLB_MAGIC = 0x46546c67;
@@ -187,7 +187,7 @@ await test("GlbStructure.imageHashes holds the sha256 of each embedded image's b
   );
 });
 
-const tolerance = config.heroPropContactToleranceStuds;
+const tolerance = heroConfig.heroPropContactToleranceStuds;
 
 await test("splits a joined mesh into closed, outward parts with their bounds", () => {
   const parts = readGlbParts(

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { config } from "../config.ts";
+import { heroConfig } from "./hero-config.ts";
 import { blenderPath, runBlender, type BlenderExec } from "./blender-path.ts";
 
 const macPath = "/Applications/Blender.app/Contents/MacOS/Blender";
@@ -61,13 +61,13 @@ await test("runBlender passes the bake device named in the environment to Blende
     seen = options.env;
     return Promise.resolve();
   };
-  const previous = process.env[config.blenderDeviceEnv];
-  process.env[config.blenderDeviceEnv] = "CUDA";
+  const previous = process.env[heroConfig.blenderDeviceEnv];
+  process.env[heroConfig.blenderDeviceEnv] = "CUDA";
   try {
     await runBlender("/scripts/make.py", [], exec);
-    assert.equal(seen[config.blenderDeviceEnv], "CUDA");
+    assert.equal(seen[heroConfig.blenderDeviceEnv], "CUDA");
   } finally {
-    if (previous === undefined) Reflect.deleteProperty(process.env, config.blenderDeviceEnv);
-    else process.env[config.blenderDeviceEnv] = previous;
+    if (previous === undefined) Reflect.deleteProperty(process.env, heroConfig.blenderDeviceEnv);
+    else process.env[heroConfig.blenderDeviceEnv] = previous;
   }
 });

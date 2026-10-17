@@ -210,13 +210,7 @@ export const config = Object.freeze({
 
   /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
   heroPropsFolder: ".roblox-kit/hero-props",
-  /** The environment variable naming the Blender that generates hero props headless (`-b --factory-startup`), so blender-mcp never loads. */
-  blenderPathEnv: "BLENDER_PATH",
-  /** Tried in order when that variable is unset: a name looked up on PATH, then an absolute install path. */
-  blenderFallbackPaths: ["blender", "/Applications/Blender.app/Contents/MacOS/Blender"],
-  blenderDeviceEnv: "ROBLOX_KIT_BLENDER_DEVICE",
   heroPropImageTolerance: 100,
-  blenderTimeoutMs: 120_000,
 
   /** ProfileStore, the player-saving library the `data` skill's templates are type-checked against, as `<scope>/<name>` on Wally. */
   profileStorePackage: "lm-loleris/profilestore",
@@ -226,14 +220,7 @@ export const config = Object.freeze({
   /** The Wally registry endpoint that serves a package's zip, and the `Wally-Version` header it requires. */
   wallyPackageContentsUrl: "https://api.wally.run/v1/package-contents/",
   wallyClientVersion: "0.3.2",
-  /** How far a generated hero prop's extent may differ from its recipe size on any axis, in studs. */
-  heroPropSizeToleranceStuds: 0.1,
-  /** How far apart two parts' bounding boxes, or a part's bottom and the floor, may be and still touch, in studs. */
-  heroPropContactToleranceStuds: 0.02,
 
-  /** Open Cloud Assets API that a checked hero-prop GLB is uploaded to, and the operations it is polled at. */
-  openCloudAssetsUrl: "https://apis.roblox.com/assets/v1/assets",
-  openCloudOperationsUrl: "https://apis.roblox.com/assets/v1/operations/",
   /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator: a user id or a group id. */
   openCloudApiKeyEnv: "ROBLOX_OPEN_CLOUD_API_KEY",
   openCloudCreatorUserIdEnv: "ROBLOX_CREATOR_USER_ID",
@@ -241,9 +228,6 @@ export const config = Object.freeze({
   /** Gitignored files, under the repository root, read when the variables are unset: the key (trimmed), and the creator as {"groupId":"<digits>"} or {"userId":"<digits>"}. */
   openCloudKeyFile: ".roblox-kit/open-cloud-key",
   openCloudCreatorFile: ".roblox-kit/open-cloud-creator.json",
-  /** Wait between two polls of an upload operation, and how many polls before the upload counts as failed. */
-  openCloudPollIntervalMs: 2000,
-  openCloudMaxPolls: 60,
 
   defaultMultiplayerPlayers: 2,
   minPlaytestPlayers: 1,

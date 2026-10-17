@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
-import { config } from "../config.ts";
+import { heroConfig } from "./hero-config.ts";
 
 const execFileAsync = promisify(execFile);
 const blenderBufferBytes = 10 * 1024 * 1024;
@@ -27,15 +27,15 @@ function isExecutable(file: string): boolean {
   }
 }
 
-/** Resolves the Blender executable: `BLENDER_PATH` when set, else the first of `config.blenderFallbackPaths` that exists (a bare name is looked up on `env.PATH`). Throws when none is found. */
+/** Resolves the Blender executable: `BLENDER_PATH` when set, else the first of `heroConfig.blenderFallbackPaths` that exists (a bare name is looked up on `env.PATH`). Throws when none is found. */
 export function blenderPath(
   env: Record<string, string | undefined>,
   exists: (file: string) => boolean = isExecutable,
 ): string {
-  const fromEnv = env[config.blenderPathEnv];
+  const fromEnv = env[heroConfig.blenderPathEnv];
   if (fromEnv) return fromEnv;
   const directories = (env.PATH ?? "").split(delimiter).filter(Boolean);
-  for (const candidate of config.blenderFallbackPaths) {
+  for (const candidate of heroConfig.blenderFallbackPaths) {
     if (candidate.includes("/")) {
       if (exists(candidate)) return candidate;
       continue;
@@ -46,12 +46,15 @@ export function blenderPath(
     }
   }
   throw new Error(
-    `Blender not found: set ${config.blenderPathEnv}, or install it at one of ${config.blenderFallbackPaths.join(", ")}.`,
+    `Blender not found: set ${heroConfig.blenderPathEnv}, or install it at one of ${heroConfig.blenderFallbackPaths.join(", ")}.`,
   );
 }
 
 function blenderEnvironment(): Record<string, string | undefined> {
-  return { ...process.env, [config.blenderDeviceEnv]: process.env[config.blenderDeviceEnv] };
+  return {
+    ...process.env,
+    [heroConfig.blenderDeviceEnv]: process.env[heroConfig.blenderDeviceEnv],
+  };
 }
 
 /** Runs `script` with headless Blender, passing `args` after `--`; a failure throws an error naming the script with the last 20 stderr lines. */
@@ -65,7 +68,7 @@ export async function runBlender(
       blenderPath(process.env),
       ["-b", "--factory-startup", "--python-exit-code", "1", "-P", script, "--", ...args],
       {
-        timeout: config.blenderTimeoutMs,
+        timeout: heroConfig.blenderTimeoutMs,
         maxBuffer: blenderBufferBytes,
         env: blenderEnvironment(),
       },

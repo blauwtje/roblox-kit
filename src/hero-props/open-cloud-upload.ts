@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { heroConfig } from "./hero-config.ts";
 import { checkGlbParts, readGlbParts, type GlbChecks } from "./glb-structure.ts";
 import { materialMapNames } from "../style/preset-schema.ts";
 import {
@@ -86,8 +86,8 @@ async function uploadAsset(
 ): Promise<string> {
   const {
     fetchFn = fetch,
-    pollIntervalMs = config.openCloudPollIntervalMs,
-    maxPolls = config.openCloudMaxPolls,
+    pollIntervalMs = heroConfig.openCloudPollIntervalMs,
+    maxPolls = heroConfig.openCloudMaxPolls,
   } = transport;
   const headers = { "x-api-key": credentials.apiKey };
   const form = new FormData();
@@ -102,7 +102,7 @@ async function uploadAsset(
   );
   form.append("fileContent", new Blob([file.bytes], { type: file.contentType }), file.fileName);
   const created = await readOperation(
-    await fetchFn(config.openCloudAssetsUrl, { method: "POST", headers, body: form }),
+    await fetchFn(heroConfig.openCloudAssetsUrl, { method: "POST", headers, body: form }),
     "upload",
   );
   const id = operationId(created);
@@ -112,7 +112,7 @@ async function uploadAsset(
     if (assetId !== undefined) return assetId;
     await sleep(pollIntervalMs);
     operation = await readOperation(
-      await fetchFn(`${config.openCloudOperationsUrl}${encodeURIComponent(id)}`, { headers }),
+      await fetchFn(`${heroConfig.openCloudOperationsUrl}${encodeURIComponent(id)}`, { headers }),
       "operation poll",
     );
   }
@@ -164,13 +164,13 @@ export type HeroPropChecks = { hash: string } & GlbChecks;
 
 /**
  * Runs the deterministic checks on the generated `model.glb` in `directory` (floating parts and inverted
- * normals, with `config.heroPropContactToleranceStuds`) and writes them with `hash` as the checks file.
+ * normals, with `heroConfig.heroPropContactToleranceStuds`) and writes them with `hash` as the checks file.
  */
 export async function writeHeroPropChecks(directory: URL, hash: string): Promise<HeroPropChecks> {
   const glb = new Uint8Array(await readFile(new URL(glbFileName, directory)));
   const checks = {
     hash,
-    ...checkGlbParts(readGlbParts(glb), config.heroPropContactToleranceStuds),
+    ...checkGlbParts(readGlbParts(glb), heroConfig.heroPropContactToleranceStuds),
   };
   await writeFile(new URL(checksFileName, directory), JSON.stringify(checks, null, 2));
   return checks;

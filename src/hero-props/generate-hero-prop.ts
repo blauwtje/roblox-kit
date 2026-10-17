@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.ts";
+import { heroConfig } from "./hero-config.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
@@ -53,9 +54,9 @@ function structureProblems(recipe: HeroPropRecipe, structure: GlbStructure): str
   ] as const;
   axes.forEach(([axis, expected], index) => {
     const actual = structure.size[index] ?? Number.NaN;
-    if (!(Math.abs(actual - expected) <= config.heroPropSizeToleranceStuds)) {
+    if (!(Math.abs(actual - expected) <= heroConfig.heroPropSizeToleranceStuds)) {
       problems.push(
-        `${axis} is ${actual.toFixed(3)} studs, not the recipe's ${String(expected)} within ${String(config.heroPropSizeToleranceStuds)}`,
+        `${axis} is ${actual.toFixed(3)} studs, not the recipe's ${String(expected)} within ${String(heroConfig.heroPropSizeToleranceStuds)}`,
       );
     }
   });
