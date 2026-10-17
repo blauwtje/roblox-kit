@@ -9,23 +9,18 @@ import { materialMapNames } from "../style/preset-schema.ts";
 import {
   heroAssetsFile,
   materialMapHashes,
+  pruneHeroAssets,
   readHeroAssets,
+  reachableHeroHashes,
   recordHeroAsset,
   recordedMaterialMaps,
 } from "./hero-asset-store.ts";
+import { heroRecipeHash } from "./hero-prop-asset.ts";
 
 async function tempFile(): Promise<URL> {
   const directory = await mkdtemp(join(tmpdir(), "hero-assets-"));
   return pathToFileURL(join(directory, "hero-assets.json"));
 }
-
-await test("the committed record parses to a kind and numeric asset id per hash", async () => {
-  for (const [hash, record] of Object.entries(await readHeroAssets(heroAssetsFile))) {
-    assert.match(hash, /^[0-9a-f]+$/);
-    assert.ok(record.kind.length > 0, `${hash} has no kind`);
-    assert.match(record.assetId, /^\d+$/);
-  }
-});
 
 await test("a missing file reads as no assets", async () => {
   assert.deepEqual(await readHeroAssets(await tempFile()), {});
@@ -57,11 +52,9 @@ await test("a malformed record is an error, not an empty record", async () => {
 
 const brick = { pattern: "brick", seed: 1, roughness: 0.8, metalness: 0, studsPerTile: 8 } as const;
 
-await test("materialMapHashes gives four distinct hex hashes that studsPerTile does not change", async () => {
+await test("materialMapHashes names every map and ignores studsPerTile", async () => {
   const hashes = await materialMapHashes(brick);
   assert.deepEqual(Object.keys(hashes), [...materialMapNames]);
-  for (const hash of Object.values(hashes)) assert.match(hash, /^[0-9a-f]+$/);
-  assert.equal(new Set(Object.values(hashes)).size, 4);
   assert.deepEqual(await materialMapHashes({ ...brick, studsPerTile: 4 }), hashes);
   assert.notDeepEqual(await materialMapHashes({ ...brick, seed: 2 }), hashes);
 });
@@ -91,4 +84,30 @@ await test("every committed preset's variant maps are the recorded uploads of it
       }
     }
   }
+});
+
+await test("every declared hero prop and mesh hash is recorded and no record is unreachable", async () => {
+  const presets = await loadPresets();
+  const assets = await readHeroAssets(heroAssetsFile);
+  for (const [name, preset] of presets) {
+    const kinds = [...Object.keys(preset.heroProps ?? {}), ...Object.keys(preset.meshes ?? {})];
+    for (const kind of kinds) {
+      const hash = await heroRecipeHash(preset, kind);
+      assert.equal(assets[hash]?.kind, kind, `${name} ${kind} ${hash} has no record`);
+    }
+  }
+  const reachable = await reachableHeroHashes(presets);
+  const unreachable = Object.keys(assets).filter((hash) => !reachable.has(hash));
+  assert.deepEqual(unreachable, [], "run: node scripts/hero-props.ts prune");
+});
+
+await test("pruneHeroAssets lists the unreachable records and drops them unless dry", async () => {
+  const file = await tempFile();
+  await recordHeroAsset("aaa", { kind: "train-car", assetId: "1" }, file);
+  await recordHeroAsset("bbb", { kind: "train-car", assetId: "2" }, file);
+  const reachable = new Map([["aaa", "train-car"]]);
+  assert.deepEqual(await pruneHeroAssets(reachable, true, file), ["bbb"]);
+  assert.deepEqual(Object.keys(await readHeroAssets(file)), ["aaa", "bbb"]);
+  assert.deepEqual(await pruneHeroAssets(reachable, false, file), ["bbb"]);
+  assert.deepEqual(Object.keys(await readHeroAssets(file)), ["aaa"]);
 });

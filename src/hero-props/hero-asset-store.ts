@@ -1,9 +1,21 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { z } from "zod";
-import { materialMapNames, type MaterialRecipe } from "../style/preset-schema.ts";
+import {
+  materialMapNames,
+  spriteNames,
+  type MaterialRecipe,
+  type Preset,
+} from "../style/preset-schema.ts";
+import { spriteHashes, spriteKind } from "../lighting/ambient-sprites.ts";
+import { heroRecipeHash } from "./hero-prop-asset.ts";
+import { trimRecipes, propRecipeKindsOf } from "./prop-recipes.ts";
 import { recipeHash } from "./recipe-hash.ts";
 
 /** The committed record of uploaded hero props and material maps, keyed by recipe hash. */
+/** The one hash of a hero prop kind under a preset, shared by the store and the generator. */
+export const heroRecipeHashOf = (preset: Preset, kind: string): Promise<string> =>
+  heroRecipeHash(preset, kind);
+
 export const heroAssetsFile = new URL("./hero-assets.json", import.meta.url);
 
 const heroAssetSchema = z.strictObject({
@@ -98,4 +110,49 @@ export async function recordedMaterialMaps(
     if (asset?.kind === materialMapKind(map)) recorded[map] = asset.assetId;
   }
   return { hashes, recorded };
+}
+
+async function addMaterialHashes(preset: Preset, reachable: Map<string, string>): Promise<void> {
+  for (const surface of Object.values(preset.surfaces)) {
+    if (surface.texture === undefined) continue;
+    const hashes = await materialMapHashes(surface.texture);
+    for (const map of materialMapNames) reachable.set(hashes[map], materialMapKind(map));
+  }
+}
+
+/** Every hash a current preset can reach, with its record kind: hero props, meshes, props, trims, material maps and sprites. */
+export async function reachableHeroHashes(
+  presets: ReadonlyMap<string, Preset>,
+): Promise<Map<string, string>> {
+  const reachable = new Map<string, string>();
+  for (const preset of presets.values()) {
+    const kinds = [
+      ...Object.keys(preset.heroProps ?? {}),
+      ...Object.keys(preset.meshes ?? {}),
+      ...propRecipeKindsOf(preset),
+      ...Object.keys(trimRecipes),
+    ];
+    for (const kind of kinds) reachable.set(await heroRecipeHashOf(preset, kind), kind);
+    await addMaterialHashes(preset, reachable);
+  }
+  const sprites = await spriteHashes();
+  for (const sprite of spriteNames) reachable.set(sprites[sprite], spriteKind(sprite));
+  return reachable;
+}
+
+/** The hashes of records not in `reachable`, dropped from the file unless `dryRun`. */
+export async function pruneHeroAssets(
+  reachable: ReadonlyMap<string, string>,
+  dryRun: boolean,
+  file: URL = heroAssetsFile,
+): Promise<string[]> {
+  const assets = await readHeroAssets(file);
+  const stale = Object.keys(assets).filter((hash) => !reachable.has(hash));
+  if (!dryRun && stale.length > 0) {
+    await writeHeroAssets(
+      Object.fromEntries(Object.entries(assets).filter(([hash]) => reachable.has(hash))),
+      file,
+    );
+  }
+  return stale;
 }

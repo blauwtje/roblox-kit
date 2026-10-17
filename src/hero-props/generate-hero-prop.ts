@@ -6,7 +6,7 @@ import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
 import { runBlender } from "./blender-path.ts";
 import { heroRecipeOf } from "./prop-recipes.ts";
-import { recipeHash } from "./recipe-hash.ts";
+import { heroRecipeHashOf } from "./hero-asset-store.ts";
 
 const repositoryRoot = new URL("../../", import.meta.url);
 const generatorScript = new URL("./generate-hero-prop.py", import.meta.url);
@@ -76,8 +76,7 @@ export async function generateHeroProp(
   for (const part of heroParts(recipe.operations)) {
     roleColors[part.shape.role] = preset.surfaces[part.shape.role].color;
   }
-  const generatorSource = await readFile(generatorScript, "utf8");
-  const hash = recipeHash({ recipe, roleColors }, generatorSource);
+  const hash = await heroRecipeHashOf(preset, kind);
   const directory = new URL(
     `${config.heroPropsFolder}/${presetName}-${kind}-${hash}/`,
     repositoryRoot,

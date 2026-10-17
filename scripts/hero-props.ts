@@ -12,9 +12,11 @@ import {
   scriptedMeshHash,
 } from "../src/hero-props/generate-scripted-mesh.ts";
 import { readGlbStructure, type GlbStructure } from "../src/hero-props/glb-structure.ts";
-import { heroPropAsset } from "../src/hero-props/hero-prop-asset.ts";
+import { heroPropAsset, heroRecipeHash } from "../src/hero-props/hero-prop-asset.ts";
 import {
   materialRecipeScript,
+  pruneHeroAssets,
+  reachableHeroHashes,
   recordedMaterialMaps,
   recordHeroAsset,
 } from "../src/hero-props/hero-asset-store.ts";
@@ -36,7 +38,6 @@ import {
 } from "../src/hero-props/open-cloud-upload.ts";
 import { renderHeroProp } from "../src/hero-props/render-hero-prop.ts";
 import { propRecipeKindsOf, trimRecipes } from "../src/hero-props/prop-recipes.ts";
-import { recipeHash } from "../src/hero-props/recipe-hash.ts";
 import {
   drawSprite,
   recordedSprites,
@@ -45,7 +46,6 @@ import {
 } from "../src/lighting/ambient-sprites.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
 import {
-  heroParts,
   materialMapNames,
   spriteNames,
   type MaterialRecipe,
@@ -80,19 +80,8 @@ async function presetOf(name: string): Promise<Preset> {
 }
 
 async function currentHash(preset: Preset, kind: string): Promise<string | undefined> {
-  const declaration = preset.meshes?.[kind];
-  if (declaration !== undefined) return scriptedMeshHash(kind, declaration);
-  const recipe = preset.heroProps?.[kind];
-  if (recipe === undefined) return undefined;
-  const roleColors: Record<string, string> = {};
-  for (const part of heroParts(recipe.operations)) {
-    roleColors[part.shape.role] = preset.surfaces[part.shape.role].color;
-  }
-  const source = await readFile(
-    new URL("../src/hero-props/generate-hero-prop.py", import.meta.url),
-    "utf8",
-  );
-  return recipeHash({ recipe, roleColors }, source);
+  const declared = preset.meshes?.[kind] ?? preset.heroProps?.[kind];
+  return declared === undefined ? undefined : heroRecipeHash(preset, kind);
 }
 
 async function reusable(
@@ -495,6 +484,12 @@ async function prune(values: Values): Promise<number> {
     if (!dryRun) await rm(new URL(`${name}/`, generatedFolder), { recursive: true, force: true });
     console.log(`${dryRun ? "would remove" : "removed"} ${name}`);
   }
+  if (only === undefined) {
+    const stale = await pruneHeroAssets(await reachableHeroHashes(presets), dryRun);
+    for (const hash of stale) {
+      console.log(`${dryRun ? "would drop" : "dropped"} record ${hash}`);
+    }
+  }
   return 0;
 }
 
@@ -544,7 +539,7 @@ const commands = {
   },
   prune: {
     usage:
-      "prune [--preset <name>] [--dry-run]  delete generated folders of stale hero prop and mesh hashes",
+      "prune [--preset <name>] [--dry-run]  delete generated folders and (without --preset) records of stale hashes",
     options: { preset: { type: "string" }, "dry-run": { type: "boolean" } },
     run: prune,
   },
