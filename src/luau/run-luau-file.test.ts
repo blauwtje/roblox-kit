@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { z } from "zod";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { config } from "../config.ts";
-import { runLuauFile } from "./run-luau-file.ts";
+import { runLuauBatch, runLuauFile } from "./run-luau-file.ts";
 
 const pingSchema = z.object({ pong: z.boolean(), echo: z.string() });
 const studios = [{ id: "studio-a", name: "Place A" }];
@@ -80,6 +80,39 @@ await test("rejects a file that is not bundled", async () => {
       resultSchema: z.object({}),
     }),
     /ENOENT/,
+  );
+});
+
+await test("runLuauBatch sends one call and parses each entry of the returned array", async () => {
+  const connection = connectionReturning('[{"pong":true,"echo":"a"},{"pong":false,"echo":"b"}]');
+  const [first, second] = await runLuauBatch({
+    connection,
+    studioId: "studio-a",
+    datamodelType: "Edit",
+    entries: [
+      { fileName: "ping.luau", arguments: { message: "a" }, resultSchema: pingSchema },
+      { fileName: "ping.luau", arguments: { message: "b" }, resultSchema: pingSchema },
+    ],
+  });
+  assert.deepEqual(first, { pong: true, echo: "a" });
+  assert.equal(second.pong, false);
+  assert.equal(connection.requests.length, 1);
+  const code = connection.requests[0]?.arguments["code"];
+  assert.ok(typeof code === "string");
+  assert.ok(code.includes('JSONDecode([[{"message":"a"}]])'));
+  assert.ok(code.includes('JSONDecode([[{"message":"b"}]])'));
+  assert.ok(code.includes("results[2] = (function(...)"));
+});
+
+await test("runLuauBatch rejects when an entry has the wrong shape", async () => {
+  await assert.rejects(
+    runLuauBatch({
+      connection: connectionReturning('[{"pong":"yes","echo":"a"}]'),
+      studioId: "studio-a",
+      datamodelType: "Edit",
+      entries: [{ fileName: "ping.luau", arguments: {}, resultSchema: pingSchema }],
+    }),
+    /wrong shape[\s\S]*pong/,
   );
 });
 
