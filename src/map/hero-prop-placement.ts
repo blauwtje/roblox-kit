@@ -1,4 +1,8 @@
-import { recordedHeroAsset, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
+import {
+  heroRecipeHash,
+  recordedHeroAsset,
+  type HeroPropSources,
+} from "../hero-props/hero-prop-asset.ts";
 import {
   propRecipeKind,
   propRecipes,
@@ -178,7 +182,8 @@ export async function heroPropsOf<Prop extends PlacedProp>(
   sources: HeroPropSources = {},
 ): Promise<{ props: Prop[]; heroProps: HeroPropRecord[]; warnings: string[] }> {
   const { style } = preset;
-  const declared = await declaredMeshesOf(preset, props, sources);
+  const assetIds = new Map<string, string | undefined>();
+  const declared = await declaredMeshesOf(preset, props, sources, assetIds);
   props = declared.props;
   const rooms = spec.rooms.flatMap((room) => {
     const kinds =
@@ -209,8 +214,9 @@ export async function heroPropsOf<Prop extends PlacedProp>(
         );
         continue;
       }
-      const { hash, assetId } = await recordedHeroAsset(preset.base, kind, sources);
+      const assetId = await cachedAssetId(assetIds, kind, preset.base, kind, sources);
       if (assetId === undefined) {
+        const hash = await heroRecipeHash(preset.base, kind);
         warnings.push(
           `Room "${room.name}" keeps its ${recipe.replaces} set piece instead of hero prop ${kind} (recipe ${hash}): it has no recorded asset; generate and upload it from a clone of the roblox-kit repo.`,
         );
@@ -232,6 +238,7 @@ export async function heroPropsOf<Prop extends PlacedProp>(
     preset,
     props.filter((prop) => !replaced.has(prop)),
     sources,
+    assetIds,
   );
   return {
     props: meshes.props,
@@ -293,28 +300,26 @@ async function declaredMeshesOf<Prop extends PlacedProp>(
   preset: HeroPreset,
   props: Prop[],
   sources: HeroPropSources,
+  assetIds: Map<string, string | undefined>,
 ): Promise<{ props: Prop[]; heroProps: HeroPropRecord[] }> {
-  const declarations = Object.entries(preset.base.meshes ?? {});
-  const assetIds = new Map<string, string | undefined>();
+  const byTarget = new Map<string, { meshKind: string; target: MeshTarget }[]>();
+  for (const [meshKind, { targets }] of Object.entries(preset.base.meshes ?? {})) {
+    for (const target of targets) {
+      const entries = byTarget.get(target.replaces) ?? [];
+      byTarget.set(target.replaces, [...entries, { meshKind, target }]);
+    }
+  }
   const kept: Prop[] = [];
   const heroProps: HeroPropRecord[] = [];
   for (const prop of props) {
-    const match = declarations.flatMap(([meshKind, { targets }]) =>
-      targets
-        .filter(
-          (target) =>
-            target.replaces === `prop:${prop.kind}` &&
-            (target.label === undefined || prop.attributes?.Label === target.label),
-        )
-        .map((target) => ({ meshKind, target })),
-    )[0];
-    for (const [meshKind, { targets }] of declarations) {
-      for (const target of targets) {
-        if (target.replaces !== `onto:prop:${prop.kind}`) continue;
-        if (target.label !== undefined && prop.attributes?.Label !== target.label) continue;
-        const assetId = await cachedAssetId(assetIds, meshKind, preset.base, meshKind, sources);
-        if (assetId !== undefined) heroProps.push(standingRecord(meshKind, assetId, target, prop));
-      }
+    const labelled = ({ target }: { target: MeshTarget }) =>
+      target.label === undefined || prop.attributes?.Label === target.label;
+    const match = byTarget.get(`prop:${prop.kind}`)?.find(labelled);
+    for (const { meshKind, target } of (byTarget.get(`onto:prop:${prop.kind}`) ?? []).filter(
+      labelled,
+    )) {
+      const assetId = await cachedAssetId(assetIds, meshKind, preset.base, meshKind, sources);
+      if (assetId !== undefined) heroProps.push(standingRecord(meshKind, assetId, target, prop));
     }
     if (match === undefined) {
       kept.push(prop);
@@ -350,8 +355,8 @@ async function propMeshesOf<Prop extends PlacedProp>(
   preset: HeroPreset,
   props: Prop[],
   sources: HeroPropSources,
+  assetIds: Map<string, string | undefined>,
 ): Promise<{ props: Prop[]; heroProps: HeroPropRecord[] }> {
-  const assetIds = new Map<string, string | undefined>();
   const kept: Prop[] = [];
   const heroProps: HeroPropRecord[] = [];
   for (const prop of props) {

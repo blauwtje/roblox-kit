@@ -137,6 +137,42 @@ await test("the recipe hash repeats generate-hero-prop's computation over the re
   assert.match(hash, /^[0-9a-f]{12}$/);
 });
 
+function trainCarInTwoRooms(style: Preset): Preset {
+  const roomTypes = Object.fromEntries(
+    Object.entries(style.roomTypes ?? {}).map(([name, roomType]) => [
+      name,
+      name === "platform" || name === "concourse"
+        ? { ...roomType, heroProps: ["train-car"] }
+        : roomType,
+    ]),
+  );
+  return { ...style, roomTypes };
+}
+
+await test("a hero prop listed by two rooms reads once", async () => {
+  const { assetsFile } = await fakeSources({ recorded: true });
+  let reads = 0;
+  const sources: HeroPropSources = {
+    get assetsFile() {
+      reads += 1;
+      return assetsFile;
+    },
+  };
+  const rooms = spec.rooms.filter((room) =>
+    ["platform", "concourse"].includes(String(room.roomType)),
+  );
+  assert.equal(rooms.length, 2);
+  const beds = rooms.map((room, seed) => ({
+    ...trackBed,
+    pivot: { x: room.x, y: trackBed.pivot.y, z: room.z },
+    seed,
+  }));
+  const styled = { name: "train-station", base, style: trainCarInTwoRooms(base) };
+  const result = await heroPropsOf(spec, styled, beds, sources);
+  assert.equal(result.heroProps.filter((hero) => hero.assetId === "123456").length, 2);
+  assert.equal(reads, 1);
+});
+
 await test("a recorded asset takes the replaced set piece's slot, standing on its base, turned by its yaw", async () => {
   const sources = await fakeSources({ recorded: true });
   const result = await heroPropsOf(spec, preset, placed.props, sources);
