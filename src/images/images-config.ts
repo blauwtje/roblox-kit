@@ -5,6 +5,7 @@ export const imagesConfig = Object.freeze({
   defaultFontFamily: "Inter",
   defaultScale: 1,
   maxScale: 8,
+  maxImagePixels: 1024,
   alphaBleedThreshold: 128,
   alphaBleedPasses: 16,
   alphaBleedMinPasses: 8,
