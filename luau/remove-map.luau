@@ -8,7 +8,6 @@ type Arguments = {
 	roles: { string },
 }
 
--- build-map.luau stores vectors as `{ x, y, z }` objects, not arrays.
 type Vector = { x: number, y: number, z: number }
 
 -- A heightmap fill has a size, so it clears as the block of its box.
@@ -27,15 +26,13 @@ local ORIGINAL_ATTRIBUTE_NAME = "RobloxKitOriginalLighting"
 local arguments: Arguments = ...
 local HttpService = game:GetService("HttpService")
 local MaterialService = game:GetService("MaterialService")
+local mapHelpers = require("./shared/map-helpers")
+local toVector3 = mapHelpers.toVector3
 
 local folder = workspace:FindFirstChild(arguments.mapsFolderName)
-local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
-if not folder or not model or not model:IsA("Model") then
+local model = mapHelpers.findMapModel(arguments.mapsFolderName, arguments.mapId)
+if not folder or not model then
 	error(`Map "{arguments.mapId}" is not under Workspace.{arguments.mapsFolderName}; nothing was removed.`, 0)
-end
-
-local function toVector3(vector: Vector): Vector3
-	return Vector3.new(vector.x, vector.y, vector.z)
 end
 
 local encodedFills = model:GetAttribute(TERRAIN_ATTRIBUTE_NAME)

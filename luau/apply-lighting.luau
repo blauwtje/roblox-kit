@@ -92,13 +92,13 @@ local POST_EFFECTS: { { key: string, className: string, properties: { string } }
 }
 
 local arguments: Arguments = ...
+local mapHelpers = require("./shared/map-helpers")
 local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
 
 local function findMapModel(): Model
-	local folder = workspace:FindFirstChild(arguments.mapsFolderName)
-	local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
-	if not model or not model:IsA("Model") then
+	local model = mapHelpers.findMapModel(arguments.mapsFolderName, arguments.mapId)
+	if model == nil then
 		error(
 			`Map "{arguments.mapId}" is not under Workspace.{arguments.mapsFolderName}; build it before applying lighting.`,
 			0

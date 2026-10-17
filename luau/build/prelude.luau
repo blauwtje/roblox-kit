@@ -2,7 +2,6 @@
 -- Helpers every file in luau/build/ shares; build_map sends it inside the file of the running phase
 -- (each file reads `local buildPrelude = require("./prelude")`, which the bundler inlines) and
 -- calls it with its own arguments. `run` wraps the phase in one undo recording and encodes the result.
-type Vector = { x: number, y: number, z: number }
 
 type HeroLoadFailure = { kind: string, assetId: string, error: string }
 
@@ -14,10 +13,8 @@ type PreludeArguments = {
 
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local HttpService = game:GetService("HttpService")
-
-local function toVector3(vector: Vector): Vector3
-	return Vector3.new(vector.x, vector.y, vector.z)
-end
+local mapHelpers = require("../shared/map-helpers")
+local toVector3 = mapHelpers.toVector3
 
 local function materialNamed(materialName: string): Enum.Material
 	return (Enum.Material:FromName(materialName) :: any) :: Enum.Material
@@ -35,9 +32,8 @@ end
 
 return function(arguments: PreludeArguments)
 	local function findModel(): Model
-		local folder = workspace:FindFirstChild(arguments.mapsFolderName)
-		local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
-		if not model or not model:IsA("Model") then
+		local model = mapHelpers.findMapModel(arguments.mapsFolderName, arguments.mapId)
+		if not model then
 			error(
 				`Map "{arguments.mapId}" is not under Workspace.{arguments.mapsFolderName}; the shell phase builds it first.`,
 				0

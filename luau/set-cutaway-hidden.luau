@@ -13,14 +13,14 @@ type Arguments = {
 }
 
 local arguments: Arguments = ...
+local mapHelpers = require("./shared/map-helpers")
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local ATTRIBUTE = arguments.originalTransparencyAttribute
 
 local function findMapModel(): Model
-	local folder = workspace:FindFirstChild(arguments.mapsFolderName)
-	local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
-	if model == nil or not model:IsA("Model") then
+	local model = mapHelpers.findMapModel(arguments.mapsFolderName, arguments.mapId)
+	if model == nil then
 		error(
 			`No map "{arguments.mapId}" under Workspace.{arguments.mapsFolderName}. Call build_map with this mapId first, or use the mapId it returned.`,
 			0

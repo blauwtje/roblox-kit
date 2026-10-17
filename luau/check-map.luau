@@ -44,6 +44,7 @@ type Box = {
 local TERRAIN_VOXEL_STUDS = 4
 
 local arguments: Arguments = ...
+local mapHelpers = require("./shared/map-helpers")
 local MAX_ISSUES_PER_KIND = arguments.maxIssuesPerKind
 local FLOOR_NAME_SUFFIX = arguments.floorNameSuffix
 local PathfindingService = game:GetService("PathfindingService")
@@ -54,9 +55,8 @@ local function toPosition(point: Vector3): Position
 end
 
 local function findMapModel(): Model
-	local folder = workspace:FindFirstChild(arguments.mapsFolderName)
-	local model = if folder then folder:FindFirstChild(arguments.mapId) else nil
-	if model == nil or not model:IsA("Model") then
+	local model = mapHelpers.findMapModel(arguments.mapsFolderName, arguments.mapId)
+	if model == nil then
 		error(
 			`No map "{arguments.mapId}" under Workspace.{arguments.mapsFolderName}. Call build_map with this mapId first, or use the mapId it returned.`,
 			0
@@ -466,8 +466,8 @@ local function findPlacement(model: Model, boxes: { Box }, floors: { BasePart })
 		end
 		for _, doorway in arguments.doorways do
 			local clearance = {
-				min = Vector3.new(doorway.min.x, doorway.min.y, doorway.min.z),
-				max = Vector3.new(doorway.max.x, doorway.max.y, doorway.max.z),
+				min = mapHelpers.toVector3(doorway.min),
+				max = mapHelpers.toVector3(doorway.max),
 			}
 			if interpenetrate(bounds, clearance) then
 				addIssue({
@@ -529,7 +529,7 @@ local function collectTargets(floors: { BasePart }): { Target }
 	for _, objective in arguments.objectives do
 		table.insert(targets, {
 			description = `objective "{objective.name}"`,
-			point = Vector3.new(objective.x, objective.y, objective.z),
+			point = mapHelpers.toVector3(objective),
 			floor = nil,
 		})
 	end

@@ -123,3 +123,21 @@ await test("a result ending in the truncation marker is an actionable error, not
     /truncated it\. Narrow the request/,
   );
 });
+
+await test("inlines the shared map helpers into every file that requires them", async () => {
+  for (const fileName of ["check-map.luau", "remove-map.luau", "build/shell.luau"]) {
+    const connection = connectionReturning("{}");
+    await runLuauFile({
+      connection,
+      studioId: "studio-a",
+      fileName,
+      datamodelType: "Edit",
+      arguments: {},
+      resultSchema: z.object({}),
+    });
+    const code = connection.requests[0]?.arguments["code"];
+    assert.ok(typeof code === "string");
+    assert.ok(code.includes("findMapModel = function(folderName: string, mapId: string): Model?"));
+    assert.ok(!/^\s*local \w+ = require\(/m.test(code));
+  }
+});
