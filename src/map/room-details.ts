@@ -3,7 +3,7 @@ import type { TrimProfileKind } from "../hero-props/prop-recipes.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import { progressionFactor, progressionScale, roomProgression } from "../style/resolve-style.ts";
 import type { PartRecord, Vector } from "./map-layout.ts";
-import type { MapSpec, RoomSpec } from "./map-spec.ts";
+import { measureRoom, type MapSpec, type RoomMeasure, type RoomSpec } from "./map-spec.ts";
 import { surfacePatternTiles } from "./surface-patterns.ts";
 import type { PatternSurface } from "./surface-patterns.ts";
 
@@ -16,11 +16,18 @@ export type DetailSurfaces = Pick<Preset["surfaces"], "wall" | "trim" | "accent"
  * One decorative axis-aligned part. It never collides, fires touch events or answers spatial queries,
  * so it cannot block a player or change what `check_map` measures.
  */
+export interface DetailGroup {
+  kind: "arch" | "crown" | "baseboard";
+  id: string;
+  piece?: "left" | "right" | "lintel";
+}
+
 export interface DetailPart extends Omit<PartRecord, "kind" | "role"> {
   kind: "trim" | "stripe" | "pillar" | "arch" | "tile";
   role: "wall" | "trim" | "accent";
   /** The profile mesh that stands in for this box when its asset is recorded; the box is the fallback. */
   profile?: TrimProfile;
+  group?: DetailGroup;
   canCollide: false;
   canTouch: false;
   canQuery: false;
@@ -63,12 +70,6 @@ export const detailDimensions = Object.freeze({
   archLipStuds: 0.2,
 });
 
-interface RoomMeasure {
-  wallHeight: number;
-  wallThickness: number;
-  doorWidth: number;
-}
-
 /** A band along the inner face of a wall stretch. */
 /** The trim bands along every wall stretch, named `<room>-<band>-<side>-<number>` after their wall. */
 export const wallBandNames = ["baseboard", "crown", "stripe"] as const;
@@ -82,15 +83,6 @@ interface Band {
   centerHeight: number;
   /** The profile mesh of the band, with its roll; the stripe has none. */
   profile?: { kind: TrimProfileKind; roll: number };
-}
-
-/** Room settings win over map settings, which win over the config defaults: the rule `layoutMap` uses. */
-function measureRoom(spec: MapSpec, room: RoomSpec): RoomMeasure {
-  return {
-    wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
-    wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
-    doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
-  };
 }
 
 function isSide(text: string): text is Side {
@@ -110,7 +102,10 @@ function wallLabel(wall: PartRecord): { side: Side; label: string } {
 }
 
 function decorativePart(
-  fields: Pick<DetailPart, "name" | "room" | "kind" | "role" | "position" | "size" | "profile">,
+  fields: Pick<
+    DetailPart,
+    "name" | "room" | "kind" | "role" | "position" | "size" | "profile" | "group"
+  >,
   surfaces: DetailSurfaces,
 ): DetailPart {
   const surface = surfaces[fields.role];
@@ -220,6 +215,10 @@ function bandParts(
                     roll: band.profile.roll,
                     size: { x: band.depth, y: band.height, z: end - start },
                   },
+                  group: {
+                    kind: band.name as "crown" | "baseboard",
+                    id: `${room.name}-${band.name}-${label}`,
+                  },
                 }),
           },
           surfaces,
@@ -315,7 +314,7 @@ function archParts(
   const across = wallAcross + towardCenter * (measure.wallThickness / 2 + archDepthStuds / 2);
   const jambOffset = measure.doorWidth / 2 - archLipStuds + archJambWidthStuds / 2;
   const jambs = [-1, 1].map((jambSign) => ({
-    piece: jambSign < 0 ? "left" : "right",
+    piece: jambSign < 0 ? ("left" as const) : ("right" as const),
     along: door.offset + jambSign * jambOffset,
     length: archJambWidthStuds,
     height: openingHeight,
@@ -323,7 +322,7 @@ function archParts(
     roll: -90,
   }));
   const lintel = {
-    piece: "lintel",
+    piece: "lintel" as const,
     along: door.offset,
     length: measure.doorWidth - 2 * archLipStuds,
     height: archLintelHeightStuds,
@@ -336,6 +335,7 @@ function archParts(
         name: `${room.name}-arch-${String(doorNumber)}-${piece.piece}`,
         room: room.name,
         kind: "arch",
+        group: { kind: "arch", id: `${room.name}-arch-${String(doorNumber)}`, piece: piece.piece },
         role: "trim",
         position: placeOnWall(room, runsAlongX, piece.along, across, piece.centerHeight),
         size: wallSizeOf(runsAlongX, piece.length, piece.height, archDepthStuds),

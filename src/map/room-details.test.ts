@@ -130,6 +130,10 @@ await test("a doorway splits the bands of its wall and gets two jambs and a lint
     archPieces.map((detail) => detail.name),
     ["hall-arch-1-left", "hall-arch-1-right", "hall-arch-1-lintel"],
   );
+  assert.deepEqual(
+    archPieces.map((detail) => detail.group),
+    ["left", "right", "lintel"].map((piece) => ({ kind: "arch", id: "hall-arch-1", piece })),
+  );
   const lintel = named(details, "hall-arch-1-lintel");
   assert.equal(lintel.position.x, 0);
   assert.equal(lintel.position.y, 12 - detailDimensions.archLintelHeightStuds / 2);
@@ -272,4 +276,13 @@ await test("floor tiles come only when asked for and leave the spawn pad free", 
       Math.abs(tile.position.z - spawn.position.z) >= (tile.size.z + spawn.size.z) / 2;
     assert.ok(clear, `${tile.name} covers the spawn pad`);
   }
+});
+
+await test("a profiled band carries its group and a stripe has none", () => {
+  const details = detailsOf(closedRoom);
+  assert.deepEqual(named(details, "box-crown-east-1").group, {
+    kind: "crown",
+    id: "box-crown-east-1",
+  });
+  assert.equal(named(details, "box-stripe-south-1").group, undefined);
 });
