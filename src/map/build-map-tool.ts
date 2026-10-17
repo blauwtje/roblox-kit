@@ -16,20 +16,51 @@ export { propsOf } from "./build-plan.ts";
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
 
+const relationMapSpecShape = relationMapSpecSchema.shape;
 const presets = await loadPresets();
 
-const buildMapInput = z.strictObject({
-  ...relationMapSpecSchema.shape,
+const fieldNotes = {
+  mapId:
+    "Handle of the map Model; building the same id again replaces it. Absent: the style preset name.",
+  rooms:
+    "The rooms, each with a size, doors and a center or a relation. Absent: one room per preset room type.",
+  terrain: "Terrain fills (block, ball, wedge or heightmap) written to Terrain.",
+  style:
+    "{ preset, overrides }: the genre preset that furnishes, paints and lights the map. A style alone is enough.",
+  seed: "Seeds every random choice, so the same seed gives the same map.",
+  objectives: "Goals the map should support, checked by check_map.",
+  performanceBudget: "Limits on parts, lights and the like that check_map reports against.",
+  npcs: "Opt-in people: { density 0-1, seed, maxTotal }. Off unless set.",
+  clutter: "Opt-in loose clutter. Off by default.",
+  signage: "Opt-in signs. Off by default.",
+  motion: "Opt-in moving set pieces. Off by default.",
+  floorMaterial: "Default floor material for all rooms.",
+  wallMaterial: "Default wall material for all rooms.",
+  wallHeight: "Default wall height in studs.",
+  wallThickness: "Default wall thickness in studs.",
+  doorWidth: "Default door width in studs.",
+  studioId: "Which Studio builds the map; optional while exactly one is connected.",
+} as const;
+
+const specShape = {
+  ...relationMapSpecShape,
   mapId: z.string().min(1).optional(),
-  rooms: relationMapSpecSchema.shape.rooms.optional(),
-  /** Which Studio builds the map; optional while exactly one is connected. */
+  rooms: relationMapSpecShape.rooms.optional(),
   studioId: z.string().min(1).optional(),
-  /**
-   * Uses the recorded asset ids (hero props, trim meshes, ambient sprites and the baked maps of material
-   * variants) that belong to the author's own places. Off by default: those ids do not load for other
-   * users, so the map is built from Luau generators and plain materials, with no missing-asset warnings.
-   */
-  useRecordedAssets: z.boolean().default(false),
+};
+const describedShape = Object.fromEntries(
+  Object.entries(specShape).map(([name, field]) => [
+    name,
+    field.describe(fieldNotes[name as keyof typeof fieldNotes]),
+  ]),
+) as typeof specShape;
+
+const buildMapInput = z.strictObject({
+  ...describedShape,
+  useRecordedAssets: z
+    .boolean()
+    .default(false)
+    .describe("Opt-in: use recorded asset ids (hero props, trim meshes, sprites). Off by default."),
 });
 
 const buildMapOutput = z.strictObject({
@@ -93,14 +124,10 @@ export const buildMapTool: ToolDefinition<typeof buildMapInput, typeof buildMapO
   name: "build_map",
   title: "Build map",
   description:
-    `Builds a map from a data spec in the open place: per room an anchored floor, walls with door gaps and an optional SpawnLocation, plus terrain fills. With a style each room also gets a ceiling (tagged ${config.ceilingTag}, not colliding), baseboard, crown, stripe, pillar and arch details in the preset's trim and accent colors (none collide) and props from the preset's kit, each a ProceduralModel that shares one generator ModuleScript per kind in the map Model and is generated before the build returns; without a style none of these are built. A styled room marked exterior (optionally with facadeFloors storeys) also gets a facade on the outer face of its walls: an accent band between storeys, a framed window per bay and storey and a trim cornice, none colliding. A room gives its center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that sets it beside another room on the 5-stud grid, joined by a hallway room named "<to>-<room>-hallway" that is one more zone. An optional style { preset, overrides } names a genre preset, is checked before Studio is asked, paints parts in its palette colors and materials, hangs point lights from its light roles under each room's floor (each light within ${String(config.lightCeilingDropStuds)} stud of a ceiling also gets a ${String(config.lightFixtureSizeStuds)}-stud Neon fixture part against the ceiling, tagged ${config.ceilingTag} so it hides with the ceilings), applies its lighting recipe to Lighting (the previous values are stored on the map Model for restore) and gives a role that names a MaterialVariant one flat MaterialVariant in MaterialService, named after the map and role and reused on rebuild; an optional seed defaults to ${String(config.defaultSeed)}. ` +
-    `Recorded assets are off by default: with useRecordedAssets false (the default) hero props, trim meshes, ambient sprite textures and the baked maps of MaterialVariants are all skipped, the map is built from Luau generators and plain materials and no missing-asset or missing-sprite warning is returned. Set useRecordedAssets true only for the author's own places, where those ids load; the rest of this paragraph and the next two describe that mode. ` +
-    `A room type that lists hero props gets each one's uploaded asset, found by recipe hash in hero-assets.json, in place of the set piece it replaces: loaded with InsertService, scaled to its recipe size, its MeshParts colored from the surface role each is named after, anchored and not colliding. A declared mesh whose target is onto:prop:<kind> instead stands on top of that prop and leaves it in place. build_map only reads recorded assets and never uploads; an asset that fails to load builds the set piece instead with a warning naming the asset id and error, except an onto:prop:<kind> mesh, which builds nothing in its place and warns the same way; a hero prop with no recorded asset keeps its set piece and a warning says to generate and upload it from a clone of the roblox-kit repo. Each other prop whose kind's prop-<kind> recipe has a recorded asset is that mesh instead, stretched on each axis to the prop's box; a kind with no recorded asset keeps its ProceduralModel, with no warning. ` +
-    `The map is one Model named mapId under Workspace.${config.mapsFolderName}, and mapId is the handle that later tools take. ` +
-    `The handle lasts while that Model exists in the open place, including across calls and saves. Calling build_map again with the same mapId ` +
-    `replaces the Model and clears the terrain its previous build filled. A terrain fill of shape heightmap { center, size, material, layers, seed, noiseScaleStuds, erosion } is seeded fractal noise with particle hydraulic erosion inside its box (minimum corner and size on the 4-stud voxel grid, size.y the tallest height above the box bottom), written with WriteVoxels in chunks after the shell phase: sand low, snow high, rock on steep slopes, grass elsewhere, and the fill's material below. Studio may not offer an undo step (undo recording is unavailable to execute_luau). ` +
-    `A style with ambientEffects also gets, per room of a listed type (or every room), a ParticleEmitter at the floor's center or a Beam across the room from west to east under Attachments on the floor part, textured with its sprite (drawn by the repo's own code and recorded by hash in hero-assets.json); a sprite with no recorded asset builds its emitters untextured with a warning. A style with idleAnimations also gives each set piece of a listed kind sway attributes and the map one server Script that sways them about the top or bottom of their box during play. The build runs in seven phases (shell, floors and ceilings, openings, surfaces, props, lighting, ambient effects), reporting progress after each; a phase that fails stops the build and may leave a partial Model, which building again with the same mapId replaces. ` +
-    `Returns { mapId, partCount, phases, bounds, zones, warnings, lookIssues, texturePixels }: the parts per phase, the studs bounds of the whole map and of each room (zone), one warning per set piece skipped because its room has no space for it, and one per hero prop not built, saying why, and one per hero asset that fails to load (its set piece is built instead; nothing for an onto:prop:<kind> mesh), and one per ambient sprite with no recorded asset; lookIssues lists plan-time look problems of a styled map (prop scale, dead gaps, walkway and doorway widths, prop facing and density, colors outside the palette, too little lightness separation between floor, wall, ceiling and trim), computed before Studio is touched, warning only and never failing the build, where walkway and doorway issues carry a suggestedSpecPatch, a JSON merge patch of this input; texturePixels is the pixel count of the plan's distinct material-map images (at the baked map size) and ambient sprites, each counted once, 0 with recorded assets off.`,
+    `Builds a map in the open place under Workspace.${config.mapsFolderName}. A style alone is enough: the rest is filled in and listed in "fills". Without a style, each room gets a floor, walls with door gaps and an optional SpawnLocation; terrain fills are optional. With a style, rooms also get ceilings (tagged ${config.ceilingTag}), trim, props, point lights and the preset's Lighting. ` +
+    `A room gives a center (x, z) or a relation { to, direction, hallwayLength, hallwayWidth } that places it beside another room, joined by a hallway zone. Opt-in extras, off unless the user asks: npcs, clutter, signage, motion and useRecordedAssets (the author's own recorded assets; off builds from Luau generators and plain materials). ` +
+    `The map is one Model named mapId, the handle later tools take. Building the same mapId again replaces the Model and its terrain. The build runs in seven phases and a failed phase may leave a partial Model. ` +
+    `Returns { mapId, partCount, phases, bounds, zones, warnings, lookIssues, texturePixels, fills }: parts per phase, studs bounds of the map and each zone, skipped-item warnings, and plan-time lookIssues (warning only, some with a suggestedSpecPatch).`,
   inputSchema: buildMapInput,
   outputSchema: buildMapOutput,
   annotations: {

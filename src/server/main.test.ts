@@ -224,14 +224,18 @@ await test("a spawned server answers 2026-07-28 discovery and lists tools withou
   await client.close();
 });
 
-const longDescriptionExemptions = new Map([["build_map", "task 80"]]);
-
 await test("every registered tool description stays under 1500 characters", () => {
   for (const tool of tools) {
-    if (longDescriptionExemptions.has(tool.name)) continue;
     assert.ok(
       tool.description.length < 1500,
       `${tool.name} description is ${String(tool.description.length)} characters`,
     );
+  }
+});
+
+await test("the build_map description names each opt-in", () => {
+  const description = tools.find((tool) => tool.name === "build_map")?.description ?? "";
+  for (const name of ["npcs", "clutter", "signage", "motion", "useRecordedAssets"]) {
+    assert.ok(description.includes(name), `build_map description lacks ${name}`);
   }
 });
