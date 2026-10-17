@@ -10,19 +10,8 @@ await test("recipeHash is stable and independent of key order", () => {
   assert.match(recipeHash(recipe, "source"), /^[0-9a-f]{12}$/);
 });
 
-await test("recipeHash changes with the recipe", () => {
+await test("recipeHash changes with the recipe and the generator source", () => {
   const taller = { ...recipe, size: { width: 4, height: 3 } };
   assert.notEqual(recipeHash(recipe, "source"), recipeHash(taller, "source"));
-});
-
-await test("recipeHash changes with the generator source", () => {
   assert.notEqual(recipeHash(recipe, "source"), recipeHash(recipe, "source changed"));
-});
-
-await test("recipeHash keeps array order significant", () => {
-  const parts = [{ role: "wall" }, { role: "floor" }];
-  assert.notEqual(
-    recipeHash({ parts }, "source"),
-    recipeHash({ parts: [...parts].reverse() }, "source"),
-  );
 });

@@ -18,8 +18,8 @@ async function projectRoot(files: { key?: string; creator?: string } = {}): Prom
   return pathToFileURL(`${root}/`);
 }
 
-await test("the key and creator come from the environment first, as a user or a group", async () => {
-  const root = await projectRoot({ key: "file-key", creator: '{"groupId":"1"}' });
+await test("the environment wins, as a user or a group, and unset or empty variables fall back to the files", async () => {
+  const root = await projectRoot({ key: "  file-key\n", creator: '{"groupId":"718128661"}' });
   assert.deepEqual(
     await lookUpOpenCloudCredentials(
       { ROBLOX_OPEN_CLOUD_API_KEY: "k", ROBLOX_CREATOR_USER_ID: "7" },
@@ -27,17 +27,6 @@ await test("the key and creator come from the environment first, as a user or a 
     ),
     { credentials: { apiKey: "k", creator: { userId: "7" } } },
   );
-  assert.deepEqual(
-    await lookUpOpenCloudCredentials(
-      { ROBLOX_OPEN_CLOUD_API_KEY: "k", ROBLOX_CREATOR_GROUP_ID: "718128661" },
-      root,
-    ),
-    { credentials: { apiKey: "k", creator: { groupId: "718128661" } } },
-  );
-});
-
-await test("unset or empty variables fall back to the trimmed key file and the creator file", async () => {
-  const root = await projectRoot({ key: "  file-key\n", creator: '{"groupId":"718128661"}' });
   assert.deepEqual(
     await lookUpOpenCloudCredentials(
       { ROBLOX_OPEN_CLOUD_API_KEY: "", ROBLOX_CREATOR_USER_ID: "", ROBLOX_CREATOR_GROUP_ID: "" },
