@@ -10,4 +10,13 @@ export const visionConfig = Object.freeze({
   shadowMaxLightness: 1 / 3,
   lightMinLightness: 2 / 3,
   edgeThreshold: 0.15,
+  verticalFovDegrees: 70,
+  lineMinSlantDegrees: 10,
+  lineMaxSlantDegrees: 80,
+  horizonVoteBins: 64,
+  horizonPeakBins: 2,
+  depthLevels: 10,
+  depthGridColumns: 8,
+  depthGridRows: 8,
+  depthRatioPerLevel: 0.5,
 });
