@@ -46,47 +46,66 @@ function roomNamed(rooms: RoomSpec[], name: string) {
   return room;
 }
 
-await test("a spec of placed rooms resolves to the same rooms", () => {
+await test("a spec of placed rooms resolves to the same rooms, overlapping or not", () => {
   const spec = relationMapSpecSchema.parse({
     mapId: "m",
-    rooms: [hub, { ...hub, name: "b", x: 40 }],
+    rooms: [hub, { ...hub, name: "b", x: 40 }, { ...hub, name: "c", x: 5 }],
   });
   assert.deepEqual(resolveRelations(spec).rooms, spec.rooms);
 });
 
-await test("an east room snaps outward to the grid and gets a hallway with matching doors", () => {
-  const { rooms } = resolve([hub, relatedRoom("lab", "hub", "east", 7)]);
-  assert.deepEqual(
-    rooms.map((room) => room.name),
-    ["hub", "lab", "hub-lab-hallway"],
-  );
-  // The east edge is 10 and 7 studs of hallway plus half the room reach 22, which snaps up to 25.
-  const lab = roomNamed(rooms, "lab");
-  assert.deepEqual([lab.x, lab.z], [25, 0]);
-  const hallway = roomNamed(rooms, "hub-lab-hallway");
-  assert.deepEqual([hallway.x, hallway.z, hallway.width, hallway.depth], [15, 0, 10, 6]);
-  assert.deepEqual(hallway.doors, [
-    { side: "west", offset: 0 },
-    { side: "east", offset: 0 },
-  ]);
-  assert.deepEqual(roomNamed(rooms, "hub").doors, [{ side: "east", offset: 0 }]);
-  assert.deepEqual(lab.doors, [{ side: "west", offset: 0 }]);
-});
+const snapRows = [
+  {
+    direction: "east",
+    opposite: "west",
+    length: 7,
+    size: 10,
+    width: 6,
+    at: [25, 0],
+    hall: [15, 0, 10, 6],
+  },
+  {
+    direction: "west",
+    opposite: "east",
+    length: 7,
+    size: 10,
+    width: 6,
+    at: [-25, 0],
+    hall: [-15, 0, 10, 6],
+  },
+  {
+    direction: "north",
+    opposite: "south",
+    length: 10,
+    size: 20,
+    width: 8,
+    at: [0, -30],
+    hall: [0, -15, 8, 10],
+  },
+];
 
-await test("west and north rooms snap down and away from the target", () => {
-  const { rooms } = resolve([
-    hub,
-    relatedRoom("west-room", "hub", "west", 7),
-    relatedRoom("north-room", "hub", "north", 10, 20, 8),
-  ]);
-  const west = roomNamed(rooms, "west-room");
-  assert.deepEqual([west.x, west.z], [-25, 0]);
-  const north = roomNamed(rooms, "north-room");
-  assert.deepEqual([north.x, north.z], [0, -30]);
-  const hallway = roomNamed(rooms, "hub-north-room-hallway");
-  assert.deepEqual([hallway.x, hallway.z, hallway.width, hallway.depth], [0, -15, 8, 10]);
-  assert.deepEqual(north.doors, [{ side: "south", offset: 0 }]);
-});
+for (const row of snapRows) {
+  await test(`a ${row.direction} room snaps away from the target and gets a hallway with matching doors`, () => {
+    const { rooms } = resolve([
+      hub,
+      relatedRoom("lab", "hub", row.direction, row.length, row.size, row.width),
+    ]);
+    assert.deepEqual(
+      rooms.map((room) => room.name),
+      ["hub", "lab", "hub-lab-hallway"],
+    );
+    const lab = roomNamed(rooms, "lab");
+    assert.deepEqual([lab.x, lab.z], row.at);
+    const hallway = roomNamed(rooms, "hub-lab-hallway");
+    assert.deepEqual([hallway.x, hallway.z, hallway.width, hallway.depth], row.hall);
+    assert.deepEqual(hallway.doors, [
+      { side: row.opposite, offset: 0 },
+      { side: row.direction, offset: 0 },
+    ]);
+    assert.deepEqual(roomNamed(rooms, "hub").doors, [{ side: row.direction, offset: 0 }]);
+    assert.deepEqual(lab.doors, [{ side: row.opposite, offset: 0 }]);
+  });
+}
 
 await test("a room off the grid is centered on the nearest grid line and its door lines up with the hallway", () => {
   const { rooms } = resolve([{ ...hub, z: 3 }, relatedRoom("lab", "hub", "east", 10)]);
@@ -203,12 +222,20 @@ await test("a hallway too narrow for any door is an error", () => {
   assert.throws(() => resolve([hub, relatedRoom("lab", "hub", "east", 10, 10, 2)]), /too narrow/);
 });
 
-await test("overlapping placed rooms without relations still resolve unchanged", () => {
-  const spec = relationMapSpecSchema.parse({
-    mapId: "m",
-    rooms: [hub, { ...hub, name: "b", x: 5 }],
-  });
-  assert.deepEqual(resolveRelations(spec).rooms, spec.rooms);
+await test("a search past the node limit is an error naming the limit", () => {
+  const wall = { ...hub, name: "blocker", x: 60, z: 0, width: 100, depth: 200 };
+  assert.throws(
+    () =>
+      resolve([
+        hub,
+        wall,
+        relatedRoom("north", "hub", "north", 10),
+        relatedRoom("south", "hub", "south", 10),
+        relatedRoom("west", "hub", "west", 10),
+        relatedRoom("lab", "hub", "east", 10),
+      ]),
+    new RegExp(`within ${String(config.relationSearch.maxNodes)} tries`),
+  );
 });
 
 await test("a related room taller than the hallway gets a door as high as the hallway and a wall header above it", () => {
