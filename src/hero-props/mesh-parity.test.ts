@@ -23,7 +23,17 @@ const root = new URL("../../", import.meta.url);
 
 async function fakeGit(args: string[]): Promise<string> {
   if (args[0] === "ls-tree") {
-    return "src/hero-props/meshes/shared.py\nsrc/hero-props/meshes/train-station/bench.py\n";
+    return (
+      [
+        "src/hero-props/meshes/shared.py",
+        "src/hero-props/meshes/lib/__init__.py",
+        "src/hero-props/meshes/lib/geometry.py",
+        "src/hero-props/meshes/lib/materials.py",
+        "src/hero-props/meshes/lib/run.py",
+        "src/hero-props/meshes/lib/uv.py",
+        "src/hero-props/meshes/train-station/bench.py",
+      ].join("\n") + "\n"
+    );
   }
   const path = (args[1] ?? "").split(":")[1] ?? "";
   return await readFile(new URL(path, root), "utf8");
