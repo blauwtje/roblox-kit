@@ -64,12 +64,11 @@ def mix_float(tree, inputs):
 
 
 def math_node(tree, operation, inputs):
-    """A math node of the operation over (a, b); floats are set, sockets are linked."""
+    """A math node of the operation over (a, b) or (a, b, c); floats are set, sockets are linked."""
     nodes, links = tree.nodes, tree.links
-    a, b = inputs
     node = nodes.new("ShaderNodeMath")
     node.operation = operation
-    for index, value in enumerate((a, b)):
+    for index, value in enumerate(inputs):
         if isinstance(value, float):
             node.inputs[index].default_value = value
         else:

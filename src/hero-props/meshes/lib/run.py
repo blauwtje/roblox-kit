@@ -135,11 +135,15 @@ def triangle_count(obj):
     return count
 
 
-def finish_mesh(name, objects, material):
-    """Prints the triangle count and bounds, unwraps, bakes the one material and exports `<maps folder>/<name>.glb`."""
+def report(name, objects):
     first = objects[0]
     corners = [tuple(round(c, 3) for c in first.bound_box[index]) for index in (0, 6)]
     print(name, "triangles", sum(triangle_count(obj) for obj in objects), "bounds", corners)
+
+
+def finish_mesh(name, objects, material):
+    """Prints the triangle count and bounds, unwraps, bakes the one material and exports `<maps folder>/<name>.glb`."""
+    report(name, objects)
     unwrap(objects)
     bake(objects, [material], name)
     export_glb(objects, name)

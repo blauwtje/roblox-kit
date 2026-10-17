@@ -143,43 +143,43 @@
     "kind": "sprite-glow",
     "assetId": "89207008552510"
   },
-  "73c6aa2d1a02": {
-    "kind": "pillar",
-    "assetId": "119951924235625"
-  },
-  "1b2197077137": {
-    "kind": "bench",
-    "assetId": "101880144843053"
-  },
-  "e3ffc1300d5d": {
-    "kind": "ticket-machine",
-    "assetId": "94698669314713"
-  },
-  "30bb23ab794b": {
-    "kind": "clock",
-    "assetId": "113868462637400"
-  },
-  "7df8eba61e57": {
-    "kind": "departure-board",
-    "assetId": "112440369639628"
-  },
-  "02a383237fa1": {
-    "kind": "sign",
-    "assetId": "107871902578867"
-  },
-  "3d454d41f7d7": {
+  "405bb0ecd329": {
     "kind": "pendant",
     "assetId": "127045372575746"
   },
-  "ee5f2dc0ab4d": {
-    "kind": "ticket-counter",
-    "assetId": "125360312908808"
-  },
-  "06a518400383": {
+  "c20a676ce92e": {
     "kind": "train-car",
     "assetId": "137669787957055"
   },
-  "77a8192e008b": {
+  "8d31363ccc4c": {
+    "kind": "pillar",
+    "assetId": "119951924235625"
+  },
+  "bfa1ecf8b03b": {
+    "kind": "departure-board",
+    "assetId": "112440369639628"
+  },
+  "44e17007df8a": {
+    "kind": "bench",
+    "assetId": "101880144843053"
+  },
+  "1c065244ff5b": {
+    "kind": "ticket-machine",
+    "assetId": "94698669314713"
+  },
+  "472c4e827bfb": {
+    "kind": "clock",
+    "assetId": "113868462637400"
+  },
+  "5c1029806b5e": {
+    "kind": "sign",
+    "assetId": "107871902578867"
+  },
+  "7bf746186bcf": {
+    "kind": "ticket-counter",
+    "assetId": "125360312908808"
+  },
+  "01984f92ebdf": {
     "kind": "arch-trim",
     "assetId": "101771726099445"
   }

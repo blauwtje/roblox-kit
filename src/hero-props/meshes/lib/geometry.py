@@ -13,12 +13,16 @@ class Box(NamedTuple):
     size: tuple
     z_bottom: float
     bevel_width: float
+    center: tuple = (0.0, 0.0)
+    bevel_segments: int = 2
 
 
 class Lathe(NamedTuple):
     rings: list
     segments: int
     radial: object = None
+    caps: tuple = (True, True)
+    flip: bool = False
 
 
 class Prism(NamedTuple):
@@ -33,6 +37,7 @@ class Ring(NamedTuple):
     z: float
     segments: int = 48
     tube_segments: int = 8
+    squash: float = 1.0
 
 
 def smoothstep(edge0, edge1, value):
@@ -52,24 +57,28 @@ def mesh_object(name, bm, surface):
 
 
 def box(name, shape, surface):
-    """A block centered on the axis, its edges bevelled."""
+    """A block over `center` (x, y), its edges bevelled unless the width is 0."""
     size = shape.size
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, shape.z_bottom + size[2] / 2))
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(*shape.center, shape.z_bottom + size[2] / 2))
     obj = bpy.context.active_object
     obj.name = name
     obj.scale = size
     bpy.ops.object.transform_apply(scale=True)
     obj.data.materials.append(surface.material)
     mark_paint(obj, surface.paint)
-    bevel = obj.modifiers.new("bevel", "BEVEL")
-    bevel.width = shape.bevel_width
-    bevel.segments = 2
+    if shape.bevel_width > 0:
+        bevel = obj.modifiers.new("bevel", "BEVEL")
+        bevel.width = shape.bevel_width
+        bevel.segments = shape.bevel_segments
     return obj
 
 
 def lathe(name, shape, surface):
-    """A turned part: (radius, z) rings from bottom to top, capped at both ends; radial(theta, z) scales a radius."""
-    rings, segments, radial = shape
+    """A turned part: (radius, z) rings from bottom to top, capped where `caps` says; radial(theta, z) scales a radius.
+
+    `flip` turns the faces toward the axis, since Roblox culls back faces.
+    """
+    rings, segments, radial, caps, flip = shape
     bm = bmesh.new()
     grid = []
     for radius, z in rings:
@@ -83,9 +92,14 @@ def lathe(name, shape, surface):
         for step in range(segments):
             following = (step + 1) % segments
             bm.faces.new((lower[step], lower[following], upper[following], upper[step]))
-    bm.faces.new(list(reversed(grid[0])))
-    bm.faces.new(grid[-1])
-    return mesh_object(name, bm, surface)
+    if caps[0]:
+        bm.faces.new(list(reversed(grid[0])))
+    if caps[1]:
+        bm.faces.new(grid[-1])
+    obj = mesh_object(name, bm, surface)
+    if flip:
+        reverse_faces(obj.data)
+    return obj
 
 
 def prism(name, shape, surface):
@@ -104,7 +118,7 @@ def prism(name, shape, surface):
 
 def ring(name, shape, surface):
     """A torus around the vertical axis: the tube's center circle has `radius` at height `z`."""
-    radius, tube, z, segments, tube_segments = shape
+    radius, tube, z, segments, tube_segments, squash = shape
     bm = bmesh.new()
     grid = []
     for step in range(segments):
@@ -113,7 +127,7 @@ def ring(name, shape, surface):
         for side in range(tube_segments):
             phi = side / tube_segments * 2 * math.pi
             reach = radius + tube * math.cos(phi)
-            row.append(bm.verts.new((reach * math.cos(theta), reach * math.sin(theta), z + tube * math.sin(phi))))
+            row.append(bm.verts.new((reach * math.cos(theta), reach * math.sin(theta), z + tube * squash * math.sin(phi))))
         grid.append(row)
     for step in range(segments):
         following = (step + 1) % segments
@@ -121,6 +135,14 @@ def ring(name, shape, surface):
             around = (side + 1) % tube_segments
             bm.faces.new((grid[step][side], grid[following][side], grid[following][around], grid[step][around]))
     return mesh_object(name, bm, surface)
+
+
+def reverse_faces(mesh):
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bmesh.ops.reverse_faces(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
 
 
 def mirror_y(obj):
@@ -131,11 +153,7 @@ def mirror_y(obj):
     bpy.context.collection.objects.link(copy)
     for vertex in copy.data.vertices:
         vertex.co.y = -vertex.co.y
-    bm = bmesh.new()
-    bm.from_mesh(copy.data)
-    bmesh.ops.reverse_faces(bm, faces=bm.faces)
-    bm.to_mesh(copy.data)
-    bm.free()
+    reverse_faces(copy.data)
     return copy
 
 
