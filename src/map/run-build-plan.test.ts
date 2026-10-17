@@ -49,6 +49,25 @@ await test("runBuildPlan runs the phases in order, reports progress and sums the
   assert.equal(studio.requests.length, 8);
 });
 
+await test("runBuildPlan sends only the running phase's Luau, under 100 KB for a whole build", async () => {
+  const sent: string[] = [];
+  const studio = new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      sent.push(code);
+      const text = code.includes('"phase":"') ? '{"partCount":1}' : '{"snapshotTaken":false}';
+      return { content: [{ type: "text", text }] };
+    },
+  });
+  await runBuildPlan(plan, { studio });
+  const total = sent.reduce((sum, code) => sum + code.length, 0);
+  assert.ok(total < 100_000, `sent ${String(total)} characters of Luau`);
+  const heroCode = sent.filter((code) => code.includes("addHeroProps"));
+  assert.equal(heroCode.length, 1);
+  assert.ok(heroCode[0]?.includes('"phase":"props"'));
+  assert.equal(sent.filter((code) => code.includes("writeTerrainChunk")).length, 1);
+});
+
 await test("runBuildPlan names the phase a failure stopped in", async () => {
   const studio = new FakeStudioConnection(studios, {
     execute_luau: () => ({ content: [{ type: "text", text: "boom" }], isError: true }),

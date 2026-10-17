@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { config } from "../config.ts";
 import { applyLighting } from "../lighting/apply-lighting.ts";
+import { inlineRequires } from "../luau/inline-requires.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolContext } from "../server/tool-definition.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
@@ -18,6 +19,26 @@ export const builtPhaseSchema = z.strictObject({
 export type HeroLoadFailure = NonNullable<
   z.infer<typeof builtPhaseSchema>["heroLoadFailures"]
 >[number];
+
+const phaseFiles: Record<BuildPhaseName | "terrain", string> = {
+  shell: "build/shell.luau",
+  terrain: "build/shell.luau",
+  "floors and ceilings": "build/parts.luau",
+  openings: "build/parts.luau",
+  surfaces: "build/parts.luau",
+  props: "build/props.luau",
+  lighting: "build/lighting.luau",
+  "ambient effects": "build/ambient.luau",
+};
+
+function inlinedGenerators(generators: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(generators).map(([kind, source]) => [
+      kind,
+      inlineRequires(source, new URL(`../../luau/props/${kind}.luau`, import.meta.url)),
+    ]),
+  );
+}
 
 function phaseArguments(phase: BuildPhase<LightRecord>, plan: BuildPlan): Record<string, unknown> {
   const { build } = plan;
@@ -39,7 +60,7 @@ function phaseArguments(phase: BuildPhase<LightRecord>, plan: BuildPlan): Record
     surfaces: { parts: phase.parts, variants: build.variants },
     props: {
       props: phase.parts,
-      generators: build.generators,
+      generators: inlinedGenerators(build.generators),
       noShadowSizeStuds: config.noShadowPropSizeStuds,
       heroProps: [...build.heroProps, ...build.trimMeshes, ...build.pendantMeshes],
       ...build.idle,
@@ -97,7 +118,7 @@ async function writeTerrain(plan: BuildPlan, context: ToolContext, studioId: str
     await runLuauFile({
       connection: context.studio,
       studioId,
-      fileName: "build-map.luau",
+      fileName: phaseFiles.terrain,
       datamodelType: "Edit",
       arguments: {
         phase: "terrain",
@@ -119,7 +140,7 @@ async function runPhase(
   const built = await runLuauFile({
     connection: context.studio,
     studioId,
-    fileName: "build-map.luau",
+    fileName: phaseFiles[phase.name],
     datamodelType: "Edit",
     arguments: phaseArguments(phase, plan),
     resultSchema: builtPhaseSchema,
