@@ -185,6 +185,7 @@ export const config = Object.freeze({
     { images: 4, longEdge: 1000 },
     { images: 6, longEdge: 1280 },
   ],
+  captureFolder: ".roblox-kit/captures",
   /** Where `judge_round` appends one line per round, under the project folder. */
   judgeLogFile: ".roblox-kit/judge-log.jsonl",
   /** The code score (`codeScoreOf`) under which the deterministic gate fails a round before any reviewer runs. */

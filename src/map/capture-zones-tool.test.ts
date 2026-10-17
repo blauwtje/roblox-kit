@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { mock, test } from "node:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, mock, test } from "node:test";
 import timers from "node:timers/promises";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { captureZonesTool } from "./capture-zones-tool.ts";
+
+const projectFolder = await mkdtemp(join(tmpdir(), "capture-zones-"));
+process.env["PROJECT_DIR"] = projectFolder;
+after(() => rm(projectFolder, { recursive: true }));
 
 const studios = [{ id: "studio-a", name: "Place A" }];
 const vector = (x: number, y: number, z: number) => ({ x, y, z });
@@ -183,6 +190,22 @@ await test("each shot reports its image size and an in-range size adds no warnin
   );
   assert.deepEqual(structured.warnings, []);
   assert.deepEqual(structured.remainingZones, []);
+});
+
+await test("each shot is saved under config.captureFolder and reports the absolute path of its file", async () => {
+  const studio = studioWith((captureId) => okImage(imageOf(captureId)));
+  const result = await run(studio, { mapId: "arena" });
+  const structured = captureZonesTool.outputSchema.parse(result.structuredContent);
+  const images = result.content.filter((block) => block.type === "image");
+  assert.equal(new Set(structured.shots.map((shot) => shot.path)).size, structured.shots.length);
+  for (const [index, shot] of structured.shots.entries()) {
+    assert.ok(shot.path?.startsWith(join(projectFolder, config.captureFolder)));
+    const image = images[index];
+    assert.equal(
+      (await readFile(shot.path ?? "")).toString("base64"),
+      image?.type === "image" ? image.data : "",
+    );
+  }
 });
 
 await test("a JPEG capture reports its size from the start-of-frame segment", async () => {

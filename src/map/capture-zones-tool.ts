@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import timers from "node:timers/promises";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
@@ -49,6 +51,7 @@ const captureZonesOutput = z.strictObject({
       /** Pixels of the image, read from the image itself. */
       width: z.number().int().positive(),
       height: z.number().int().positive(),
+      path: z.string().optional(),
     }),
   ),
   /** Zones left out by the per-call image cap; pass them as `zones` in a follow-up call. */
@@ -345,6 +348,25 @@ async function captureEachShot(
   return captured;
 }
 
+function projectFolder(): string {
+  const dir = process.env["PROJECT_DIR"];
+  return dir !== undefined && isAbsolute(dir) && !dir.includes("${") ? dir : process.cwd();
+}
+
+async function saveCaptures(mapId: string, captured: CapturedShot[]): Promise<string[]> {
+  const folder = join(projectFolder(), config.captureFolder);
+  await mkdir(folder, { recursive: true });
+  return Promise.all(
+    captured.map(async ({ shot, image }) => {
+      const extension = image.mimeType === "image/jpeg" ? "jpg" : "png";
+      const name = `${mapId}-${shot.zone}-${shot.view}`.replace(/[^\w.-]/g, "_");
+      const path = join(folder, `${name}.${extension}`);
+      await writeFile(path, Buffer.from(image.data, "base64"));
+      return path;
+    }),
+  );
+}
+
 const errorText = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -386,7 +408,7 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       `Takes the mapId that build_map returned, a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Optional inputs: zones lists the zone names (default all; at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included, a zone whole or not at all, and the rest are listed in remainingZones); views lists the views per zone (default a and b from opposite sides at ${String(config.zoneShotPitchDegrees)} degrees pitch; eye stands at eye height, ${String(config.eyeHeightStuds)} studs, with ceilings and walls shown); cutaway false skips the cutaway in a follow-up call; studioId picks the Studio. An input the user did not ask for stays at its default. ` +
       `Ceilings (tag ${config.ceilingTag}) and a zone's south wall in view a are hidden during captures and restored afterwards, also on failure. Otherwise read-only: only the Studio camera moves. ` +
-      `Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings }, with warnings naming each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in order.`,
+      `Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height, path }], remainingZones, warnings }, with warnings naming each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. path is the saved image file under ${config.captureFolder} in the project folder. One image content block per shot follows, in order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -416,9 +438,11 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         { connection: context.studio, studioId, mapId: input.mapId },
         plannedShots,
       );
-      const shots = captured.map(({ shot, image }) => ({
+      const paths = await saveCaptures(input.mapId, captured);
+      const shots = captured.map(({ shot, image }, index) => ({
         ...shot,
         ...imageSize(image, shot),
+        path: paths[index],
       }));
       const warnings = shots.flatMap((shot) => longEdgeWarning(shot, shot) ?? []);
       return toolResult(
