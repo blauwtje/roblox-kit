@@ -6,4 +6,8 @@ export const visionConfig = Object.freeze({
   paletteMinAlpha: 128,
   paletteMinShare: 0.005,
   greyChroma: 0.03,
+  lightnessBins: 8,
+  shadowMaxLightness: 1 / 3,
+  lightMinLightness: 2 / 3,
+  edgeThreshold: 0.15,
 });
