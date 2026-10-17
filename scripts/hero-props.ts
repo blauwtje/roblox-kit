@@ -159,8 +159,8 @@ async function compareKind(
   const current = await currentMeshFiles(script);
   const before = await baseMeshSources(base, script);
   try {
-    const baseHash = meshFilesHash(kind, script, before.files);
-    const hash = meshFilesHash(kind, script, current);
+    const baseHash = await meshFilesHash(kind, script, before.files);
+    const hash = await meshFilesHash(kind, script, current);
     if (sameMeshFiles(before.files, current)) {
       const directory = new URL(`${presetName}-${kind}-${hash}/`, generatedFolder);
       await mkdir(directory, { recursive: true });

@@ -7,7 +7,8 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import type { GlbStructure } from "./glb-structure.ts";
 import { heroAssetsFile, readHeroAssets, rekeyHeroAsset } from "./hero-asset-store.ts";
-import { recipeHash } from "./recipe-hash.ts";
+import { scriptedMeshHash, type MeshSourceReader } from "./generate-scripted-mesh.ts";
+import { loadPresets } from "../style/load-preset.ts";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = new URL("../../", import.meta.url);
@@ -43,8 +44,10 @@ async function runGit(args: string[]): Promise<string> {
   return stdout;
 }
 
-function isLibraryFile(name: string): boolean {
-  return name === "shared.py" || (name.startsWith("lib/") && name.endsWith(".py"));
+async function isLibraryFile(name: string): Promise<boolean> {
+  if (!name.endsWith(".py")) return false;
+  const presetNames = new Set((await loadPresets()).keys());
+  return !presetNames.has(name.split("/")[0] ?? "");
 }
 
 export async function baseMeshSources(
@@ -53,9 +56,10 @@ export async function baseMeshSources(
   git: GitRunner = runGit,
 ): Promise<BaseMeshSources> {
   const listing = await git(["ls-tree", "-r", "--name-only", ref, "--", meshesFolder]);
-  const library = listing
-    .split("\n")
-    .filter((path) => isLibraryFile(path.slice(meshesFolder.length + 1)));
+  const library: string[] = [];
+  for (const path of listing.split("\n")) {
+    if (await isLibraryFile(path.slice(meshesFolder.length + 1))) library.push(path);
+  }
   const files: MeshFiles = {};
   for (const path of [script, ...library]) files[path] = await git(["show", `${ref}:${path}`]);
   const directory = await mkdtemp(join(tmpdir(), "mesh-base-"));
@@ -67,14 +71,12 @@ export async function baseMeshSources(
 }
 
 async function libraryPaths(root: URL): Promise<string[]> {
-  const names = ["shared.py"];
-  try {
-    const entries = await readdir(new URL(`${meshesFolder}/lib/`, root));
-    names.push(...entries.filter((name) => name.endsWith(".py")).map((name) => `lib/${name}`));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  const entries = await readdir(new URL(`${meshesFolder}/`, root), { recursive: true });
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (await isLibraryFile(entry.replaceAll("\\", "/"))) names.push(entry);
   }
-  return names.map((name) => `${meshesFolder}/${name}`);
+  return names.sort().map((name) => `${meshesFolder}/${name}`);
 }
 
 export async function currentMeshFiles(
@@ -96,9 +98,17 @@ export function sameMeshFiles(base: MeshFiles, current: MeshFiles): boolean {
   );
 }
 
-export function meshFilesHash(kind: string, script: string, files: MeshFiles): string {
-  const shared = files[`${meshesFolder}/shared.py`] ?? "";
-  return recipeHash({ kind, script }, `${files[script] ?? ""}\0${shared}`);
+export async function meshFilesHash(
+  kind: string,
+  script: string,
+  files: MeshFiles,
+): Promise<string> {
+  const prefix = `${meshesFolder}/`;
+  const reader: MeshSourceReader = {
+    list: () => Promise.resolve(Object.keys(files).map((path) => path.replace(prefix, ""))),
+    read: (path) => Promise.resolve(files[`${prefix}${path}`] ?? ""),
+  };
+  return await scriptedMeshHash(kind, { script, targets: [] }, reader);
 }
 
 function listed(values: unknown): string {

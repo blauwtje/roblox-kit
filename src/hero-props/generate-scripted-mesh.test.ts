@@ -1,23 +1,51 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import type { GlbStructure } from "./glb-structure.ts";
-import { scriptedMeshHash, scriptedMeshProblems } from "./generate-scripted-mesh.ts";
-import { recipeHash } from "./recipe-hash.ts";
+import {
+  scriptedMeshHash,
+  scriptedMeshProblems,
+  type MeshSourceReader,
+} from "./generate-scripted-mesh.ts";
 
 const script = "src/hero-props/meshes/train-station/pillar.py";
 const declaration = { script, targets: [{ replaces: "prop:pillar" }] };
 
-await test("a declared mesh's hash covers its script path, its source and shared.py", async () => {
-  const source = await readFile(new URL(`../../${script}`, import.meta.url), "utf8");
-  const shared = await readFile(new URL("./meshes/shared.py", import.meta.url), "utf8");
+function readerOf(files: Record<string, string>): MeshSourceReader {
+  return {
+    list: () => Promise.resolve(Object.keys(files)),
+    read: (path) => Promise.resolve(files[path] ?? ""),
+  };
+}
+
+const tree = {
+  "shared.py": "shared",
+  "lib/wood.py": "wood",
+  "train-station/pillar.py": "pillar",
+  "train-station/bench.py": "bench",
+};
+const bench = { script: "src/hero-props/meshes/train-station/bench.py", targets: [] };
+
+await test("a library edit changes every hash, a script edit one, an unchanged tree none", async () => {
+  const hashes = async (files: Record<string, string>) => [
+    await scriptedMeshHash("pillar", declaration, readerOf(files)),
+    await scriptedMeshHash("bench", bench, readerOf(files)),
+  ];
+  const before = await hashes(tree);
+  assert.deepEqual(await hashes({ ...tree }), before);
+  const library = await hashes({ ...tree, "lib/wood.py": "wood2" });
+  assert.notEqual(library[0], before[0]);
+  assert.notEqual(library[1], before[1]);
+  const shared = await hashes({ ...tree, "shared.py": "shared2" });
+  assert.notEqual(shared[0], before[0]);
+  const edited = await hashes({ ...tree, "train-station/bench.py": "bench2" });
+  assert.equal(edited[0], before[0]);
+  assert.notEqual(edited[1], before[1]);
+});
+
+await test("the real mesh library hashes deterministically", async () => {
   assert.equal(
     await scriptedMeshHash("pillar", declaration),
-    recipeHash({ kind: "pillar", script }, `${source}\0${shared}`),
-  );
-  assert.notEqual(
     await scriptedMeshHash("pillar", declaration),
-    await scriptedMeshHash("column", declaration),
   );
 });
 

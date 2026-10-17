@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.ts";
 import { loadPresets } from "../style/load-preset.ts";
@@ -9,18 +9,39 @@ import { requiredMaps, type GeneratedHeroProp } from "./generate-hero-prop.ts";
 import { recipeHash } from "./recipe-hash.ts";
 
 const repositoryRoot = new URL("../../", import.meta.url);
-const sharedScript = new URL("./meshes/shared.py", import.meta.url);
 /** Most triangles a scripted mesh may hold; the same limit the recipe-built hero props keep. */
 const maxScriptedMeshTriangles = 20000;
 
-/** The recipe hash of a declared mesh: its script path hashed with the script's source and `shared.py`'s, so a change to either names a new output. */
+const meshesPrefix = "src/hero-props/meshes/";
+const meshesFolder = new URL("./meshes/", import.meta.url);
+
+/** Reads the mesh library: `list` gives `.py` paths relative to the meshes folder, `read` one file's source. */
+export interface MeshSourceReader {
+  list: () => Promise<string[]>;
+  read: (path: string) => Promise<string>;
+}
+
+const fileReader: MeshSourceReader = {
+  list: async () =>
+    (await readdir(meshesFolder, { recursive: true })).filter((path) => path.endsWith(".py")),
+  read: (path) => readFile(new URL(path, meshesFolder), "utf8"),
+};
+
+/** The recipe hash of a declared mesh: its script path hashed with the script's source and every library `.py` under `meshes/` outside preset folders (sorted by path), so a change to any of them names a new output. */
 export async function scriptedMeshHash(
   kind: string,
   declaration: MeshDeclaration,
+  reader: MeshSourceReader = fileReader,
 ): Promise<string> {
-  const script = await readFile(new URL(declaration.script, repositoryRoot), "utf8");
-  const shared = await readFile(sharedScript, "utf8");
-  return recipeHash({ kind, script: declaration.script }, `${script}\0${shared}`);
+  const presetNames = new Set((await loadPresets()).keys());
+  const library = (await reader.list())
+    .map((path) => path.replaceAll("\\", "/"))
+    .filter((path) => !presetNames.has(path.split("/")[0] ?? ""))
+    .sort();
+  const script = await reader.read(declaration.script.replace(meshesPrefix, ""));
+  const sources: string[] = [script];
+  for (const path of library) sources.push(`${path}\0${await reader.read(path)}`);
+  return recipeHash({ kind, script: declaration.script }, sources.join("\0"));
 }
 
 /** Problems of a generated GLB: no mesh, over the triangle limit, or a material without its texture maps. */

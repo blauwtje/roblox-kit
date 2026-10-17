@@ -33,7 +33,7 @@ await test("a base tree of identical sources hashes like the current mesh and sk
     const current = await currentMeshFiles(script);
     assert.ok(sameMeshFiles(base.files, current));
     assert.equal(
-      meshFilesHash("pillar", script, base.files),
+      await meshFilesHash("pillar", script, base.files),
       await scriptedMeshHash("pillar", { script, targets: [{ replaces: "prop:pillar" }] }),
     );
     assert.equal(
