@@ -28,5 +28,17 @@
     "weight": 400,
     "file": "LilitaOne-Regular.ttf",
     "sha256": "f5b641c45c69d772ee4eda687bc9fda411d5cad6b0b45371491da4580cbc8d59"
+  },
+  {
+    "family": "Liberation Serif",
+    "weight": 700,
+    "file": "LiberationSerif-Bold.ttf",
+    "sha256": "d754ba427cfe0bca54ae052384baa8f842da5bd6550ad4da024ac441e7a7d5ce"
+  },
+  {
+    "family": "Gelasio",
+    "weight": 700,
+    "file": "Gelasio-Bold.ttf",
+    "sha256": "34dccf6cdbd01fc5aa700877c727b3e9de749a574367b10d684ce68b2c5391ad"
   }
 ]

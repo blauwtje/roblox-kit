@@ -186,3 +186,11 @@ def printed_face(tree, coords, image, center_z, half_width, half_height=None):
     texture.extension = "EXTEND"
     links.new(combine.outputs["Vector"], texture.inputs["Vector"])
     return texture.outputs["Color"]
+
+
+def print_image(path):
+    """Loads a print PNG (the render of a sibling `<kind>.print.svg`, the script's third argument) as a packed image that keeps its alpha."""
+    image = bpy.data.images.load(path)
+    image.alpha_mode = "STRAIGHT"
+    image.pack()
+    return image

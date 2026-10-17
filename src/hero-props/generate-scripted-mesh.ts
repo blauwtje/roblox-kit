@@ -1,6 +1,9 @@
-import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { config } from "../config.ts";
+import { imagesConfig } from "../images/images-config.ts";
+import { renderSvg } from "../images/render-svg.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { MeshDeclaration } from "../style/preset-schema.ts";
 import { runBlender } from "./blender-path.ts";
@@ -13,9 +16,11 @@ const repositoryRoot = new URL("../../", import.meta.url);
 const maxScriptedMeshTriangles = 20000;
 
 const meshesPrefix = "src/hero-props/meshes/";
+const printSuffix = ".print.svg";
+const printHelper = /\n\ndef print_image[\s\S]*$/;
 const meshesFolder = new URL("./meshes/", import.meta.url);
 
-/** Reads the mesh library: `list` gives `.py` paths relative to the meshes folder, `read` one file's source. */
+/** Reads the mesh library: `list` gives `.py` and `.print.svg` paths relative to the meshes folder, `read` one file's source. */
 export interface MeshSourceReader {
   list: () => Promise<string[]>;
   read: (path: string) => Promise<string>;
@@ -23,24 +28,54 @@ export interface MeshSourceReader {
 
 const fileReader: MeshSourceReader = {
   list: async () =>
-    (await readdir(meshesFolder, { recursive: true })).filter((path) => path.endsWith(".py")),
+    (await readdir(meshesFolder, { recursive: true })).filter(
+      (path) => path.endsWith(".py") || path.endsWith(printSuffix),
+    ),
   read: (path) => readFile(new URL(path, meshesFolder), "utf8"),
 };
 
-/** The recipe hash of a declared mesh: its script path hashed with the script's source and every library `.py` under `meshes/` outside preset folders (sorted by path), so a change to any of them names a new output. */
+async function printSvg(
+  declaration: MeshDeclaration,
+  reader: MeshSourceReader,
+): Promise<string | undefined> {
+  const path = declaration.script.replace(meshesPrefix, "").replace(/\.py$/, printSuffix);
+  const listed = (await reader.list()).map((entry) => entry.replaceAll("\\", "/"));
+  return listed.includes(path) ? reader.read(path) : undefined;
+}
+
+function fontHashes(svg: string): string[] {
+  const squash = (text: string): string => text.toLowerCase().replace(/[\s'"-]+/g, "");
+  const rows = JSON.parse(
+    readFileSync(new URL(imagesConfig.fontManifestFile, imagesConfig.fontsFolder), "utf8"),
+  ) as { family: string; sha256: string }[];
+  const text = squash(svg);
+  const named = rows.filter((row) => text.includes(squash(row.family)));
+  const used =
+    named.length > 0 || svg.includes("font-family")
+      ? named
+      : rows.filter((row) => row.family === imagesConfig.defaultFontFamily);
+  return used.map((row) => `${row.family}:${row.sha256}`).sort();
+}
+
+/** The recipe hash of a declared mesh: its script path hashed with the script's source and every library `.py` under `meshes/` outside preset folders (sorted by path), so a change to any of them names a new output. A script with a sibling `<kind>.print.svg` also hashes that SVG, the font hashes it names and the `print_image` helper in the library; without one that helper is left out of the hash, so earlier records stay valid. */
 export async function scriptedMeshHash(
   kind: string,
   declaration: MeshDeclaration,
   reader: MeshSourceReader = fileReader,
 ): Promise<string> {
   const presetNames = new Set((await loadPresets()).keys());
+  const svg = await printSvg(declaration, reader);
   const library = (await reader.list())
     .map((path) => path.replaceAll("\\", "/"))
-    .filter((path) => !presetNames.has(path.split("/")[0] ?? ""))
+    .filter((path) => path.endsWith(".py") && !presetNames.has(path.split("/")[0] ?? ""))
     .sort();
   const script = await reader.read(declaration.script.replace(meshesPrefix, ""));
   const sources: string[] = [script];
-  for (const path of library) sources.push(`${path}\0${await reader.read(path)}`);
+  for (const path of library) {
+    const source = await reader.read(path);
+    sources.push(`${path}\0${svg === undefined ? source.replace(printHelper, "") : source}`);
+  }
+  if (svg !== undefined) sources.push(`${svg}\0${fontHashes(svg).join(",")}`);
   return recipeHash({ kind, script: declaration.script }, sources.join("\0"));
 }
 
@@ -80,9 +115,17 @@ export async function generateScriptedMesh(
   );
   const maps = new URL("maps/", directory);
   await mkdir(maps, { recursive: true });
+  const svg = await printSvg(declaration, fileReader);
+  const printed: string[] = [];
+  if (svg !== undefined) {
+    const print = new URL(`${kind}-print.png`, maps);
+    await writeFile(print, renderSvg(svg).png);
+    printed.push(fileURLToPath(print));
+  }
   await runBlender(fileURLToPath(new URL(declaration.script, repositoryRoot)), [
     fileURLToPath(new URL(kind, directory)),
     fileURLToPath(maps),
+    ...printed,
   ]);
   const glb = new URL("model.glb", directory);
   await copyFile(new URL(`${kind}.glb`, maps), glb);

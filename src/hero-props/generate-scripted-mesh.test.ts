@@ -49,6 +49,30 @@ await test("the real mesh library hashes deterministically", async () => {
   );
 });
 
+await test("a print svg adds its text and named fonts to the hash, a mesh without one keeps it", async () => {
+  const svg = (family: string, word: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg"><text font-family="${family}">${word}</text></svg>`;
+  const files = { ...tree, "train-station/pillar.print.svg": svg("Gelasio", "A") };
+  const hash = (all: Record<string, string>) =>
+    scriptedMeshHash("pillar", declaration, readerOf(all));
+  const plain = await hash(tree);
+  const printed = await hash(files);
+  assert.notEqual(printed, plain);
+  const word = await hash({ ...files, "train-station/pillar.print.svg": svg("Gelasio", "B") });
+  assert.notEqual(word, printed);
+  const font = await hash({ ...files, "train-station/pillar.print.svg": svg("Inter", "A") });
+  assert.notEqual(font, printed);
+  const other = await hash({ ...tree, "train-station/bench.print.svg": svg("Gelasio", "A") });
+  assert.equal(other, plain);
+  const helper = { ...tree, "lib/wood.py": "wood\n\ndef print_image(path):\n    return path\n" };
+  assert.equal(await hash(helper), plain);
+  const withHelper = await hash({
+    ...helper,
+    "train-station/pillar.print.svg": svg("Gelasio", "A"),
+  });
+  assert.notEqual(withHelper, printed);
+});
+
 const structure: GlbStructure = {
   triangles: 1200,
   size: [2, 16, 2],

@@ -73,3 +73,17 @@ await test(`the mesh library and scripts hold at most ${String(maxMeshLines)} li
   }
   assert.ok(lines <= maxMeshLines, `${String(lines)} lines`);
 });
+
+const printedKinds: Record<string, string> = {};
+
+for (const [kind, script] of Object.entries(printedKinds)) {
+  await test(`printed ${kind}`, async () => {
+    const source = await readFile(`${meshes}${script}`, "utf8");
+    assert.ok(!source.includes("fonts.load"), "the script loads no font");
+    assert.ok(!source.includes("/System/Library/Fonts"), "the script names no system font");
+    const svg = await readFile(`${meshes}${script.replace(/\.py$/, ".print.svg")}`, "utf8").catch(
+      () => undefined,
+    );
+    assert.notEqual(svg, undefined, "the script has a sibling .print.svg");
+  });
+}
