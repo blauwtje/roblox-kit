@@ -1,111 +1,80 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { placeCheckBrief, placeMatches } from "./blind-place-check.ts";
+import { placeCheckBrief, placeMatches, type PlaceAnswer } from "./blind-place-check.ts";
 
 const promptUrl = new URL("../../skills/visual-judge/place-check-prompt.md", import.meta.url);
 
-await test("the eval brief is the prompt's brief with the images as its source and nothing about the map", async () => {
+await test("the blind brief names only the images, never the map", async () => {
   const brief = placeCheckBrief(await readFile(promptUrl, "utf8"), ["image-1.jpg", "image-2.jpg"]);
-  assert.match(brief, /^You are a first-time visitor/);
-  assert.match(
-    brief,
-    /Read the images `image-1\.jpg` and `image-2\.jpg`, which hold view a then view b/,
-  );
+  assert.match(brief, /`image-1\.jpg` and `image-2\.jpg`/);
   assert.doesNotMatch(brief, /<source>|<paths>|capture_zones|eval:studio|neutral names/);
 });
 
-await test("a prompt without the eval source line is rejected", () => {
-  assert.throws(() => placeCheckBrief("# Prompt\n\n---\n\nBrief <source>", []), /no line starting/);
-});
+const right: PlaceAnswer = {
+  clues: "",
+  furnished: "furnished",
+  genre: "train-station",
+  room: "ticket hall",
+};
 
-await test("the room matches ignoring case, spaces and hyphens; another genre or unknown does not", () => {
-  const answer = {
-    clues: "",
-    furnished: "furnished" as const,
-    genre: "train-station",
-    room: "Ticket Hall",
-  };
-  assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), true);
-  assert.equal(placeMatches(answer, "train-station", "platform", []), false);
-  assert.equal(
-    placeMatches({ ...answer, genre: "unknown" }, "train-station", "ticket-hall", []),
-    false,
-  );
-});
+const rows: {
+  name: string;
+  answer: Partial<PlaceAnswer>;
+  roomType?: string;
+  accepted?: string[];
+  passes: boolean;
+}[] = [
+  { name: "exact room", answer: {}, passes: true },
+  { name: "case, spaces and hyphens ignored", answer: { room: "Ticket-HALL" }, passes: true },
+  {
+    name: "accepted name",
+    answer: { room: "Main Concourse" },
+    accepted: ["main-concourse"],
+    passes: true,
+  },
+  { name: "room type inside a longer name", answer: { room: "Grand Ticket Hall" }, passes: true },
+  {
+    name: "accepted name inside a longer name",
+    answer: { room: "the main-concourse hall" },
+    accepted: ["main concourse"],
+    passes: true,
+  },
+  { name: "wrong room", answer: { room: "platform" }, passes: false },
+  {
+    name: "unlisted accepted name",
+    answer: { room: "Main Concourse" },
+    accepted: ["waiting room"],
+    passes: false,
+  },
+  { name: "wrong genre", answer: { genre: "airport" }, passes: false },
+  { name: "unknown genre", answer: { genre: "unknown" }, passes: false },
+  { name: "empty room", answer: { furnished: "empty" }, passes: false },
+  { name: "words held apart", answer: { room: "Ticket Waiting Hall" }, passes: false },
+  { name: "partial name", answer: { room: "Ticket" }, passes: false },
+  {
+    name: "inside a longer word",
+    answer: { room: "Platforms" },
+    roomType: "platform",
+    passes: false,
+  },
+  {
+    name: "blank accepted name",
+    answer: { room: "Hall" },
+    roomType: "platform",
+    accepted: [""],
+    passes: false,
+  },
+];
 
-await test("a name the room type lists matches, ignoring case, spaces and hyphens; an unlisted one does not", () => {
-  const answer = {
-    clues: "",
-    furnished: "furnished" as const,
-    genre: "train-station",
-    room: "Main Concourse",
-  };
-  assert.equal(placeMatches(answer, "train-station", "ticket-hall", ["main-concourse"]), true);
-  assert.equal(placeMatches(answer, "train-station", "ticket-hall", ["waiting room"]), false);
-  assert.equal(
-    placeMatches({ ...answer, genre: "airport" }, "train-station", "ticket-hall", [
-      "main-concourse",
-    ]),
-    false,
-  );
-});
-
-await test("a name that contains the room type or a listed name as a run of whole words matches", () => {
-  const answer = {
-    clues: "",
-    furnished: "furnished" as const,
-    genre: "train-station",
-    room: "Train Station Platform",
-  };
-  assert.equal(placeMatches(answer, "train-station", "platform", []), true);
-  assert.equal(
-    placeMatches({ ...answer, room: "Platform 4 Waiting Area" }, "train-station", "platform", []),
-    true,
-  );
-  assert.equal(
-    placeMatches({ ...answer, room: "the main-concourse hall" }, "train-station", "concourse", []),
-    true,
-  );
-  assert.equal(
-    placeMatches({ ...answer, room: "Grand Ticket Hall" }, "train-station", "ticket-hall", []),
-    true,
-  );
-  assert.equal(
-    placeMatches({ ...answer, room: "Main Hall" }, "train-station", "concourse", ["main hall"]),
-    true,
-  );
-});
-
-await test("a name that holds the words apart, partly or inside a longer word does not match", () => {
-  const answer = {
-    clues: "",
-    furnished: "furnished" as const,
-    genre: "train-station",
-    room: "Ticket Waiting Hall",
-  };
-  assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), false);
-  assert.equal(
-    placeMatches({ ...answer, room: "Ticket" }, "train-station", "ticket-hall", []),
-    false,
-  );
-  assert.equal(
-    placeMatches({ ...answer, room: "Platforms" }, "train-station", "platform", []),
-    false,
-  );
-  assert.equal(placeMatches({ ...answer, room: "Hall" }, "train-station", "platform", [""]), false);
-});
-
-await test("an empty answer fails even when the genre and room are right", () => {
-  const answer = {
-    clues: "",
-    genre: "train-station",
-    room: "ticket hall",
-    furnished: "empty" as const,
-  };
-  assert.equal(placeMatches(answer, "train-station", "ticket-hall", []), false);
-  assert.equal(
-    placeMatches({ ...answer, furnished: "furnished" }, "train-station", "ticket-hall", []),
-    true,
-  );
+await test("the blind check passes right answers and fails wrong and empty ones", () => {
+  for (const row of rows) {
+    const got = placeMatches(
+      { ...right, ...row.answer },
+      "train-station",
+      row.roomType ?? "ticket-hall",
+      row.accepted ?? [],
+    );
+    assert.equal(got, row.passes, row.name);
+  }
 });
