@@ -10,26 +10,28 @@ import { clientHarnessSource, serverHarnessSource } from "./harness-source.ts";
 const modeSchema = z.enum(["run", "play", "multiplayer"]);
 
 const runPlaytestInput = z.strictObject({
-  /**
-   * `run`: server only, no player. `play`: one solo player. `multiplayer`: `players` clients.
-   * Defaults to `play`.
-   */
-  mode: modeSchema.optional(),
-  /** Number of clients of a `multiplayer` session; defaults to 2. */
+  mode: modeSchema.optional().describe("run: server only. play: one player (default)."),
   players: z
     .number()
     .int()
     .min(config.minPlaytestPlayers)
     .max(config.maxPlaytestPlayers)
-    .optional(),
-  /** Luau body of `runChecks(check, expectedClients)` on the server. */
-  serverChecks: z.string().optional(),
-  /** Luau body of `runChecks(check, player)` that every client runs. */
-  clientChecks: z.string().optional(),
-  /** How long the harness waits for the server checks and every client report. */
-  timeoutSeconds: z.number().int().min(1).max(config.maxPlaytestTimeoutSeconds).optional(),
-  /** Which Studio runs the test; optional while exactly one is connected. */
-  studioId: z.string().min(1).optional(),
+    .optional()
+    .describe("Clients of a multiplayer session; defaults to 2."),
+  serverChecks: z.string().optional().describe("Luau body of runChecks(check, expectedClients)."),
+  clientChecks: z.string().optional().describe("Luau body of runChecks(check, player)."),
+  timeoutSeconds: z
+    .number()
+    .int()
+    .min(1)
+    .max(config.maxPlaytestTimeoutSeconds)
+    .optional()
+    .describe("Seconds the harness waits for the server checks and every client report."),
+  studioId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Which Studio runs the test; optional while one is connected."),
 });
 
 const checkSchema = z.strictObject({ name: z.string(), passed: z.boolean(), detail: z.string() });
@@ -94,17 +96,26 @@ function planPlaytest(input: z.output<typeof runPlaytestInput>): PlaytestPlan {
 
 type Settled<Value> = { ok: true; value: Value } | { ok: false; error: unknown };
 
+export interface PlaytestTimers {
+  deadline(deadlineMs: number, signal: AbortSignal): Promise<"timed-out">;
+}
+
+const realTimers: PlaytestTimers = {
+  deadline: (deadlineMs, signal) => sleep(deadlineMs, "timed-out" as const, { signal }),
+};
+
 /** Runs the session call; resolves `"timed-out"` when it outlasts `deadlineMs`, and reports a late failure to nobody. */
 async function settleWithin<Value>(
   work: Promise<Value>,
   deadlineMs: number,
+  timers: PlaytestTimers,
 ): Promise<Settled<Value> | "timed-out"> {
   const controller = new AbortController();
   const settled = work.then(
     (value): Settled<Value> => ({ ok: true, value }),
     (error: unknown): Settled<Value> => ({ ok: false, error }),
   );
-  const timedOut = sleep(deadlineMs, "timed-out" as const, { signal: controller.signal });
+  const timedOut = timers.deadline(deadlineMs, controller.signal);
   try {
     return await Promise.race([settled, timedOut]);
   } finally {
@@ -167,6 +178,7 @@ function summarize(
 /** Builds the tool; `deadlineMarginMs` is how long past the harness timeout the session call may take. */
 export function createRunPlaytestTool(
   deadlineMarginMs: number = config.playtestCallMarginSeconds * 1000,
+  timers: PlaytestTimers = realTimers,
 ): ToolDefinition<typeof runPlaytestInput, typeof runPlaytestOutput> {
   return {
     name: "run_playtest",
@@ -204,6 +216,7 @@ export function createRunPlaytestTool(
           timeoutMs: plan.timeoutSeconds * 1000 + deadlineMarginMs,
         }),
         plan.timeoutSeconds * 1000 + deadlineMarginMs,
+        timers,
       );
       const stopNote = session === "timed-out" ? await stopTest(context.studio, studioId) : "";
       let removalFailure: string | undefined;

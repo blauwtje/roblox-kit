@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { FakeStudioConnection, type FakeToolHandler } from "../studio/fake-studio-connection.ts";
-import { createRunPlaytestTool } from "./run-playtest-tool.ts";
+import { createRunPlaytestTool, type PlaytestTimers } from "./run-playtest-tool.ts";
 
 const studios = [{ id: "studio-a", name: "Place A" }];
 
@@ -33,8 +33,9 @@ function callTool(
   connection: FakeStudioConnection,
   input: Record<string, unknown>,
   deadlineMarginMs?: number,
+  timers?: PlaytestTimers,
 ) {
-  const tool = createRunPlaytestTool(deadlineMarginMs);
+  const tool = createRunPlaytestTool(deadlineMarginMs, timers);
   return tool.handler(tool.inputSchema.parse(input), { studio: connection });
 }
 
@@ -139,14 +140,23 @@ await test("a report without any check fails with an error", async () => {
 
 await test("a session that never ends is stopped, cleaned up and reported with the syntax-error hint", async () => {
   const connection = connectionWith(() => new Promise<CallToolResult>(() => undefined));
+  const deadlines: number[] = [];
+  const timers: PlaytestTimers = {
+    deadline: (deadlineMs) => {
+      deadlines.push(deadlineMs);
+      return Promise.resolve("timed-out");
+    },
+  };
   await assert.rejects(
     callTool(
       connection,
       { mode: "run", serverChecks: "this is not luau (", timeoutSeconds: 1 },
       30,
+      timers,
     ),
     /did not end within 1 s[\s\S]*syntax error[\s\S]*get_console_output/,
   );
+  assert.deepEqual(deadlines, [1030]);
   const names = connection.requests.map((request) => request.name);
   assert.deepEqual(names, ["execute_luau", "start_stop_play", "execute_luau"]);
   assert.deepEqual(connection.requests[1]?.arguments, { is_start: false });
