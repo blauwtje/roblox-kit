@@ -895,6 +895,50 @@ for (const row of rangeRows) {
   });
 }
 
+await test("presetSchema accepts propWeights for kit kinds and rejects bad entries", () => {
+  const preset = validPreset();
+  const accepted = { bench: { weight: 3, wall: "long" }, lamp: { weight: 0.5, wall: "any" } };
+  assert.equal(presetSchema.safeParse({ ...preset, propWeights: accepted }).success, true);
+  assert.equal(
+    presetSchema.safeParse({ ...preset, propWeights: { bench: { weight: 1, wall: "doorless" } } })
+      .success,
+    true,
+  );
+  for (const bad of [
+    { bench: { weight: 0, wall: "any" } },
+    { bench: { weight: -1, wall: "any" } },
+    { bench: { weight: 1, wall: "north" } },
+    { bench: { weight: 1 } },
+    { bench: { wall: "any" } },
+    { bench: { weight: 1, wall: "any", extra: 1 } },
+    { "": { weight: 1, wall: "any" } },
+  ]) {
+    assert.equal(
+      presetSchema.safeParse({ ...preset, propWeights: bad }).success,
+      false,
+      JSON.stringify(bad),
+    );
+  }
+});
+
+await test("presetSchema accepts a propRules placement from the strategy enum", () => {
+  const withPlacement = (placement: unknown) => {
+    const preset = validPreset();
+    const lamp = { ...preset.propRules.lamp, placement };
+    return { ...preset, propRules: { ...preset.propRules, lamp } };
+  };
+  for (const placement of ["facing-entry", "standing", "beside-door", "door-sign", "track"]) {
+    assert.equal(presetSchema.safeParse(withPlacement(placement)).success, true, placement);
+  }
+  for (const placement of ["", "center", 1]) {
+    assert.equal(
+      presetSchema.safeParse(withPlacement(placement)).success,
+      false,
+      String(placement),
+    );
+  }
+});
+
 await test("presetSchema rejects a bad mesh declaration", () => {
   const target = { replaces: "prop:bench" };
   const mesh = { script: "bench.py", targets: [target] };

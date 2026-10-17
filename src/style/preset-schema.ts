@@ -322,6 +322,14 @@ const numberRange = z
   .strictObject({ min: z.number().positive(), max: z.number().positive() })
   .refine((range) => range.min <= range.max, "min must not exceed max");
 
+export const setPiecePlacements = [
+  "facing-entry",
+  "standing",
+  "beside-door",
+  "door-sign",
+  "track",
+] as const;
+
 /** What a prop kind may look like: its height, width and depth as shares of the avatar's, and whether it may stand at any yaw. */
 const propRule = z.strictObject({
   /** Prop height divided by avatar height; `presetSchema` requires it for every `propKit` and `setPieces` kind. */
@@ -339,6 +347,12 @@ const propRule = z.strictObject({
   surface: z.union([surfaceRoleName, z.literal("exempt")]).optional(),
   /** Studs the prop stands away from its wall, in place of the generator's own depth; the track bed and platform edge read it. */
   depth: z.number().positive().optional(),
+  placement: z.enum(setPiecePlacements).optional(),
+});
+
+const propWeight = z.strictObject({
+  weight: z.number().positive(),
+  wall: z.enum(["any", "long", "doorless"]),
 });
 
 const studPoint = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
@@ -565,6 +579,7 @@ export const presetSchema = z
     lightFixtures: lightFixtures.optional(),
     /** Names of the props this genre may place. */
     propKit: z.array(z.string().min(1)).min(1),
+    propWeights: z.record(z.string().min(1), propWeight).optional(),
     /** The color and material of each prop slot; a generator reads them as `<Slot>Color` and `<Slot>Material`. */
     propSlots,
     /** Scale and rotation rules keyed by prop kind, for every kind a room of this genre can place. */
