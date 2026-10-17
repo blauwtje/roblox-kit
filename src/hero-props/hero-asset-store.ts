@@ -40,6 +40,23 @@ export async function recordHeroAsset(
   await rename(pending, file);
 }
 
+async function writeHeroAssets(assets: Record<string, HeroAsset>, file: URL): Promise<void> {
+  const pending = new URL(`${file.href}.tmp`);
+  await writeFile(pending, `${JSON.stringify(assets, null, 2)}\n`);
+  await rename(pending, file);
+}
+
+/** Moves the record of `fromHash` to `toHash`, throwing when `fromHash` has none; the file is swapped in whole. */
+export async function rekeyHeroAsset(
+  fromHash: string,
+  toHash: string,
+  file: URL = heroAssetsFile,
+): Promise<void> {
+  const { [fromHash]: record, ...rest } = await readHeroAssets(file);
+  if (record === undefined) throw new Error(`No hero asset is recorded under ${fromHash}`);
+  await writeHeroAssets({ ...rest, [toHash]: record }, file);
+}
+
 /** The Blender script that bakes a material recipe; its source is part of every map's hash. */
 export const materialRecipeScript = new URL("../style/material-recipe.py", import.meta.url);
 

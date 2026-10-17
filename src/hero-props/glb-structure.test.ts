@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import { checkGlbParts, readGlbParts, readGlbStructure } from "./glb-structure.ts";
@@ -53,6 +54,7 @@ await test("reads the triangles, size and names of a GLB", () => {
     meshNames: ["body", "roof"],
     materialNames: ["shell", "glass"],
     materialMaps: [["color", "normal", "roughness-metalness"], ["color"]],
+    imageHashes: [],
   });
 });
 
@@ -142,6 +144,33 @@ function assembleBoxGlb(meshes: Record<string, Box[]>): Uint8Array {
   glb.set(bin, 20 + json.length);
   return glb;
 }
+
+await test("GlbStructure.imageHashes holds the sha256 of each embedded image's bytes", () => {
+  const first = new Uint8Array([1, 2, 3, 4]);
+  const second = new Uint8Array([9, 8, 7, 6]);
+  const json = assembleGlb({
+    asset: { version: "2.0" },
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: 4 },
+      { buffer: 0, byteOffset: 4, byteLength: 4 },
+    ],
+    accessors: [{ count: 3, type: "VEC3", min: [0, 0, 0], max: [1, 1, 1] }],
+    meshes: [{ name: "body", primitives: [{ attributes: { POSITION: 0 } }] }],
+    images: [{ bufferView: 0 }, { bufferView: 1 }],
+  }).subarray(12);
+  const glb = new Uint8Array(12 + json.length + 8 + 8);
+  const view = new DataView(glb.buffer);
+  view.setUint32(0, GLB_MAGIC, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, glb.length, true);
+  glb.set(json, 12);
+  view.setUint32(12 + json.length, 8, true);
+  view.setUint32(16 + json.length, BIN_CHUNK_TYPE, true);
+  glb.set(first, 20 + json.length);
+  glb.set(second, 24 + json.length);
+  const hash = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+  assert.deepEqual(readGlbStructure(glb).imageHashes, [hash(first), hash(second)]);
+});
 
 const tolerance = config.heroPropContactToleranceStuds;
 

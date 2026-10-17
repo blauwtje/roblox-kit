@@ -1,22 +1,24 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { config } from "../src/config.ts";
 import { runBlender } from "../src/hero-props/blender-path.ts";
 import { generateScriptedMesh } from "../src/hero-props/generate-scripted-mesh.ts";
 import { readGlbStructure, type GlbStructure } from "../src/hero-props/glb-structure.ts";
+import {
+  baseMeshSources,
+  currentMeshFiles,
+  meshDifferences,
+  meshFilesHash,
+  sameMeshFiles,
+  type ParityResult,
+} from "../src/hero-props/mesh-parity.ts";
+import { loadPresets } from "../src/style/load-preset.ts";
 
-/**
- * `node scripts/mesh-parity.ts <preset> <kind>=<original.py>...` runs each original script and the preset's
- * repository script of that kind with headless Blender, compares their triangle counts and bounds (to 0.01
- * stud) and writes `parity.json` with the result into the kind's generated folder, where
- * `record-mesh-asset.ts` reads it. It prints each kind and exits 1 when any kind differs.
- */
-/** How far apart two bounds may be, in studs, and still count as the same size. */
-const boundsTolerance = 0.01;
+const defaultBase = "HEAD~1";
 
-/** Runs the original script into a temp folder and reads the one GLB it exports, from the maps folder or `<out prefix>.glb`. */
-async function originalStructure(script: string): Promise<GlbStructure> {
+async function bakedStructure(script: string): Promise<GlbStructure> {
   const folder = await mkdtemp(join(tmpdir(), "mesh-parity-"));
   try {
     const maps = join(folder, "maps");
@@ -27,7 +29,6 @@ async function originalStructure(script: string): Promise<GlbStructure> {
     if (others.length > 0) {
       throw new Error(`${script} exported ${String(glbs.length)} GLBs into its maps folder`);
     }
-    // A script may write its one GLB beside the out prefix instead of into the maps folder.
     return readGlbStructure(
       await readFile(glb === undefined ? join(folder, "out.glb") : join(maps, glb)),
     );
@@ -36,54 +37,82 @@ async function originalStructure(script: string): Promise<GlbStructure> {
   }
 }
 
-/** What differs between the original and the repository mesh; empty when they match. */
-function differences(original: GlbStructure, repository: GlbStructure): string[] {
-  const found: string[] = [];
-  if (original.triangles !== repository.triangles) {
-    found.push(`triangles ${String(original.triangles)} vs ${String(repository.triangles)}`);
-  }
-  (["x", "y", "z"] as const).forEach((axis, index) => {
-    const before = original.size[index] ?? 0;
-    const after = repository.size[index] ?? 0;
-    if (Math.abs(before - after) > boundsTolerance) {
-      found.push(`${axis} bound ${before.toFixed(3)} vs ${after.toFixed(3)}`);
-    }
-  });
-  return found;
+interface KindRequest {
+  presetName: string;
+  kind: string;
+  script: string;
+  base: string;
 }
 
-const [presetName, ...pairs] = process.argv.slice(2);
-const kinds = pairs.map((pair) => {
-  const split = pair.indexOf("=");
-  return { kind: pair.slice(0, split), original: pair.slice(split + 1), valid: split > 0 };
-});
-if (presetName === undefined || kinds.length === 0 || kinds.some((entry) => !entry.valid)) {
-  console.error("Usage: node scripts/mesh-parity.ts <preset> <kind>=<original.py>...");
+async function compareKind(
+  request: KindRequest,
+): Promise<{ result: ParityResult; directory: URL }> {
+  const { presetName, kind, script, base } = request;
+  const current = await currentMeshFiles(script);
+  const before = await baseMeshSources(base, script);
+  try {
+    const baseHash = meshFilesHash(kind, script, before.files);
+    const hash = meshFilesHash(kind, script, current);
+    if (sameMeshFiles(before.files, current)) {
+      const directory = new URL(
+        `../${config.heroPropsFolder}/${presetName}-${kind}-${hash}/`,
+        import.meta.url,
+      );
+      await mkdir(directory, { recursive: true });
+      return { result: { hash, baseHash, passed: true, differences: [] }, directory };
+    }
+    const baseStructure = await bakedStructure(before.script);
+    const generated = await generateScriptedMesh(presetName, kind);
+    const differences = meshDifferences(baseStructure, generated.structure);
+    return {
+      result: { hash: generated.hash, baseHash, passed: differences.length === 0, differences },
+      directory: generated.directory,
+    };
+  } finally {
+    await rm(before.directory, { recursive: true, force: true });
+  }
+}
+
+async function reportKind(request: KindRequest): Promise<string[]> {
+  const { result, directory } = await compareKind(request);
+  await writeFile(new URL("parity.json", directory), `${JSON.stringify(result, null, 2)}\n`);
+  const verdict = result.passed ? "parity" : `differs (${result.differences.join("; ")})`;
+  console.log(`${request.presetName}/${request.kind}: ${verdict}, ${fileURLToPath(directory)}`);
+  return result.passed ? [] : [request.kind];
+}
+
+function scriptOf(
+  meshes: Record<string, { script: string }>,
+  presetName: string,
+  kind: string,
+): string {
+  const script = meshes[kind]?.script;
+  if (script === undefined) throw new Error(`Preset "${presetName}" declares no mesh "${kind}"`);
+  return script;
+}
+
+function parseArguments(args: string[]): { presetName?: string; base: string; kinds: string[] } {
+  const [presetName, ...rest] = args;
+  const flag = rest.indexOf("--base");
+  if (flag < 0) return { presetName, base: defaultBase, kinds: rest };
+  const kinds = rest.filter((_, index) => index !== flag && index !== flag + 1);
+  return { presetName, base: rest[flag + 1] ?? "", kinds };
+}
+
+const { presetName, base, kinds } = parseArguments(process.argv.slice(2));
+if (presetName === undefined || base === "") {
+  console.error("Usage: node scripts/mesh-parity.ts <preset> [--base <git ref>] [<kind>...]");
   process.exit(1);
 }
 
 const differing: string[] = [];
 try {
-  for (const { kind, original } of kinds) {
-    const before = await originalStructure(resolve(original));
-    const generated = await generateScriptedMesh(presetName, kind);
-    const found = differences(before, generated.structure);
-    const result = {
-      hash: generated.hash,
-      passed: found.length === 0,
-      original: { triangles: before.triangles, size: before.size },
-      repository: { triangles: generated.structure.triangles, size: generated.structure.size },
-      differences: found,
-    };
-    await writeFile(
-      new URL("parity.json", generated.directory),
-      `${JSON.stringify(result, null, 2)}\n`,
-    );
-    console.log(
-      `${presetName}/${kind}: ${result.passed ? "parity" : `differs (${found.join("; ")})`}, ` +
-        `${String(result.repository.triangles)} triangles, ${fileURLToPath(generated.directory)}`,
-    );
-    if (!result.passed) differing.push(kind);
+  const meshes = (await loadPresets()).get(presetName)?.meshes ?? {};
+  const selected = kinds.length > 0 ? kinds : Object.keys(meshes);
+  if (selected.length === 0) throw new Error(`Preset "${presetName}" declares no meshes`);
+  for (const kind of selected) {
+    const script = scriptOf(meshes, presetName, kind);
+    differing.push(...(await reportKind({ presetName, kind, script, base })));
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

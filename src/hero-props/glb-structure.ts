@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 const GLB_MAGIC = 0x46546c67;
@@ -62,6 +63,14 @@ const gltfSchema = z.object({
       }),
     )
     .default([]),
+  images: z
+    .array(
+      z.object({
+        bufferView: z.number().int().optional(),
+        uri: z.string().optional(),
+      }),
+    )
+    .default([]),
 });
 
 type Gltf = z.infer<typeof gltfSchema>;
@@ -76,6 +85,29 @@ export interface GlbStructure {
   materialNames: string[];
   /** Per material, parallel to `materialNames`, the texture maps it reads: "color", "normal" and "roughness-metalness" (glTF packs roughness in green and metalness in blue of one image). */
   materialMaps: string[][];
+  imageHashes?: string[];
+}
+
+function sha256(data: Uint8Array | string): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+
+function imageHashesOf(gltf: Gltf, bin: Uint8Array | undefined): string[] {
+  return gltf.images.map((image, index) => {
+    if (image.bufferView === undefined) {
+      if (image.uri === undefined) {
+        throw new Error(`GLB image ${String(index)} has neither a buffer view nor a uri`);
+      }
+      return sha256(image.uri);
+    }
+    const view = gltf.bufferViews[image.bufferView];
+    if (view === undefined || bin === undefined) {
+      throw new Error(`GLB image ${String(index)} names a buffer view that cannot be read`);
+    }
+    const end = view.byteOffset + view.byteLength;
+    if (end > bin.byteLength) throw new Error(`GLB image ${String(index)} runs past the BIN chunk`);
+    return sha256(bin.subarray(view.byteOffset, end));
+  });
 }
 
 function mapsOf(material: Gltf["materials"][number]): string[] {
@@ -173,7 +205,8 @@ function sizeOf(gltf: Gltf): [number, number, number] {
 
 /** Reads the triangle count, size, mesh and material names and material texture maps of a GLB from its JSON chunk. */
 export function readGlbStructure(glb: Uint8Array): GlbStructure {
-  const gltf = gltfSchema.parse(readChunks(glb).json);
+  const { json, bin } = readChunks(glb);
+  const gltf = gltfSchema.parse(json);
   let triangles = 0;
   for (const mesh of gltf.meshes) {
     for (const primitive of mesh.primitives) {
@@ -186,6 +219,7 @@ export function readGlbStructure(glb: Uint8Array): GlbStructure {
     meshNames: gltf.meshes.map((mesh) => mesh.name ?? ""),
     materialNames: gltf.materials.map((material) => material.name ?? ""),
     materialMaps: gltf.materials.map(mapsOf),
+    imageHashes: imageHashesOf(gltf, bin),
   };
 }
 
