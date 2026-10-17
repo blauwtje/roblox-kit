@@ -5,9 +5,7 @@ export const config = Object.freeze({
   /** URI prefix of the full check reports served as resource links. */
   checkReportUriPrefix: "roblox-kit://check-reports/",
 
-  /** Name and version this server reports in the MCP handshake, to its client and to StudioMCP. */
   serverName: "roblox-kit",
-  serverVersion: "0.4.0",
   /** Upper bound of the StudioMCP handshake and of a call to it that sets no timeout of its own. */
   upstreamTimeoutMs: 60_000,
   /** How long an empty Studio list is re-asked on one connection: a fresh StudioMCP lists nothing at first. */

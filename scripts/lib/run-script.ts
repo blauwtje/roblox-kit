@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 import { config } from "../../src/config.ts";
+import { pluginVersion } from "../../src/server/main.ts";
 import { awaitEditMode } from "../../src/studio/await-edit-mode.ts";
 import type { StudioConnection } from "../../src/studio/studio-connection.ts";
 import { StudioMcpClient } from "../../src/studio/studio-mcp-client.ts";
@@ -67,7 +68,7 @@ export async function withStudio<T>(
     const connection =
       options.connect?.() ??
       new StudioMcpClient({
-        clientInfo: { name: `${config.serverName}-${options.name}`, version: config.serverVersion },
+        clientInfo: { name: `${config.serverName}-${options.name}`, version: pluginVersion },
         timeoutMs: config.upstreamTimeoutMs,
       });
     try {

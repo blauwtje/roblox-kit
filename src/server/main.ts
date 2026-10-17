@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { z } from "zod";
 import {
   McpServer,
   ResourceTemplate,
@@ -18,6 +20,13 @@ import type { StudioConnection } from "../studio/studio-connection.ts";
 import { StudioMcpClient } from "../studio/studio-mcp-client.ts";
 import type { ResourceDefinition, ToolContext, ToolDefinition } from "./tool-definition.ts";
 import { toolErrorResult } from "./tool-error.ts";
+
+/** The `version` of `.claude-plugin/plugin.json`, read once at startup: the one source of the server version. */
+export const pluginVersion = z
+  .object({ version: z.string() })
+  .parse(
+    JSON.parse(readFileSync(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")),
+  ).version;
 
 export interface ToolDependencies {
   projectDir: string | undefined;
@@ -131,7 +140,7 @@ export function serveOverStdio(options: ServerOptions, transport?: Transport): S
 
 /** Runs the server on this process's stdio; the StudioMCP process starts on the first tool call. */
 function runServer(): void {
-  const serverInfo = { name: config.serverName, version: config.serverVersion };
+  const serverInfo = { name: config.serverName, version: pluginVersion };
   const studio = new StudioMcpClient({
     clientInfo: serverInfo,
     timeoutMs: config.upstreamTimeoutMs,

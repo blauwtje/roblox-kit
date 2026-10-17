@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { pluginVersion } from "./main.ts";
 
 const pluginManifestUrl = new URL("../../.claude-plugin/plugin.json", import.meta.url);
 const devManifestUrl = new URL("../../.mcp.json", import.meta.url);
@@ -11,9 +11,9 @@ const serverEnvSchema = z.object({
   mcpServers: z.object({ "roblox-kit": z.object({ env: z.object({ PROJECT_DIR: z.string() }) }) }),
 });
 
-await test("plugin.json version equals config.serverVersion", () => {
+await test("the server reports the plugin.json version", () => {
   const manifest = pluginManifestSchema.parse(JSON.parse(readFileSync(pluginManifestUrl, "utf8")));
-  assert.equal(manifest.version, config.serverVersion);
+  assert.equal(manifest.version, pluginVersion);
 });
 
 await test("plugin.json and .mcp.json carry no Open Cloud user settings", () => {
