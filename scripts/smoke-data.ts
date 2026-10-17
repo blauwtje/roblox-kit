@@ -1,12 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { config } from "../src/config.ts";
 import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
-import { acquireStudioLock } from "../src/studio/studio-lock.ts";
 import { type StudioConnection } from "../src/studio/studio-connection.ts";
 import { createRunInPlaytestTool } from "../src/playtest/run-in-playtest-tool.ts";
-import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+import { withStudio } from "./lib/run-script.ts";
 import { profileStorePath } from "./profilestore-cache.ts";
 import {
   createInstance,
@@ -157,31 +154,22 @@ async function runSmoke(connection: StudioConnection, studioId: string): Promise
   });
 }
 
-const releaseStudioLock = await acquireStudioLock({
-  lockFile: fileURLToPath(new URL(`../${config.studioLockFile}`, import.meta.url)),
-});
-const connection = new StudioMcpClient({
-  clientInfo: { name: `${config.serverName}-smoke-data`, version: config.serverVersion },
-  timeoutMs: config.upstreamTimeoutMs,
-});
 try {
-  const studioId = await awaitEditMode(connection);
-  try {
-    console.log(await runSmoke(connection, studioId));
-  } finally {
-    const removed = await removeMarked(
-      connection,
-      studioId,
-      "ServerScriptService",
-      markerAttribute,
-    );
-    console.log(`removed ${removed} inserted instances`);
-    await awaitEditMode(connection, { studioId });
-  }
+  await withStudio({ name: "smoke-data" }, async (connection, studioId) => {
+    try {
+      console.log(await runSmoke(connection, studioId));
+    } finally {
+      const removed = await removeMarked(
+        connection,
+        studioId,
+        "ServerScriptService",
+        markerAttribute,
+      );
+      console.log(`removed ${removed} inserted instances`);
+      await awaitEditMode(connection, { studioId });
+    }
+  });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
-} finally {
-  await connection.close();
-  await releaseStudioLock();
 }

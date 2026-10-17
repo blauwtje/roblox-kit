@@ -1,4 +1,4 @@
-import { config } from "../config.ts";
+import { scriptConfig } from "./script-config.ts";
 import { selectStudio, type StudioConnection } from "./studio-connection.ts";
 
 const modePattern = /Current Studio Mode:\s*(\S+)/;
@@ -11,15 +11,15 @@ export interface AwaitEditModeOptions {
 
 /**
  * Waits until `get_studio_state` reports Studio in Edit mode and returns the studio id. Throws naming the last
- * reported mode when `config.studioEditModeTimeoutMs` passes first, since `execute_luau` on the Edit
+ * reported mode when `scriptConfig.studioEditModeTimeoutMs` passes first, since `execute_luau` on the Edit
  * DataModel fails while a playtest runs or is still shutting down.
  */
 export async function awaitEditMode(
   connection: StudioConnection,
   options: AwaitEditModeOptions = {},
 ): Promise<string> {
-  const timeoutMs = options.timeoutMs ?? config.studioEditModeTimeoutMs;
-  const pollIntervalMs = options.pollIntervalMs ?? config.studioEditModePollIntervalMs;
+  const timeoutMs = options.timeoutMs ?? scriptConfig.studioEditModeTimeoutMs;
+  const pollIntervalMs = options.pollIntervalMs ?? scriptConfig.studioEditModePollIntervalMs;
   const studioId = await selectStudio(connection, options.studioId);
   const deadline = Date.now() + timeoutMs;
   for (;;) {

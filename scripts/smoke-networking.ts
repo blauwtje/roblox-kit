@@ -1,8 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { config } from "../src/config.ts";
-import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
 import { type StudioConnection } from "../src/studio/studio-connection.ts";
-import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+import { withStudio } from "./lib/run-script.ts";
 import { executeLuau, insertScript, removeMarked, runSmokePlaytest } from "./studio-insert.ts";
 
 /**
@@ -105,31 +103,25 @@ async function runSmoke(connection: StudioConnection, studioId: string): Promise
   });
 }
 
-const connection = new StudioMcpClient({
-  clientInfo: { name: `${config.serverName}-smoke-networking`, version: config.serverVersion },
-  timeoutMs: config.upstreamTimeoutMs,
-});
 try {
-  const studioId = await awaitEditMode(connection);
-  try {
-    console.log(await runSmoke(connection, studioId));
-  } finally {
-    for (const service of ["ServerScriptService", "ReplicatedStorage"]) {
-      // One service failing to clean up must not leave the other one dirty.
-      try {
-        const removed = await removeMarked(connection, studioId, service, markerAttribute);
-        console.log(`removed ${removed} inserted instances from ${service}`);
-      } catch (error) {
-        console.error(
-          `cleanup of ${service} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        process.exitCode = 1;
+  await withStudio({ name: "smoke-networking" }, async (connection, studioId) => {
+    try {
+      console.log(await runSmoke(connection, studioId));
+    } finally {
+      for (const service of ["ServerScriptService", "ReplicatedStorage"]) {
+        try {
+          const removed = await removeMarked(connection, studioId, service, markerAttribute);
+          console.log(`removed ${removed} inserted instances from ${service}`);
+        } catch (error) {
+          console.error(
+            `cleanup of ${service} failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          process.exitCode = 1;
+        }
       }
     }
-  }
+  });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
-} finally {
-  await connection.close();
 }

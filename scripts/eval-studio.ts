@@ -15,10 +15,8 @@ import type { RelationMapSpec } from "../src/map/map-spec.ts";
 import { loadPresets } from "../src/style/load-preset.ts";
 import { resolveStyle } from "../src/style/resolve-style.ts";
 import type { ToolDefinition } from "../src/server/tool-definition.ts";
-import { StudioMcpClient } from "../src/studio/studio-mcp-client.ts";
+import { withStudio } from "./lib/run-script.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
-import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
-import { assertViewportVisible } from "../src/studio/viewport-preflight.ts";
 
 /**
  * Builds, checks and captures each benchmark in `eval/benchmarks/` in the open Studio, runs the blind place
@@ -215,62 +213,58 @@ async function evaluate(file: string, connection: StudioConnection) {
   };
 }
 
-const connection = new StudioMcpClient({
-  clientInfo: { name: `${config.serverName}-eval`, version: config.serverVersion },
-  timeoutMs: config.upstreamTimeoutMs,
-});
 try {
-  await awaitEditMode(connection);
-  await assertViewportVisible(connection);
-  const files = (await readdir(benchmarksUrl)).filter((name) => name.endsWith(".json")).sort();
-  const failedPlaceChecks: string[] = [];
-  const failedQualityRooms: string[] = [];
-  for (const file of files) {
-    const line = await evaluate(file, connection);
-    await appendFile(resultsUrl, `${JSON.stringify(line)}\n`);
-    console.log(
-      `${line.benchmark}: codeScore ${String(line.codeScore)}, checkPassed ${String(line.checkPassed)}, ${String(line.captures.length)} images, place check ${line.placeCheckPassed ? "passed" : "FAILED"}`,
-    );
-    for (const check of line.placeCheck) {
-      const named =
-        check.answer === undefined
-          ? `nothing (${String(check.error)})`
-          : `${check.answer.genre} / ${check.answer.room} (${check.answer.furnished})`;
+  await withStudio({ name: "eval" }, async (connection) => {
+    const files = (await readdir(benchmarksUrl)).filter((name) => name.endsWith(".json")).sort();
+    const failedPlaceChecks: string[] = [];
+    const failedQualityRooms: string[] = [];
+    for (const file of files) {
+      const line = await evaluate(file, connection);
+      await appendFile(resultsUrl, `${JSON.stringify(line)}\n`);
       console.log(
-        `  ${check.room} (${check.roomType}): named ${named}: ${check.passed ? "pass" : "fail"}`,
+        `${line.benchmark}: codeScore ${String(line.codeScore)}, checkPassed ${String(line.checkPassed)}, ${String(line.captures.length)} images, place check ${line.placeCheckPassed ? "passed" : "FAILED"}`,
       );
-      if (!check.passed) {
-        failedPlaceChecks.push(
-          `${line.benchmark} ${check.room}: named ${named}, not ${check.genre} / ${check.roomType} furnished`,
+      for (const check of line.placeCheck) {
+        const named =
+          check.answer === undefined
+            ? `nothing (${String(check.error)})`
+            : `${check.answer.genre} / ${check.answer.room} (${check.answer.furnished})`;
+        console.log(
+          `  ${check.room} (${check.roomType}): named ${named}: ${check.passed ? "pass" : "fail"}`,
         );
+        if (!check.passed) {
+          failedPlaceChecks.push(
+            `${line.benchmark} ${check.room}: named ${named}, not ${check.genre} / ${check.roomType} furnished`,
+          );
+        }
+      }
+      for (const review of line.quality) {
+        const scores =
+          review.medians === undefined
+            ? `no scores (${String(review.error)})`
+            : Object.entries(review.medians)
+                .map(([axis, median]) => `${axis} ${String(median)}`)
+                .join(", ");
+        console.log(`  ${review.room} (${review.roomType}) quality: ${scores}`);
+        if (!review.passed) {
+          failedQualityRooms.push(
+            `${line.benchmark} ${review.room} (${review.roomType}): ${scores}`,
+          );
+        }
       }
     }
-    for (const review of line.quality) {
-      const scores =
-        review.medians === undefined
-          ? `no scores (${String(review.error)})`
-          : Object.entries(review.medians)
-              .map(([axis, median]) => `${axis} ${String(median)}`)
-              .join(", ");
-      console.log(`  ${review.room} (${review.roomType}) quality: ${scores}`);
-      if (!review.passed) {
-        failedQualityRooms.push(`${line.benchmark} ${review.room} (${review.roomType}): ${scores}`);
-      }
+    const failures: string[] = [];
+    if (failedPlaceChecks.length > 0) {
+      failures.push(`The blind place check failed:\n${failedPlaceChecks.join("\n")}`);
     }
-  }
-  const failures: string[] = [];
-  if (failedPlaceChecks.length > 0) {
-    failures.push(`The blind place check failed:\n${failedPlaceChecks.join("\n")}`);
-  }
-  if (failedQualityRooms.length > 0) {
-    failures.push(`Rooms below the pass score:\n${failedQualityRooms.join("\n")}`);
-  }
-  if (failures.length > 0) {
-    throw new Error(failures.join("\n"));
-  }
+    if (failedQualityRooms.length > 0) {
+      failures.push(`Rooms below the pass score:\n${failedQualityRooms.join("\n")}`);
+    }
+    if (failures.length > 0) {
+      throw new Error(failures.join("\n"));
+    }
+  });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
-} finally {
-  await connection.close();
 }

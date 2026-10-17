@@ -13,14 +13,8 @@ export const config = Object.freeze({
   /** How long an empty Studio list is re-asked on one connection: a fresh StudioMCP lists nothing at first. */
   studioDiscoveryTimeoutMs: 15_000,
   studioDiscoveryPollIntervalMs: 1000,
-  /** How long a smoke script waits for Studio to report Edit mode, re-asked every studioEditModePollIntervalMs: a playtest that just stopped takes a few seconds to leave Play mode. */
-  studioEditModeTimeoutMs: 30_000,
-  studioEditModePollIntervalMs: 500,
   /** Lock file, under the repository root, that smoke scripts sharing one Studio take in turn; it holds the holder's pid and start time. */
   studioLockFile: ".roblox-kit/studio.lock",
-  /** The longest one smoke run may hold Studio: an older lock counts as stale, and a waiting smoke gives up after as long. */
-  smokeTimeoutMs: 600_000,
-  studioLockPollIntervalMs: 1000,
   /** Characters of text `execute_luau` returns before Studio cuts it; the smoke probe fails if Studio changes this. */
   executeLuauMaxResultChars: 100_000,
   /** What Studio appends to an `execute_luau` result it cut. */
@@ -211,15 +205,6 @@ export const config = Object.freeze({
   /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
   heroPropsFolder: ".roblox-kit/hero-props",
   heroPropImageTolerance: 100,
-
-  /** ProfileStore, the player-saving library the `data` skill's templates are type-checked against, as `<scope>/<name>` on Wally. */
-  profileStorePackage: "lm-loleris/profilestore",
-  profileStoreVersion: "1.0.3",
-  /** Where the Wally package contents of that version are unpacked; git-ignored, under the repository root. */
-  profileStoreCacheFolder: ".roblox-kit/cache",
-  /** The Wally registry endpoint that serves a package's zip, and the `Wally-Version` header it requires. */
-  wallyPackageContentsUrl: "https://api.wally.run/v1/package-contents/",
-  wallyClientVersion: "0.3.2",
 
   /** Environment variables that hold the Open Cloud API key (Assets read and write) and the creator: a user id or a group id. */
   openCloudApiKeyEnv: "ROBLOX_OPEN_CLOUD_API_KEY",

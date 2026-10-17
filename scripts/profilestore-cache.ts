@@ -3,6 +3,7 @@ import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { config } from "../src/config.ts";
+import { scriptConfig } from "../src/studio/script-config.ts";
 
 /**
  * Downloads the pinned ProfileStore from Wally once into `.roblox-kit/cache/profilestore-<version>/` and returns the
@@ -13,7 +14,7 @@ const repositoryRoot = new URL("../", import.meta.url);
 
 export async function profileStorePath(): Promise<string> {
   const folder = new URL(
-    `${config.profileStoreCacheFolder}/profilestore-${config.profileStoreVersion}/`,
+    `${scriptConfig.profileStoreCacheFolder}/profilestore-${scriptConfig.profileStoreVersion}/`,
     repositoryRoot,
   );
   const sourcePath = fileURLToPath(new URL("ProfileStore.luau", folder));
@@ -23,9 +24,9 @@ export async function profileStorePath(): Promise<string> {
   );
   if (exists) return sourcePath;
 
-  const url = `${config.wallyPackageContentsUrl}${config.profileStorePackage}/${config.profileStoreVersion}`;
+  const url = `${scriptConfig.wallyPackageContentsUrl}${scriptConfig.profileStorePackage}/${scriptConfig.profileStoreVersion}`;
   const response = await fetch(url, {
-    headers: { "Wally-Version": config.wallyClientVersion },
+    headers: { "Wally-Version": scriptConfig.wallyClientVersion },
     signal: AbortSignal.timeout(config.upstreamTimeoutMs),
   });
   if (!response.ok) throw new Error(`Downloading ${url} failed: HTTP ${String(response.status)}`);
@@ -47,7 +48,7 @@ export async function profileStorePath(): Promise<string> {
   );
   if (!found)
     throw new Error(
-      `The ${config.profileStorePackage} ${config.profileStoreVersion} zip has no ProfileStore.luau`,
+      `The ${scriptConfig.profileStorePackage} ${scriptConfig.profileStoreVersion} zip has no ProfileStore.luau`,
     );
   return sourcePath;
 }

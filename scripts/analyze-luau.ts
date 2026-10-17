@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { config } from "../src/config.ts";
+import { scriptConfig } from "../src/studio/script-config.ts";
 import { runScript } from "./lib/run-script.ts";
 import { profileStorePath } from "./profilestore-cache.ts";
 
@@ -14,7 +14,7 @@ import { profileStorePath } from "./profilestore-cache.ts";
  * The definitions come from the luau-lsp tag that `rokit.toml` pins and are cached in the git-ignored
  * `.roblox-kit/cache/`; bumping the pin downloads the definitions for the new tag.
  */
-const cacheDirectory = config.profileStoreCacheFolder;
+const cacheDirectory = scriptConfig.profileStoreCacheFolder;
 
 async function downloadDefinitions(): Promise<string> {
   const rokitToml = readFileSync("rokit.toml", "utf8");

@@ -1,7 +1,7 @@
 import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { scriptConfig } from "./script-config.ts";
 
 const holderSchema = z.object({ pid: z.number().int().positive(), startedAt: z.number() });
 type Holder = z.output<typeof holderSchema>;
@@ -96,14 +96,14 @@ async function takeOverStale(
 
 /**
  * Waits until this process holds the Studio lock and returns the function that releases it; call that in a
- * `finally`. A lock whose holder process is gone, or that is older than `config.smokeTimeoutMs`, or that is not a
+ * `finally`. A lock whose holder process is gone, or that is older than `scriptConfig.smokeTimeoutMs`, or that is not a
  * holder record is stale: it is taken over with one logged line, so a crashed smoke never blocks the next one.
  * Throws naming the holder when the lock stays held past the wait timeout.
  */
 export async function acquireStudioLock(options: StudioLockOptions): Promise<() => Promise<void>> {
-  const staleAfterMs = options.staleAfterMs ?? config.smokeTimeoutMs;
-  const waitTimeoutMs = options.waitTimeoutMs ?? config.smokeTimeoutMs;
-  const pollIntervalMs = options.pollIntervalMs ?? config.studioLockPollIntervalMs;
+  const staleAfterMs = options.staleAfterMs ?? scriptConfig.smokeTimeoutMs;
+  const waitTimeoutMs = options.waitTimeoutMs ?? scriptConfig.smokeTimeoutMs;
+  const pollIntervalMs = options.pollIntervalMs ?? scriptConfig.studioLockPollIntervalMs;
   const log = options.log ?? console.log;
   const now = options.now ?? Date.now;
   const isAlive = options.isAlive ?? processIsAlive;
