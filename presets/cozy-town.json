@@ -47,6 +47,30 @@
       "Intensity": 0.4,
       "Size": 24,
       "Threshold": 1.4
+    },
+    "PostProcessing": {
+      "ColorCorrection": {
+        "Brightness": 0.02,
+        "Contrast": 0.08,
+        "Saturation": 0.12,
+        "TintColor": "#fff0d8"
+      },
+      "SunRays": {
+        "Intensity": 0.1,
+        "Spread": 0.6
+      },
+      "DepthOfField": {
+        "FarIntensity": 0.08,
+        "FocusDistance": 50,
+        "InFocusRadius": 40,
+        "NearIntensity": 0
+      },
+      "Sky": {
+        "StarCount": 0,
+        "CelestialBodiesShown": true,
+        "SunAngularSize": 21,
+        "MoonAngularSize": 11
+      }
     }
   },
   "lightingIntent": "bright, even",
@@ -65,6 +89,17 @@
       "range": 70,
       "brightness": 2.6,
       "color": "#fff0d0"
+    }
+  },
+  "lightFixtures": {
+    "kind": "pendant",
+    "spacing": 12,
+    "drop": 3,
+    "lines": 2,
+    "size": {
+      "width": 2.5,
+      "height": 1.5,
+      "depth": 2.5
     }
   },
   "propKit": ["bench", "lamp", "rail"],
@@ -190,6 +225,54 @@
       "signLabel": "HOME"
     }
   },
+  "idleAnimations": {
+    "lamp": {
+      "swayDegrees": 0.5,
+      "periodSeconds": 7,
+      "hinge": "bottom"
+    }
+  },
+  "ambientEffects": [
+    {
+      "kind": "particles",
+      "name": "dust",
+      "sprite": "dust",
+      "roomTypes": ["shop", "home"],
+      "color": "#f7e8c4",
+      "heightStuds": 7,
+      "transparency": 0.65,
+      "lightEmission": 0.3,
+      "rate": 5,
+      "lifetimeSeconds": 8,
+      "sizeStuds": 0.2,
+      "speedStuds": 0.5
+    },
+    {
+      "kind": "particles",
+      "name": "embers",
+      "sprite": "spark",
+      "roomTypes": ["home"],
+      "color": "#ffb45a",
+      "heightStuds": 3,
+      "transparency": 0.2,
+      "lightEmission": 1,
+      "rate": 2,
+      "lifetimeSeconds": 2,
+      "sizeStuds": 0.25,
+      "speedStuds": 2
+    },
+    {
+      "kind": "beam",
+      "name": "window-light",
+      "sprite": "glow",
+      "roomTypes": ["shop", "home"],
+      "color": "#ffe7b8",
+      "heightStuds": 9,
+      "transparency": 0.88,
+      "lightEmission": 1,
+      "widthStuds": 6
+    }
+  ],
   "sizeRules": {
     "agentRadius": 2,
     "agentHeight": 5,

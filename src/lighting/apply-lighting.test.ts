@@ -143,9 +143,8 @@ await test("sends the post-processing block of a preset that has one, and none f
   for (const key of ["PostProcessing", "ColorCorrection", "SunRays", "DepthOfField", "Sky"]) {
     assert.ok(code.includes(`"${key}":{`), key);
   }
-  assert.equal(recipe.PostProcessing, undefined);
   const without = studioReturning('{"snapshotTaken":true}');
-  await applyLighting(request(without));
+  await applyLighting({ ...request(without), recipe: { ...recipe, PostProcessing: undefined } });
   assert.ok(!String(without.requests[0]?.arguments["code"]).includes('"PostProcessing":{'));
 });
 

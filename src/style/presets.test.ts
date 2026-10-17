@@ -14,7 +14,7 @@ import {
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
 
-const featurePresets = ["train-station"];
+const featurePresets = ["train-station", "cozy-town"];
 
 /** Names in Enum.Material that these presets may use; "built-in Materials only" means no custom ones. */
 const builtInMaterials = new Set([
@@ -88,9 +88,11 @@ await test("every bundled preset meets the size rules check_map enforces", async
   }
 });
 
-const featureRoom = { name: "hall", x: 0, z: 0, width: 50, depth: 50, spawn: true };
+const featureRoomSizes: Record<string, number> = { "train-station": 50, "cozy-town": 46 };
 
 for (const name of featurePresets) {
+  const size = featureRoomSizes[name] ?? 50;
+  const featureRoom = { name: "hall", x: 0, z: 0, width: size, depth: size, spawn: true };
   await test(`${name} builds a map with no look issues and sets the full upload-free feature set`, async () => {
     const preset = (await loadPresets()).get(name);
     assert.ok(preset !== undefined, name);
