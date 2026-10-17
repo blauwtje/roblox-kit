@@ -965,3 +965,53 @@ await test("presetSchema rejects a bad mesh declaration", () => {
     );
   }
 });
+
+await test("presetSchema idleAnimation.kind defaults to sway and rejects an unknown kind", () => {
+  const sign = { swayDegrees: 3, periodSeconds: 4, hinge: "top" };
+  const parsed = presetSchema.parse({ ...validPreset(), idleAnimations: { sign } });
+  assert.equal(parsed.idleAnimations?.["sign"]?.kind, "sway");
+  const flicker = { ...validPreset(), idleAnimations: { sign: { ...sign, kind: "flicker" } } };
+  assert.ok(presetSchema.safeParse(flicker).success);
+  const bad = { ...validPreset(), idleAnimations: { sign: { ...sign, kind: "spin" } } };
+  assert.equal(presetSchema.safeParse(bad).success, false);
+});
+
+await test("presetSchema takes npc roles, room .clutter density lists and signage.destinations", () => {
+  const colors = { head: "#ffcc99", torso: "#334455", arms: "#ffcc99", legs: "#222222" };
+  const npcRoles = {
+    commuter: {
+      outfits: [{ ...colors, scale: { min: 0.9, max: 1.1 } }],
+      speed: { min: 6, max: 10 },
+      chatLines: ["Mind the gap."],
+      behaviors: { wander: 3, stand: 1 },
+    },
+  };
+  const roomTypes = {
+    platform: {
+      setPieces: [],
+      signLabel: "PLATFORM 1",
+      npcs: [{ role: "commuter", density: 0.5 }],
+      clutter: [{ kind: "bin", density: 0.2 }],
+    },
+  };
+  const full = {
+    ...validPreset(),
+    npcRoles,
+    roomTypes,
+    signage: { destinations: ["Central", "Harbour"] },
+  };
+  assert.ok(presetSchema.safeParse(full).success);
+  assert.ok(presetSchema.safeParse(validPreset()).success);
+  const unknownRole = {
+    ...full,
+    roomTypes: { platform: { ...roomTypes.platform, npcs: [{ role: "ghost", density: 1 }] } },
+  };
+  assert.equal(presetSchema.safeParse(unknownRole).success, false);
+  for (const bad of [
+    { ...full, signage: { destinations: [] } },
+    { ...full, npcRoles: { commuter: { ...npcRoles.commuter, chatLines: [] } } },
+    { ...full, npcRoles: { commuter: { ...npcRoles.commuter, speed: { min: 9, max: 2 } } } },
+  ]) {
+    assert.equal(presetSchema.safeParse(bad).success, false);
+  }
+});

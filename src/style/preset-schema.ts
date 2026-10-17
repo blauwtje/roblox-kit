@@ -123,8 +123,12 @@ const ambientEffect = z.discriminatedUnion("kind", [
 
 export type AmbientEffect = z.infer<typeof ambientEffect>;
 
+/** The motions `idle-animation.luau` can run. */
+export const idleAnimationKinds = ["sway", "tick", "flicker", "flip"] as const;
+
 /** How one prop kind sways in a running game: a sine plus noise about a hinge at the top or bottom of its box. */
 const idleAnimation = z.strictObject({
+  kind: z.enum(idleAnimationKinds).default("sway"),
   /** Largest tilt in degrees either way. */
   swayDegrees: z.number().positive().max(45),
   /** Seconds of one full swing. */
@@ -502,6 +506,24 @@ const heroProp = z.strictObject({
     }),
 });
 
+const npcOutfit = z.strictObject({
+  head: hexColor,
+  torso: hexColor,
+  arms: hexColor,
+  legs: hexColor,
+  scale: numberRange,
+});
+
+const npcRole = z.strictObject({
+  outfits: z.array(npcOutfit).min(1),
+  speed: numberRange,
+  chatLines: z.array(z.string().min(1)).min(1),
+  behaviors: z.record(z.string().min(1), z.number().positive()),
+});
+
+const npcDensity = z.strictObject({ role: z.string().min(1), density: z.number().positive() });
+const clutterDensity = z.strictObject({ kind: z.string().min(1), density: z.number().positive() });
+
 /** What a room of one type shows: the set pieces that identify it, the arrangements that fill it, the text its signs carry and the room names a reviewer may call it. */
 const roomType = z.strictObject({
   /** Set-piece kinds placed in a room of this type. */
@@ -513,6 +535,8 @@ const roomType = z.strictObject({
   signLabel: z.string().min(1),
   /** Room names, besides the type name, that the blind place check accepts for this type. */
   roomNames: z.array(z.string().min(1)).optional(),
+  npcs: z.array(npcDensity).optional(),
+  clutter: z.array(clutterDensity).optional(),
 });
 
 /** The color and material a prop generator takes for one slot. */
@@ -540,6 +564,24 @@ const propSlots = z.strictObject({
   sleeper: plainPropSlot.optional(),
   ballast: plainPropSlot.optional(),
 });
+
+function undeclaredNpcRoles(preset: {
+  roomTypes?: Record<string, { npcs?: { role: string }[] | undefined }> | undefined;
+  npcRoles?: Record<string, unknown> | undefined;
+}): z.core.$ZodRawIssue[] {
+  const roomTypes = Object.entries(preset.roomTypes ?? {});
+  const npcs = roomTypes.flatMap(([typeName, roomType]) =>
+    (roomType.npcs ?? []).map((npc, index) => ({ typeName, npc, index })),
+  );
+  return npcs
+    .filter(({ npc }) => preset.npcRoles?.[npc.role] === undefined)
+    .map(({ typeName, npc, index }) => ({
+      code: "custom",
+      input: npc,
+      path: ["roomTypes", typeName, "npcs", index, "role"],
+      message: `NPC role "${npc.role}" is not declared in npcRoles`,
+    }));
+}
 
 /** One genre preset: palette, surface roles, lighting recipe and intent, light roles, prop kit and rules, room types and size rules. */
 export const presetSchema = z
@@ -594,6 +636,8 @@ export const presetSchema = z
     idleAnimations: z.record(z.string().min(1), idleAnimation).optional(),
     /** Blender-scripted meshes keyed by mesh kind; each replaces the pieces its targets name; absent keeps the kit pieces. */
     meshes: z.record(z.string().min(1), meshDeclaration).optional(),
+    npcRoles: z.record(z.string().min(1), npcRole).optional(),
+    signage: z.strictObject({ destinations: z.array(z.string().min(1)).min(1) }).optional(),
     sizeRules: z.strictObject({
       agentRadius: z.number().positive(),
       agentHeight: z.number().positive(),
@@ -609,6 +653,7 @@ export const presetSchema = z
     for (const roomType of Object.values(preset.roomTypes ?? {})) {
       for (const kind of roomType.setPieces) kinds.add(kind);
     }
+    for (const issue of undeclaredNpcRoles(preset)) context.addIssue(issue);
     for (const kind of kinds) {
       for (const ratio of ["heightRatio", "widthRatio", "depthRatio"] as const) {
         if (preset.propRules[kind]?.[ratio] === undefined) {
