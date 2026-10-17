@@ -163,6 +163,66 @@
       "color": "#ffffff"
     }
   },
+  "lightFixtures": {
+    "kind": "pendant",
+    "spacing": 24,
+    "drop": 2,
+    "size": {
+      "width": 4,
+      "height": 0.6,
+      "depth": 1
+    }
+  },
+  "idleAnimations": {
+    "lamp": {
+      "swayDegrees": 0.8,
+      "periodSeconds": 4,
+      "hinge": "bottom"
+    }
+  },
+  "ambientEffects": [
+    {
+      "kind": "particles",
+      "name": "motes",
+      "sprite": "glow",
+      "color": "#9fe3ff",
+      "heightStuds": 5,
+      "transparency": 0.6,
+      "lightEmission": 0.8,
+      "rate": 3,
+      "lifetimeSeconds": 8,
+      "sizeStuds": 0.3,
+      "speedStuds": 0.5
+    },
+    {
+      "kind": "particles",
+      "name": "vapor",
+      "sprite": "steam",
+      "roomTypes": ["cargo-bay"],
+      "color": "#c9d6e2",
+      "heightStuds": 1,
+      "transparency": 0.7,
+      "lightEmission": 0,
+      "rate": 2,
+      "lifetimeSeconds": 5,
+      "sizeStuds": 3,
+      "speedStuds": 1.2
+    },
+    {
+      "kind": "particles",
+      "name": "console-sparks",
+      "sprite": "spark",
+      "roomTypes": ["bridge"],
+      "color": "#7fdcff",
+      "heightStuds": 4,
+      "transparency": 0.2,
+      "lightEmission": 1,
+      "rate": 1,
+      "lifetimeSeconds": 1.2,
+      "sizeStuds": 0.2,
+      "speedStuds": 2
+    }
+  ],
   "propKit": ["pillar", "lamp", "stairs", "rail"],
   "propRules": {
     "pillar": {

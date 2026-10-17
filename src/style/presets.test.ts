@@ -14,7 +14,7 @@ import {
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
 
-const featurePresets = ["train-station", "cozy-town", "horror-facility"];
+const featurePresets = ["train-station", "cozy-town", "horror-facility", "sci-fi-station"];
 
 /** Names in Enum.Material that these presets may use; "built-in Materials only" means no custom ones. */
 const builtInMaterials = new Set([
