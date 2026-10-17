@@ -1,26 +1,20 @@
-import {
-  heroRecipeHash,
-  recordedHeroAsset,
-  type HeroPropSources,
-} from "../hero-props/hero-prop-asset.ts";
-import {
-  propRecipeKind,
-  propRecipes,
-  trimRecipeKind,
-  type TrimProfileKind,
-} from "../hero-props/prop-recipes.ts";
-import { heroParts, type MeshDeclaration, type Preset } from "../style/preset-schema.ts";
+import { heroRecipeHash, type HeroPropSources } from "../hero-props/hero-prop-asset.ts";
+import { propRecipeKind, propRecipes } from "../hero-props/prop-recipes.ts";
+import { heroParts, type Preset } from "../style/preset-schema.ts";
+import { cachedAssetId, declaredMeshesOf, type AssetLookup } from "./declared-meshes.ts";
 import type { Vector } from "./map-layout.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
-import type { DetailPart } from "./room-details.ts";
 import { roomBounds, type PropRecord } from "./prop-placement.ts";
 import { doorwayClearanceBoxes, type DoorwayClearanceBox } from "./size-rules.ts";
+
+export { declaredTrimOf, type DeclaredTrimRecord } from "./declared-meshes.ts";
+export { trimMeshesOf, type TrimMeshRecord } from "./trim-meshes.ts";
 
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 type SurfaceRole = keyof Preset["surfaces"];
 
 /** A placed prop as `build-map.luau` takes it: a set piece also turns by `yaw` and carries `attributes`. */
-type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, string> };
+export type PlacedProp = PropRecord & { yaw?: number; attributes?: Record<string, string> };
 
 /**
  * One hero prop for `build-map.luau`: the uploaded asset loaded in the slot of the set piece it replaces.
@@ -182,8 +176,8 @@ export async function heroPropsOf<Prop extends PlacedProp>(
   sources: HeroPropSources = {},
 ): Promise<{ props: Prop[]; heroProps: HeroPropRecord[]; warnings: string[] }> {
   const { style } = preset;
-  const assetIds = new Map<string, string | undefined>();
-  const declared = await declaredMeshesOf(preset, props, sources, assetIds);
+  const lookup = { cache: new Map<string, string | undefined>(), base: preset.base, sources };
+  const declared = await declaredMeshesOf(lookup, props);
   props = declared.props;
   const rooms = spec.rooms.flatMap((room) => {
     const kinds =
@@ -214,7 +208,7 @@ export async function heroPropsOf<Prop extends PlacedProp>(
         );
         continue;
       }
-      const assetId = await cachedAssetId(assetIds, kind, preset.base, kind, sources);
+      const assetId = await cachedAssetId(lookup, kind);
       if (assetId === undefined) {
         const hash = await heroRecipeHash(preset.base, kind);
         warnings.push(
@@ -235,10 +229,9 @@ export async function heroPropsOf<Prop extends PlacedProp>(
     }
   }
   const meshes = await propMeshesOf(
-    preset,
+    lookup,
     props.filter((prop) => !replaced.has(prop)),
-    sources,
-    assetIds,
+    style,
   );
   return {
     props: meshes.props,
@@ -247,115 +240,11 @@ export async function heroPropsOf<Prop extends PlacedProp>(
   };
 }
 
-type MeshTarget = MeshDeclaration["targets"][number];
-
-/** The record that puts a declared mesh in the piece's slot at its modelled size, turned by the piece's yaw and the target's. */
-function declaredRecord(assetId: string, target: MeshTarget, piece: PlacedProp): HeroPropRecord {
-  const anchor = target.anchor ?? "center";
-  const { x, y, z } = piece.pivot;
-  return {
-    kind: piece.kind,
-    assetId,
-    pivot: anchor === "bottom" ? { x, y: y - piece.size.y / 2, z } : piece.pivot,
-    yaw: ((piece.yaw ?? 0) + (target.yaw ?? 0)) % 360,
-    size: piece.size,
-    surfaces: {},
-    bevels: {},
-    fallback: piece,
-    fit: "none",
-    anchor,
-    ...(target.part === undefined ? {} : { part: target.part }),
-  };
-}
-
-/** The record that stands a declared mesh on top of a piece it leaves in place, turned by the piece's yaw and the target's. */
-function standingRecord(
-  meshKind: string,
-  assetId: string,
-  target: MeshTarget,
-  piece: PlacedProp,
-): HeroPropRecord {
-  const { x, y, z } = piece.pivot;
-  return {
-    kind: meshKind,
-    assetId,
-    pivot: { x, y: y + piece.size.y / 2, z },
-    yaw: ((piece.yaw ?? 0) + (target.yaw ?? 0)) % 360,
-    size: piece.size,
-    surfaces: {},
-    bevels: {},
-    fit: "none",
-    anchor: "bottom",
-    ...(target.part === undefined ? {} : { part: target.part }),
-  };
-}
-
-/**
- * Each prop a declared mesh replaces (a `prop:<kind>` target, and its `label` when it has one) as that mesh at its
- * modelled size, ahead of any `heroProps` entry or `prop-<kind>` recipe for the piece. A prop an `onto:prop:<kind>`
- * target names stays and gets the mesh stood on its top, with no fallback. A mesh with no recorded asset leaves its
- * pieces in place, with no warning.
- */
-async function declaredMeshesOf<Prop extends PlacedProp>(
-  preset: HeroPreset,
-  props: Prop[],
-  sources: HeroPropSources,
-  assetIds: Map<string, string | undefined>,
-): Promise<{ props: Prop[]; heroProps: HeroPropRecord[] }> {
-  const byTarget = new Map<string, { meshKind: string; target: MeshTarget }[]>();
-  for (const [meshKind, { targets }] of Object.entries(preset.base.meshes ?? {})) {
-    for (const target of targets) {
-      const entries = byTarget.get(target.replaces) ?? [];
-      byTarget.set(target.replaces, [...entries, { meshKind, target }]);
-    }
-  }
-  const kept: Prop[] = [];
-  const heroProps: HeroPropRecord[] = [];
-  for (const prop of props) {
-    const labelled = ({ target }: { target: MeshTarget }) =>
-      target.label === undefined || prop.attributes?.Label === target.label;
-    const match = byTarget.get(`prop:${prop.kind}`)?.find(labelled);
-    for (const { meshKind, target } of (byTarget.get(`onto:prop:${prop.kind}`) ?? []).filter(
-      labelled,
-    )) {
-      const assetId = await cachedAssetId(assetIds, meshKind, preset.base, meshKind, sources);
-      if (assetId !== undefined) heroProps.push(standingRecord(meshKind, assetId, target, prop));
-    }
-    if (match === undefined) {
-      kept.push(prop);
-      continue;
-    }
-    const assetId = await cachedAssetId(
-      assetIds,
-      match.meshKind,
-      preset.base,
-      match.meshKind,
-      sources,
-    );
-    if (assetId === undefined) kept.push(prop);
-    else heroProps.push(declaredRecord(assetId, match.target, prop));
-  }
-  return { props: kept, heroProps };
-}
-
-/** The recorded asset of `recipeKind`, looked up once per `key` of `cache`; undefined when none is recorded. */
-async function cachedAssetId<Key>(
-  cache: Map<Key, string | undefined>,
-  key: Key,
-  base: Preset,
-  recipeKind: string,
-  sources: HeroPropSources,
-): Promise<string | undefined> {
-  if (!cache.has(key)) cache.set(key, (await recordedHeroAsset(base, recipeKind, sources)).assetId);
-  return cache.get(key);
-}
-
 /** Each prop whose kind's recipe has a recorded asset as its stretched mesh; the others stay Luau models. */
 async function propMeshesOf<Prop extends PlacedProp>(
-  preset: HeroPreset,
+  lookup: AssetLookup,
   props: Prop[],
-  sources: HeroPropSources,
-  assetIds: Map<string, string | undefined>,
+  style: Preset,
 ): Promise<{ props: Prop[]; heroProps: HeroPropRecord[] }> {
   const kept: Prop[] = [];
   const heroProps: HeroPropRecord[] = [];
@@ -366,172 +255,9 @@ async function propMeshesOf<Prop extends PlacedProp>(
       kept.push(prop);
       continue;
     }
-    const assetId = await cachedAssetId(assetIds, kind, preset.base, kind, sources);
+    const assetId = await cachedAssetId(lookup, kind);
     if (assetId === undefined) kept.push(prop);
-    else heroProps.push(stretchedRecord(assetId, recipe, prop, preset.style));
+    else heroProps.push(stretchedRecord(assetId, recipe, prop, style));
   }
   return { props: kept, heroProps };
-}
-
-/** A profile mesh that replaces one trim box: its recorded asset placed like the box, with the box as its fallback. */
-export interface TrimMeshRecord {
-  kind: string;
-  assetId: string;
-  pivot: Vector;
-  yaw: number;
-  roll: number;
-  size: Vector;
-  surfaces: Record<string, { color: string; material: string }>;
-  fit: "stretch";
-  fallbackPart: DetailPart;
-}
-
-/**
- * A declared mesh that replaces trim details: one doorway arch (its jambs and lintel as `fallbackParts`) stretched to
- * the frame's outer bounds, or one crown or baseboard run (its box as the one fallback part) stretched along the run.
- * `part` names the MeshPart of the Model to keep; the mesh's own baked look is kept, so it names no surfaces.
- */
-export interface DeclaredTrimRecord {
-  kind: "arch" | "crown" | "baseboard";
-  assetId: string;
-  pivot: Vector;
-  yaw: number;
-  size: Vector;
-  surfaces: Record<string, never>;
-  fit: "stretch" | "none";
-  part: string;
-  fallbackParts: DetailPart[];
-}
-
-const archPiece = /^(.*-arch-\d+)-(left|right|lintel)$/;
-const bandRun = /-(crown|baseboard)-(?:north|south|east|west)-[^-]*$/;
-
-/** The doorway arches and the crown and baseboard runs the preset's declared meshes replace, as records; the other details stay. */
-export async function declaredTrimOf(
-  details: DetailPart[],
-  preset: { base: Preset },
-  sources: HeroPropSources = {},
-): Promise<{ details: DetailPart[]; declaredTrim: DeclaredTrimRecord[] }> {
-  const targets = Object.entries(preset.base.meshes ?? {}).flatMap(([meshKind, { targets }]) =>
-    targets.map((target) => ({ meshKind, target })),
-  );
-  const assetIds = new Map<string, string | undefined>();
-  const assetOf = async (replaces: string) => {
-    const match = targets.find(({ target }) => target.replaces === replaces);
-    if (match === undefined || match.target.part === undefined) return undefined;
-    const assetId = await cachedAssetId(
-      assetIds,
-      match.meshKind,
-      preset.base,
-      match.meshKind,
-      sources,
-    );
-    return assetId === undefined ? undefined : { assetId, part: match.target.part };
-  };
-  const arches = new Map<string, DetailPart[]>();
-  const kept: DetailPart[] = [];
-  const declaredTrim: DeclaredTrimRecord[] = [];
-  const archAsset = await assetOf("arch");
-  for (const detail of details) {
-    const piece = detail.kind === "arch" ? archPiece.exec(detail.name) : null;
-    if (piece?.[1] !== undefined && archAsset !== undefined) {
-      arches.set(piece[1], [...(arches.get(piece[1]) ?? []), detail]);
-      continue;
-    }
-    const band = detail.profile === undefined ? null : bandRun.exec(detail.name);
-    const bandKind = band?.[1] === "crown" || band?.[1] === "baseboard" ? band[1] : undefined;
-    const asset = bandKind === undefined ? undefined : await assetOf(`band:${bandKind}`);
-    if (bandKind === undefined || asset === undefined || detail.profile === undefined) {
-      kept.push(detail);
-      continue;
-    }
-    // The mesh's x runs along the wall and its profile faces local -Z; the profile's yaw turns x out of the wall.
-    declaredTrim.push({
-      kind: bandKind,
-      assetId: asset.assetId,
-      pivot: detail.position,
-      yaw: (detail.profile.yaw + 270) % 360,
-      size: { x: detail.profile.size.z, y: detail.profile.size.y, z: detail.profile.size.x },
-      surfaces: {},
-      fit: "stretch",
-      part: asset.part,
-      fallbackParts: [detail],
-    });
-  }
-  for (const parts of arches.values()) {
-    const [jamb, other] = parts.filter((part) => !part.name.endsWith("-lintel"));
-    if (archAsset === undefined || jamb === undefined || other === undefined) {
-      kept.push(...parts);
-      continue;
-    }
-    // Stretched to the frame's outer bounds (both jambs and the lintel), turned a quarter when the jambs differ in z.
-    const low = (axis: "x" | "y" | "z") =>
-      Math.min(...parts.map((part) => part.position[axis] - part.size[axis] / 2));
-    const high = (axis: "x" | "y" | "z") =>
-      Math.max(...parts.map((part) => part.position[axis] + part.size[axis] / 2));
-    const extent = { x: high("x") - low("x"), y: high("y") - low("y"), z: high("z") - low("z") };
-    const alongZ = Math.abs(jamb.position.z - other.position.z) > 1e-9;
-    declaredTrim.push({
-      kind: "arch",
-      assetId: archAsset.assetId,
-      pivot: {
-        x: (low("x") + high("x")) / 2,
-        y: (low("y") + high("y")) / 2,
-        z: (low("z") + high("z")) / 2,
-      },
-      yaw: alongZ ? 90 : 0,
-      // The mesh's x runs along the wall and its z through it.
-      size: alongZ ? { x: extent.z, y: extent.y, z: extent.x } : extent,
-      surfaces: {},
-      fit: "stretch",
-      part: archAsset.part,
-      fallbackParts: parts,
-    });
-  }
-  return { details: kept, declaredTrim };
-}
-
-/**
- * Each detail with a profile whose recipe has a recorded asset as a mesh stretched along its run, and the details
- * left as boxes: the others, and every one when its profile has no recorded upload (nothing is uploaded here).
- */
-export async function trimMeshesOf(
-  details: DetailPart[],
-  preset: { base: Preset; style: Preset },
-  sources: HeroPropSources = {},
-): Promise<{ details: DetailPart[]; trimMeshes: TrimMeshRecord[] }> {
-  const assetIds = new Map<TrimProfileKind, string | undefined>();
-  const kept: DetailPart[] = [];
-  const trimMeshes: TrimMeshRecord[] = [];
-  const { color, material } = preset.style.surfaces.trim;
-  for (const detail of details) {
-    const { profile } = detail;
-    if (profile === undefined) {
-      kept.push(detail);
-      continue;
-    }
-    const assetId = await cachedAssetId(
-      assetIds,
-      profile.kind,
-      preset.base,
-      trimRecipeKind(profile.kind),
-      sources,
-    );
-    if (assetId === undefined) {
-      kept.push(detail);
-      continue;
-    }
-    trimMeshes.push({
-      kind: trimRecipeKind(profile.kind),
-      assetId,
-      pivot: detail.position,
-      yaw: profile.yaw,
-      roll: profile.roll,
-      size: profile.size,
-      surfaces: { trim: { color, material } },
-      fit: "stretch",
-      fallbackPart: detail,
-    });
-  }
-  return { details: kept, trimMeshes };
 }
