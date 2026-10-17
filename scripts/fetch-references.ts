@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { z } from "zod";
 import { readReferenceSet, referenceImagePath, type Reference } from "../src/eval/reference-set.ts";
+import { runScript } from "./lib/run-script.ts";
 
 /**
  * `node scripts/fetch-references.ts` downloads every image `eval/reference-set.json` names into
@@ -67,7 +68,7 @@ async function download(reference: Reference, imageUrl: string): Promise<string>
   return relative(process.cwd(), imagePath);
 }
 
-try {
+async function fetchReferences(): Promise<number> {
   const references = await readReferenceSet();
   const universeIds = [...new Set(references.map((reference) => reference.universeId))];
   const imageUrls = await imageUrlsByTargetId(universeIds);
@@ -83,7 +84,12 @@ try {
   if (missing.length > 0) {
     throw new Error(`The thumbnail API no longer returns:\n${missing.join("\n")}`);
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+  return 0;
 }
+
+await runScript({
+  name: "fetch-references",
+  usage:
+    "Usage: node scripts/fetch-references.ts\nDownloads every image eval/reference-set.json names into eval/references/.",
+  run: fetchReferences,
+});

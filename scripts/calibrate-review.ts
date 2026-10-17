@@ -9,6 +9,7 @@ import {
   type QualityAxis,
 } from "../src/eval/quality-review.ts";
 import { readReferenceSet, referenceImagePath } from "../src/eval/reference-set.ts";
+import { runScript } from "./lib/run-script.ts";
 
 const badAnchorsUrl = new URL("../eval/anchors/bad/", import.meta.url);
 
@@ -124,7 +125,7 @@ function axisRows(rows: CalibrationRow[]): AxisRow[] {
   });
 }
 
-try {
+async function calibrateReview(): Promise<number> {
   const images = await calibrationImages();
   const rows: CalibrationRow[] = [];
   for (const image of images) {
@@ -141,10 +142,12 @@ try {
   console.log(
     `calibration: ${String(imagesIn)}/${String(rows.length)} images and ${String(axesIn)}/${String(axes.length)} axes inside their bound`,
   );
-  if (imagesIn < rows.length || axesIn < axes.length) {
-    process.exitCode = 1;
-  }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+  return imagesIn < rows.length || axesIn < axes.length ? 1 : 0;
 }
+
+await runScript({
+  name: "calibrate-review",
+  usage:
+    "Usage: node scripts/calibrate-review.ts\nChecks the visual reviewer against the reference set and eval/anchors/bad/.",
+  run: calibrateReview,
+});
