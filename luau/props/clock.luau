@@ -28,37 +28,12 @@ local BASE_WIDTH = 1.5
 local HOUR_COUNT = 12
 type Look = { Color: Color3, Material: Enum.Material }
 
-local DEFAULT_COLOR = Instance.new("Part").Color
+local propKit = require("../shared/prop-kit")
+local slotLook = propKit.slotLook
+local addPart = propKit.addPart
+
+local DEFAULT_COLOR = propKit.DEFAULT_COLOR
 local DEFAULT_MATERIAL = "Plastic"
-
--- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
-local function slotLook(attributes: { [string]: any }, slot: string): Look
-	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
-	return { Color = attributes[`{slot}Color`], Material = material }
-end
-
-local function addPart(
-	targetContainer: Instance,
-	name: string,
-	size: Vector3,
-	cframe: CFrame,
-	look: Look,
-	shape: Enum.PartType?
-): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.Shape = shape or Enum.PartType.Block
-	part.Size = size
-	part.Color = look.Color
-	part.Material = look.Material
-	part.CFrame = cframe
-	part.Parent = targetContainer
-	return part
-end
 
 -- A cylinder's axis is its X; this turns it to Z so the round side faces -Z and +Z.
 local AXIS_TO_Z = CFrame.Angles(0, math.pi / 2, 0)
@@ -79,12 +54,15 @@ local function addRadialBar(
 	local middle = (innerRadius + outerRadius) / 2
 	local x = facing * math.sin(angle) * middle
 	local y = math.cos(angle) * middle
+	local position = center + Vector3.new(x, y, 0)
 	addPart(
 		targetContainer,
 		name,
 		Vector3.new(width, outerRadius - innerRadius, MARK_THICKNESS),
-		CFrame.new(center + Vector3.new(x, y, 0)) * CFrame.Angles(0, 0, -facing * angle),
-		look
+		position,
+		look,
+		nil,
+		CFrame.new(position) * CFrame.Angles(0, 0, -facing * angle)
 	)
 end
 
@@ -115,14 +93,14 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		targetContainer,
 		"Base",
 		Vector3.new(BASE_WIDTH, BASE_HEIGHT, math.min(BASE_WIDTH, size.Z)),
-		CFrame.new(0, bottom + BASE_HEIGHT / 2, 0),
+		Vector3.new(0, bottom + BASE_HEIGHT / 2, 0),
 		frame
 	)
 	addPart(
 		targetContainer,
 		"Post",
 		Vector3.new(POST_WIDTH, postHeight, POST_WIDTH),
-		CFrame.new(0, bottom + BASE_HEIGHT + postHeight / 2, 0),
+		Vector3.new(0, bottom + BASE_HEIGHT + postHeight / 2, 0),
 		frame
 	)
 	local rimDepth = size.Z - 2 * (DIAL_THICKNESS + MARK_THICKNESS)
@@ -130,9 +108,10 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		targetContainer,
 		"Rim",
 		Vector3.new(rimDepth, diameter, diameter),
-		CFrame.new(center) * AXIS_TO_Z,
+		center,
 		frame,
-		Enum.PartType.Cylinder
+		Enum.PartType.Cylinder,
+		CFrame.new(center) * AXIS_TO_Z
 	)
 
 	local hours = random:NextInteger(0, HOUR_COUNT - 1)
@@ -148,9 +127,10 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			targetContainer,
 			`Dial{faceName}`,
 			Vector3.new(DIAL_THICKNESS, dialRadius * 2, dialRadius * 2),
-			CFrame.new(center.X, center.Y, dialZ) * AXIS_TO_Z,
+			Vector3.new(center.X, center.Y, dialZ),
 			panel,
-			Enum.PartType.Cylinder
+			Enum.PartType.Cylinder,
+			CFrame.new(center.X, center.Y, dialZ) * AXIS_TO_Z
 		)
 		for hour = 0, HOUR_COUNT - 1 do
 			local angle = hour / HOUR_COUNT * 2 * math.pi

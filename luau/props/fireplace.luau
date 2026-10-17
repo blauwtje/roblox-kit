@@ -22,33 +22,16 @@ local MAXIMUM_FLAME_HEIGHT_RATIO = 0.9
 
 type Look = { Color: Color3, Material: Enum.Material }
 
-local DEFAULT_COLOR = Instance.new("Part").Color
-local DEFAULT_MATERIAL = "Plastic"
+local propKit = require("../shared/prop-kit")
+local slotLook = propKit.slotLook
+local addPart = propKit.addPart
 
--- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
-local function slotLook(attributes: { [string]: any }, slot: string): Look
-	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
-	return { Color = attributes[`{slot}Color`], Material = material }
-end
+local DEFAULT_COLOR = propKit.DEFAULT_COLOR
+local DEFAULT_MATERIAL = "Plastic"
 
 -- The look with its color blended toward black by `amount`.
 local function darkened(look: Look, amount: number): Look
 	return { Color = look.Color:Lerp(Color3.new(), amount), Material = look.Material }
-end
-
-local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.Size = size
-	part.Color = look.Color
-	part.Material = look.Material
-	part.CFrame = CFrame.new(position)
-	part.Parent = targetContainer
-	return part
 end
 
 local Generator = {}

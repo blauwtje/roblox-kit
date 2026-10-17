@@ -24,34 +24,16 @@ local SLOT_HEIGHT = 0.5
 local SLOT_WIDTH_RATIO = 0.4
 local WINDOW_MIN_WIDTH = 4
 local PIXELS_PER_STUD = 50
-type Look = { Color: Color3, Material: Enum.Material }
 
-local DEFAULT_COLOR = Instance.new("Part").Color
+local propKit = require("../shared/prop-kit")
+local slotLook = propKit.slotLook
+local addPart = propKit.addPart
+
+local DEFAULT_COLOR = propKit.DEFAULT_COLOR
 local DEFAULT_MATERIAL = "Plastic"
-
--- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
-local function slotLook(attributes: { [string]: any }, slot: string): Look
-	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
-	return { Color = attributes[`{slot}Color`], Material = material }
-end
 
 local GLASS_TRANSPARENCY = 0.55
 local TEXT_FONT = Enum.Font.GothamBold
-
-local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.Size = size
-	part.Color = look.Color
-	part.Material = look.Material
-	part.CFrame = CFrame.new(position)
-	part.Parent = targetContainer
-	return part
-end
 
 -- The window numbers on the header's customer face, one per window, evenly across its length.
 local function addWindowNumbers(header: Part, windowCount: number, numberColor: Color3)

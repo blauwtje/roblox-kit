@@ -21,37 +21,12 @@ local TOP_RAIL_DROP_RATIO = 1.2
 
 type Look = { Color: Color3, Material: Enum.Material }
 
-local DEFAULT_COLOR = Instance.new("Part").Color
+local propKit = require("../shared/prop-kit")
+local slotLook = propKit.slotLook
+local addPart = propKit.addPart
+
+local DEFAULT_COLOR = propKit.DEFAULT_COLOR
 local DEFAULT_MATERIAL = "Plastic"
-
--- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
-local function slotLook(attributes: { [string]: any }, slot: string): Look
-	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
-	return { Color = attributes[`{slot}Color`], Material = material }
-end
-
-local function addPart(
-	targetContainer: Instance,
-	name: string,
-	shape: Enum.PartType,
-	size: Vector3,
-	cframe: CFrame,
-	look: Look
-): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Shape = shape
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.Size = size
-	part.Color = look.Color
-	part.Material = look.Material
-	part.CFrame = cframe
-	part.Parent = targetContainer
-	return part
-end
 
 -- A cylinder standing on its end: a Cylinder part's axis is X, so it is turned a quarter about Z.
 local function addUprightCylinder(
@@ -65,10 +40,11 @@ local function addUprightCylinder(
 	return addPart(
 		targetContainer,
 		name,
-		Enum.PartType.Cylinder,
 		Vector3.new(height, diameter, diameter),
-		CFrame.new(position) * CFrame.Angles(0, 0, math.pi / 2),
-		look
+		position,
+		look,
+		Enum.PartType.Cylinder,
+		CFrame.new(position) * CFrame.Angles(0, 0, math.pi / 2)
 	)
 end
 
@@ -116,10 +92,10 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		addPart(
 			targetContainer,
 			"Cap" .. index,
-			Enum.PartType.Ball,
 			Vector3.new(capWidth, capWidth, capWidth),
-			CFrame.new(x, top - capWidth / 2, 0),
-			frame
+			Vector3.new(x, top - capWidth / 2, 0),
+			frame,
+			Enum.PartType.Ball
 		)
 	end
 	local railHeights = {
@@ -130,10 +106,10 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		addPart(
 			targetContainer,
 			name,
-			Enum.PartType.Cylinder,
 			Vector3.new(postRun, railDiameter, railDiameter),
-			CFrame.new(0, railHeights[name], 0),
-			frame
+			Vector3.new(0, railHeights[name], 0),
+			frame,
+			Enum.PartType.Cylinder
 		)
 	end
 	params:Pause()

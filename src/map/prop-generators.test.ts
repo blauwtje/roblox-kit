@@ -20,6 +20,11 @@ for (const kind of propKinds) {
     assert.deepEqual(offenders, []);
   });
 
+  await test(`the ${kind} generator takes slotLook and addPart from the prop kit`, () => {
+    const source = generatorSource(kind);
+    assert.doesNotMatch(source, /local function (slotLook|addPart)\b/);
+  });
+
   await test(`the ${kind} generator reads a slot attribute and keeps a default for it`, () => {
     const source = generatorSource(kind);
     assert.match(source, /slotLook\(params\.Attributes, "[A-Z][a-z]+"\)/);
