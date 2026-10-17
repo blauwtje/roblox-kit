@@ -51,16 +51,23 @@ const ceilingsChanged = (changed: number): CallToolResult => ({
   content: [{ type: "text", text: JSON.stringify({ changed }) }],
 });
 
-/** The arguments of a set-cutaway-hidden call carry `hidden`; a zones read carries none. */
-const isCeilingsCall = (request: { arguments: Record<string, unknown> }) =>
-  String(request.arguments["code"]).includes('"hidden":');
+const codeOf = (request: { arguments: Record<string, unknown> }) =>
+  String(request.arguments["code"]);
+const readsZones = (request: { arguments: Record<string, unknown> }) =>
+  codeOf(request).includes('"floorNameSuffix"');
+const hidesOrRestores = (request: { arguments: Record<string, unknown> }) =>
+  codeOf(request).includes('"hidden":');
 
 function studioWith(captures: (captureId: string) => CallToolResult, zonesText = mapZones()) {
   return new FakeStudioConnection(studios, {
-    execute_luau: (request) =>
-      isCeilingsCall(request)
-        ? ceilingsChanged(2)
-        : { content: [{ type: "text", text: zonesText }] },
+    execute_luau: (request) => {
+      if (readsZones(request)) {
+        return {
+          content: [{ type: "text", text: `[${JSON.stringify({ changed: 2 })},${zonesText}]` }],
+        };
+      }
+      return ceilingsChanged(2);
+    },
     screen_capture: (request) => captures(String(request.arguments["capture_id"])),
   });
 }
@@ -99,7 +106,7 @@ await test("the top-down cutaway comes first, then views a and b of each zone, e
   const result = await run(studio, { mapId: "arena" });
 
   const luauRequests = studio.requests.filter((request) => request.name === "execute_luau");
-  const readRequest = luauRequests.find((request) => !isCeilingsCall(request));
+  const readRequest = luauRequests.find(readsZones);
   const captureRequests = studio.requests.filter((request) => request.name === "screen_capture");
   assert.equal(readRequest?.name, "execute_luau");
   assert.equal(readRequest.arguments["datamodel_type"], "Edit");
@@ -209,8 +216,7 @@ await test("an image that is neither a readable PNG nor a JPEG fails after the c
   );
   const zoneViews = ["hide", "capture", "hide", "capture"];
   assert.deepEqual(callKinds(studio), [
-    "restore",
-    "read",
+    "restore+read",
     "hide",
     "capture",
     ...zoneViews,
@@ -291,15 +297,14 @@ await test("a map with no zones, a missing map or a capture without an image fai
   );
 });
 
-/** One call as "restore", "hide", "capture" or "read". */
 function callKindOf(request: FakeStudioConnection["requests"][number]): string {
   if (request.name === "screen_capture") {
     return "capture";
   }
-  if (!isCeilingsCall(request)) {
-    return "read";
+  if (readsZones(request) && hidesOrRestores(request)) {
+    return "restore+read";
   }
-  return String(request.arguments["code"]).includes('"hidden":true') ? "hide" : "restore";
+  return codeOf(request).includes('"hidden":true') ? "hide" : "restore";
 }
 
 /** Every call in order. */
@@ -312,16 +317,20 @@ await test("ceilings are restored at call start, hidden for the captures and res
   await run(studio, { mapId: "arena" });
   const zoneViews = ["hide", "capture", "hide", "capture"];
   assert.deepEqual(callKinds(studio), [
-    "restore",
-    "read",
+    "restore+read",
     "hide",
     "capture",
     ...zoneViews,
     ...zoneViews,
     "restore",
   ]);
+  const luauCalls = studio.requests.filter((request) => request.name === "execute_luau");
+  const startCode = codeOf(luauCalls[0] ?? { arguments: {} });
+  assert.ok(startCode.includes('"hidden":false'), "the start call restores");
+  assert.ok(startCode.includes('"floorNameSuffix"'), "the same call reads the zones");
+  assert.equal(luauCalls.filter(readsZones).length, 1);
 
-  const hideCode = String(studio.requests[2]?.arguments["code"]);
+  const hideCode = String(studio.requests[1]?.arguments["code"]);
   assert.ok(hideCode.includes(`"ceilingTag":"${config.ceilingTag}"`));
   assert.ok(
     hideCode.includes(
@@ -351,13 +360,13 @@ await test("ceilings are restored when a capture fails", async () => {
     isError: true,
   }));
   await assert.rejects(run(studio, { mapId: "arena" }), /returned no image/);
-  assert.deepEqual(callKinds(studio), ["restore", "read", "hide", "capture", "restore"]);
+  assert.deepEqual(callKinds(studio), ["restore+read", "hide", "capture", "restore"]);
 });
 
 await test("a bad zone name fails before any ceiling is hidden", async () => {
   const studio = studioWith(() => okImage());
   await assert.rejects(run(studio, { mapId: "arena", zones: ["attic"] }), /"attic"/);
-  assert.deepEqual(callKinds(studio), ["restore", "read"]);
+  assert.deepEqual(callKinds(studio), ["restore+read"]);
 });
 
 await test(
@@ -376,14 +385,27 @@ await test(
     // the handler to register the timer instead of guessing a number of event-loop turns.
     const settleTimer = mock.method(timers, "setTimeout");
     const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+    const outcome: { error?: Error } = {};
+    call.then(
+      () => undefined,
+      (error: unknown) => {
+        outcome.error = error instanceof Error ? error : new Error(String(error));
+      },
+    );
+    const turnOrFail = async () => {
+      await nextTurn();
+      if (outcome.error !== undefined) {
+        throw outcome.error;
+      }
+    };
     const untilSettleTimers = async (count: number) => {
       while (settleTimer.mock.callCount() < count) {
-        await nextTurn();
+        await turnOrFail();
       }
     };
     const untilCaptures = async (count: number) => {
       while (capturesSoFar() < count) {
-        await nextTurn();
+        await turnOrFail();
       }
     };
 
@@ -424,7 +446,7 @@ await test("views eye shoots each zone with ceilings and walls shown, and views 
     structured.shots.map((shot) => [shot.zone, shot.view]),
     [["start", "eye"]],
   );
-  assert.deepEqual(callKinds(studio), ["restore", "read", "capture", "restore"]);
+  assert.deepEqual(callKinds(studio), ["restore+read", "capture", "restore"]);
   assert.deepEqual(captureZonesTool.inputSchema.parse({ mapId: "arena" }).views, ["a", "b"]);
   assert.throws(() => captureZonesTool.inputSchema.parse({ mapId: "arena", views: ["top"] }));
 });
@@ -433,8 +455,7 @@ await test("an eye shot after a cutaway shot restores the hidden parts before it
   const studio = studioWith(() => okImage());
   await run(studio, { mapId: "arena", zones: ["start"], views: ["b", "eye"], cutaway: false });
   assert.deepEqual(callKinds(studio), [
-    "restore",
-    "read",
+    "restore+read",
     "hide",
     "capture",
     "restore",

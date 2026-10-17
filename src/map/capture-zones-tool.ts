@@ -2,17 +2,17 @@ import timers from "node:timers/promises";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { config } from "../config.ts";
-import { runLuauFile } from "../luau/run-luau-file.ts";
+import { runLuauBatch, runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
+import { mapZonesBatchPart, mapZonesSchema } from "./read-map-zones.ts";
 import { wallBandNames } from "./room-details.ts";
 import { nearWallSideOfView, zoneShots, type Bounds, type ViewedZoneShot } from "./zone-cameras.ts";
 
 const zoneViewSchema = z.enum(["a", "b", "eye"]);
 type ZoneView = z.output<typeof zoneViewSchema>;
 
-const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const coordinatesSchema = z.tuple([z.number(), z.number(), z.number()]);
 
 const captureZonesInput = z.strictObject({
@@ -51,11 +51,6 @@ const captureZonesOutput = z.strictObject({
   remainingZones: z.array(z.string()),
   /** One entry per image whose long edge is outside the expected range. */
   warnings: z.array(z.string()),
-});
-
-/** What `read-map-zones.luau` reports: each zone with the studs bounds of its parts. */
-const mapZonesSchema = z.strictObject({
-  zones: z.array(z.strictObject({ name: z.string(), min: vectorSchema, max: vectorSchema })),
 });
 
 type ImageBlock = Extract<CallToolResult["content"][number], { type: "image" }>;
@@ -212,6 +207,21 @@ function planShots(
  * With `hidden`, hides the tagged ceilings of the map, so the shots see into the rooms, and the parts named by
  * `wallPrefixes`, restoring any other part hidden before; without it, restores every hidden part.
  */
+function cutawayBatchPart(mapId: string, hidden: boolean, wallPrefixes: string[] = []) {
+  return {
+    fileName: "set-cutaway-hidden.luau",
+    arguments: {
+      mapId,
+      mapsFolderName: config.mapsFolderName,
+      ceilingTag: config.ceilingTag,
+      originalTransparencyAttribute: config.cutawayOriginalTransparencyAttribute,
+      hidden,
+      wallPrefixes,
+    },
+    resultSchema: cutawayChangedSchema,
+  };
+}
+
 async function setCutawayHidden(
   connection: StudioConnection,
   studioId: string,
@@ -222,17 +232,8 @@ async function setCutawayHidden(
   await runLuauFile({
     connection,
     studioId,
-    fileName: "set-cutaway-hidden.luau",
     datamodelType: "Edit",
-    arguments: {
-      mapId,
-      mapsFolderName: config.mapsFolderName,
-      ceilingTag: config.ceilingTag,
-      originalTransparencyAttribute: config.cutawayOriginalTransparencyAttribute,
-      hidden,
-      wallPrefixes,
-    },
-    resultSchema: cutawayChangedSchema,
+    ...cutawayBatchPart(mapId, hidden, wallPrefixes),
   });
 }
 
@@ -319,20 +320,11 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     async handler(input, context) {
       const studioId = await selectStudio(context.studio, input.studioId);
       // A call that died before its restore left parts hidden; this puts them back first.
-      await setCutawayHidden(context.studio, studioId, input.mapId, false);
-      const mapZones = await runLuauFile({
+      const [, mapZones] = await runLuauBatch({
         connection: context.studio,
         studioId,
-        fileName: "read-map-zones.luau",
         datamodelType: "Edit",
-        arguments: {
-          mapId: input.mapId,
-          mapsFolderName: config.mapsFolderName,
-          floorNameSuffix: config.floorNameSuffix,
-          spawnNameSuffix: config.spawnNameSuffix,
-          wallNameInfix: config.wallNameInfix,
-        },
-        resultSchema: mapZonesSchema,
+        entries: [cutawayBatchPart(input.mapId, false), mapZonesBatchPart(input.mapId)],
       });
       const selected = selectZones(input.mapId, mapZones.zones, input.zones);
       const { plannedShots, remainingZones } = planShots(

@@ -25,6 +25,7 @@ import {
   findSurfaceIssues,
   mapRecordsSchema,
 } from "./prop-rules.ts";
+import { mapZonesBatchPart } from "./read-map-zones.ts";
 import { resolveRelations } from "./relation-solver.ts";
 import { doorwayClearanceBoxes, findSizeRuleIssues } from "./size-rules.ts";
 import { zoneShot } from "./zone-cameras.ts";
@@ -110,13 +111,6 @@ const checkedMapSchema = z.strictObject({
   warnings: z.array(z.string()),
 });
 
-const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
-
-/** What `read-map-zones.luau` reports: each zone with the studs bounds of its parts. */
-const mapZonesSchema = z.strictObject({
-  zones: z.array(z.strictObject({ name: z.string(), min: vectorSchema, max: vectorSchema })),
-});
-
 /** The props, flat parts, lights and hero MeshParts of the map with what the quality and prop rules need, read in Studio. */
 async function readMapRecords(connection: StudioConnection, studioId: string, mapId: string) {
   const read = await runLuauFile({
@@ -139,16 +133,8 @@ async function sampleSceneStats(
   const mapZones = await runLuauFile({
     connection,
     studioId,
-    fileName: "read-map-zones.luau",
     datamodelType: "Edit",
-    arguments: {
-      mapId,
-      mapsFolderName: config.mapsFolderName,
-      floorNameSuffix: config.floorNameSuffix,
-      spawnNameSuffix: config.spawnNameSuffix,
-      wallNameInfix: config.wallNameInfix,
-    },
-    resultSchema: mapZonesSchema,
+    ...mapZonesBatchPart(mapId),
   });
   const shots = mapZones.zones.map((zone) =>
     zoneShot({ name: zone.name, bounds: { min: zone.min, max: zone.max } }),
