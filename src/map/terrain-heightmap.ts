@@ -69,8 +69,12 @@ function fractalNoise(x: number, z: number, seed: number): number {
 
 /** Rescales heights in place so the lowest is 0 and the highest `top`; a flat field becomes all 0. */
 function stretchTo(heights: number[], top: number): void {
-  const lowest = Math.min(...heights);
-  const highest = Math.max(...heights);
+  let lowest = Infinity;
+  let highest = -Infinity;
+  for (const height of heights) {
+    if (height < lowest) lowest = height;
+    if (height > highest) highest = height;
+  }
   const range = highest - lowest;
   for (const [index, height] of heights.entries()) {
     heights[index] = range === 0 ? 0 : ((height - lowest) / range) * top;

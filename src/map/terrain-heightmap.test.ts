@@ -45,6 +45,16 @@ await test("heights fill the box from its bottom to its height, one per voxel co
   assert.ok(Math.abs(Math.max(...heights) - 24) < 1e-9);
 });
 
+await test("a 2048 by 2048 heightmap at erosion 0 fills within a time budget", () => {
+  const side = 2048 * config.terrainVoxelStuds;
+  const fill = { ...heightmapFill({ erosion: 0 }), size: { x: side, y: 24, z: side } };
+  const started = performance.now();
+  const { columns, rows, heights } = generateHeightmap(fill, 1);
+  assert.equal(columns, 2048);
+  assert.equal(heights.length, columns * rows);
+  assert.ok(performance.now() - started < 20_000);
+});
+
 await test("erosion reshapes the noise and 0 droplets leaves it", () => {
   const raw = generateHeightmap(heightmapFill({ erosion: 0 }), 1);
   const eroded = generateHeightmap(heightmapFill({ erosion: 4 }), 1);
