@@ -7,17 +7,18 @@ import { selectStudio } from "../studio/studio-connection.ts";
 import { playtestProbeSource } from "./harness-source.ts";
 
 const runInPlaytestInput = z.strictObject({
-  /** Luau body that runs in the server of the running playtest and returns one JSON-encodable value. */
-  code: z.string().min(1),
-  /** How long to wait for the code to return. */
+  code: z
+    .string()
+    .min(1)
+    .describe("Luau body that runs in the playtest server and returns one JSON value."),
   timeoutSeconds: z
     .number()
     .int()
     .min(config.minRunInPlaytestTimeoutSeconds)
     .max(config.maxRunInPlaytestTimeoutSeconds)
-    .optional(),
-  /** Which Studio; optional while exactly one is connected. */
-  studioId: z.string().min(1).optional(),
+    .optional()
+    .describe("How long to wait for the code to return."),
+  studioId: z.string().min(1).optional().describe("Which Studio; optional while one is connected."),
 });
 
 const runInPlaytestOutput = z.strictObject({
@@ -49,7 +50,7 @@ export function createRunInPlaytestTool(
       `Start the playtest first with start_stop_play; this tool never starts or stops one. ` +
       `It inserts a Script into ServerScriptService whose body is code, so require returns the live module instances, unlike execute_luau with datamodel_type Server, which gets its own module copies. ` +
       `code ends with return of one JSON-encodable value (return nothing for null); a throw fails the call with its message. ` +
-      `timeoutSeconds (${String(config.minRunInPlaytestTimeoutSeconds)} to ${String(config.maxRunInPlaytestTimeoutSeconds)}, default ${String(config.defaultRunInPlaytestTimeoutSeconds)}) bounds the wait; code that never returns, or does not compile, times out. ` +
+      `timeoutSeconds (${String(config.minRunInPlaytestTimeoutSeconds)} to ${String(config.maxRunInPlaytestTimeoutSeconds)}, default ${String(config.defaultRunInPlaytestTimeoutSeconds)}) bounds the wait; studioId picks the Studio; an input the user did not ask for stays at its default; code that never returns, or does not compile, times out. ` +
       `The Script is removed in every outcome. Server only. For repeatable assertions use run_playtest serverChecks. ` +
       `Returns { value, durationMs }.`,
     inputSchema: runInPlaytestInput,

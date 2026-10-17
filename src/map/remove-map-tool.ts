@@ -11,10 +11,8 @@ import { presetSchema } from "../style/preset-schema.ts";
 const surfaceRoles = Object.keys(presetSchema.shape.surfaces.shape);
 
 const removeMapInput = z.strictObject({
-  /** The mapId that `build_map` returned. */
-  mapId: z.string().min(1),
-  /** Which Studio holds the map; optional while exactly one is connected. */
-  studioId: z.string().min(1).optional(),
+  mapId: z.string().min(1).describe("The mapId that build_map returned."),
+  studioId: z.string().min(1).optional().describe("Which Studio; optional while one is connected."),
 });
 
 const removeMapOutput = z.strictObject({
@@ -37,6 +35,7 @@ export const removeMapTool: ToolDefinition<typeof removeMapInput, typeof removeM
   description:
     `Removes a map that build_map built: fills its terrain with Air, destroys its MaterialVariants and its Model under Workspace.${config.mapsFolderName}, and destroys that folder when it is left empty. ` +
     `A mapId that is not a Model under Workspace.${config.mapsFolderName} fails the call before any change. ` +
+    `Optional studioId picks the Studio; an input the user did not ask for stays at its default. ` +
     `Lighting returns to the place's original when the last styled map goes; while another styled map remains, lighting stays as it is and a warning names the remaining maps. ` +
     `Returns { mapId, lighting: { restored, remainingStyledMaps }, warnings }.`,
   inputSchema: removeMapInput,

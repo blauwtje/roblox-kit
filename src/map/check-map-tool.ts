@@ -50,18 +50,14 @@ const issueCountsSchema = luauCountsSchema.extend({
 });
 
 const checkMapInput = z.strictObject({
-  /** The mapId that `build_map` returned. */
-  mapId: z.string().min(1),
-  /** Points in studs that every spawn must be able to walk to; they replace the objectives of `spec`. */
+  mapId: z.string().min(1).describe("The mapId that build_map returned."),
   objectives: z
     .array(z.strictObject({ name: z.string().min(1), x: z.number(), y: z.number(), z: z.number() }))
-    .optional(),
-  /** The genre preset the map was built with; its size rules give the pathfinding agent's size. */
-  preset: z.string().min(1).optional(),
-  /** The spec the map was built with; with `preset` it is measured against the preset's size rules. */
-  spec: relationMapSpecSchema.optional(),
-  /** Which Studio holds the map; optional while exactly one is connected. */
-  studioId: z.string().min(1).optional(),
+    .optional()
+    .describe("Points in studs every spawn must reach; they replace the spec's objectives."),
+  preset: z.string().min(1).optional().describe("The style preset the map was built with."),
+  spec: relationMapSpecSchema.optional().describe("The spec the map was built with; needs preset."),
+  studioId: z.string().min(1).optional().describe("Which Studio; optional while one is connected."),
 });
 
 const sceneStatSampleSchema = z.strictObject({
@@ -201,14 +197,10 @@ export function createCheckMapTool(
     name: "check_map",
     title: "Check map",
     description:
-      `Checks a map built by build_map for overlapping parts, floating parts (not connected to the ground or terrain) and zones and objective points that a walk from any SpawnLocation cannot reach (Studio pathfinding; a pair of spawn and target over ${String(config.maxPathStuds)} studs apart is reported as an unreachable issue whose detail starts with tooFar). ` +
-      `Optional objectives [{ name, x, y, z }] add targets and an optional preset (a build_map style preset name) sets the agent size from its size rules. ` +
-      `With both preset and spec (the build_map spec) it also reports sizeRule issues for doorways, hallways and walls smaller than the preset's size rules, computed from the layout; without either, counts.sizeRule is 0. With a preset it also reads the map's props and reports scale issues (a prop's height outside the preset's heightRatio of the avatar height, naming the prop) and rotation issues (a prop whose yaw is not a multiple of 90 degrees or that is tilted, where the preset's rule does not allow free rotation). ` +
-      `It also reports placement issues for each prop (at its declared size about its pivot) that has no floor part under its center and four footprint corners, overlaps a wall part, or stands inside a doorway's clearance box (the opening's width, the wall's thickness plus an agent radius on each face, and the agent's height; needs the spec, else only the floor and wall rules apply); the detail names the rule. ` +
-      `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact, sceneStats is one { zone, drawCalls, triangles } sample per zone read from that zone's camera after ${String(config.statsSettleSeconds)} second of settling, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles): withinBudget is false and warnings name each zone over a limit, without failing passed; warnings also name any model outside the map that stands between a spawn and a target it cannot reach; issues list the first ${String(config.maxInlineIssues)} with part paths and stud positions, ` +
-      `and a resource link to ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} issues per kind) for as long as this server runs. Rotated parts are checked by their world bounding box. ` +
-      `With a preset it also reports untextured issues (a part whose two longest sides both exceed ${String(config.maxUntexturedSurfaceStuds)} studs and that has no texture, material variant or textured material; none for a preset with flatSurfaces) and unbevelled issues (a hero prop MeshPart whose recipe shape has no bevel), and with the spec too unlit issues (a room with no light inside its footprint).`,
+      `Checks a map built by build_map for overlapping parts, floating parts and zones or objective points that a walk from any SpawnLocation cannot reach (a pair over ${String(config.maxPathStuds)} studs apart is an unreachable issue starting with tooFar). ` +
+      `Takes the mapId that build_map returned, a Model under Workspace.${config.mapsFolderName}; a missing Model is an error. ` +
+      `Optional inputs: objectives [{ name, x, y, z }] add targets; preset (a build_map style preset name) sets the agent size and adds scale, rotation, untextured and unbevelled issues; spec (the build_map spec) with a preset adds sizeRule, placement and unlit issues; studioId picks the Studio. An input the user did not ask for stays at its default. ` +
+      `Read-only. Returns { reportId, reportUri, passed, partCount, zoneCount, reachabilityChecked, counts, sceneStats, budget, withinBudget, warnings, issues, issuesOmitted }: counts are exact; sceneStats is one { zone, drawCalls, triangles } sample per zone, compared to budget (the spec's performanceBudget, else ${String(config.maxDrawCalls)} draw calls and ${String(config.maxTriangles)} triangles), and an over-budget zone sets withinBudget false with a warning but does not fail passed; issues list the first ${String(config.maxInlineIssues)} with part paths and positions, and ${config.checkReportUriPrefix}{reportId} holds the full report (up to ${String(config.maxIssuesPerKind)} per kind) while this server runs.`,
     inputSchema: checkMapInput,
     outputSchema: checkMapOutput,
     annotations: {

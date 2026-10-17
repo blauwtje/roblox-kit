@@ -16,16 +16,19 @@ type ZoneView = z.output<typeof zoneViewSchema>;
 const coordinatesSchema = z.tuple([z.number(), z.number(), z.number()]);
 
 const captureZonesInput = z.strictObject({
-  /** The mapId that `build_map` returned. */
-  mapId: z.string().min(1),
-  /** Zone names to capture; all zones of the map when omitted. */
-  zones: z.array(z.string().min(1)).min(1).optional(),
-  /** False in a follow-up call for `remainingZones`, which already has the cutaway from the first call. */
-  cutaway: z.boolean().default(true),
-  /** The views of each zone; `a` and `b` look from opposite sides over a cutaway, `eye` stands at player eye height with ceilings and walls shown. */
-  views: z.array(zoneViewSchema).min(1).default(["a", "b"]),
-  /** Which Studio holds the map; optional while exactly one is connected. */
-  studioId: z.string().min(1).optional(),
+  mapId: z.string().min(1).describe("The mapId that build_map returned."),
+  zones: z
+    .array(z.string().min(1))
+    .min(1)
+    .optional()
+    .describe("Zone names to capture; all when omitted."),
+  cutaway: z.boolean().default(true).describe("False in a follow-up call for remainingZones."),
+  views: z
+    .array(zoneViewSchema)
+    .min(1)
+    .default(["a", "b"])
+    .describe("Views of each zone: a, b or eye."),
+  studioId: z.string().min(1).optional().describe("Which Studio; optional while one is connected."),
 });
 
 /** What `set-cutaway-hidden.luau` reports: how many parts it hid or restored. */
@@ -378,11 +381,11 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
     name: "capture_zones",
     title: "Capture zones",
     description:
-      `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top, named by the mapId), then the asked views per zone (room), by default two from opposite sides (views a and b, at ${String(config.zoneShotPitchDegrees)} degrees pitch), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
-      `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
-      `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with all its asked views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call, which passes cutaway false to skip the repeated cutaway). ` +
-      `Optional views lists the views of each zone (default a and b); view eye stands at player eye height (${String(config.eyeHeightStuds)} studs) ${String(config.eyeInsetStuds)} studs in from the zone's -Z side, looks at the zone center pitched down ${String(config.eyePitchDegrees)} degrees, and is shot with ceilings and all walls shown. ` +
-      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures of the other views, and so is a zone's south (+Z) wall with its trim during view a, which looks over it; all are restored afterwards, also when a capture fails, and a call that finds parts a crashed call left hidden restores them first. The first capture and each capture after the ceilings or walls shown changed wait ${String(config.captureSettleMs)} ms first so the lighting settles; a capture that only moves the camera waits ${String(config.captureCameraSettleMs)} ms. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
+      `Screenshots a map built by build_map: first one top-down cutaway of the whole map (view top), then the asked views per zone (room), framed for Studio's default ${String(config.studioFieldOfViewDegrees)}-degree field of view. ` +
+      `Takes the mapId that build_map returned, a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
+      `Optional inputs: zones lists the zone names (default all; at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included, a zone whole or not at all, and the rest are listed in remainingZones); views lists the views per zone (default a and b from opposite sides at ${String(config.zoneShotPitchDegrees)} degrees pitch; eye stands at eye height, ${String(config.eyeHeightStuds)} studs, with ceilings and walls shown); cutaway false skips the cutaway in a follow-up call; studioId picks the Studio. An input the user did not ask for stays at its default. ` +
+      `Ceilings (tag ${config.ceilingTag}) and a zone's south wall in view a are hidden during captures and restored afterwards, also on failure. Otherwise read-only: only the Studio camera moves. ` +
+      `Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings }, with warnings naming each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {

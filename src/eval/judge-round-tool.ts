@@ -37,23 +37,21 @@ const placeAnswerSchema = z.strictObject({
 });
 
 const judgeRoundInput = z.strictObject({
-  /** The round of this loop, starting at 1. */
-  round: z.int().min(1),
-  /** The spec that `build_map` built, with its `mapId`. */
-  spec: relationMapSpecSchema,
-  /** The zones judged this round. */
-  zones: z.array(z.string().min(1)),
-  /** The findings the `visual-judge` agent returned. */
-  findings: z.array(judgeFindingSchema),
-  /** The place-check agent's answer for each typed room. */
-  placeChecks: z.array(z.strictObject({ zone: z.string().min(1), answer: placeAnswerSchema })),
-  /** The quality reviewers' answers for each room. */
-  qualityAnswers: z.array(
-    z.strictObject({
-      zone: z.string().min(1),
-      answers: z.array(qualityAnswerSchema).length(config.qualityReviewersPerRoom),
-    }),
-  ),
+  round: z.int().min(1).describe("The round of this loop, starting at 1."),
+  spec: relationMapSpecSchema.describe("The spec build_map built, with its mapId."),
+  zones: z.array(z.string().min(1)).describe("The zones judged this round."),
+  findings: z.array(judgeFindingSchema).describe("The findings the visual-judge agent returned."),
+  placeChecks: z
+    .array(z.strictObject({ zone: z.string().min(1), answer: placeAnswerSchema }))
+    .describe("The place-check answer for each typed room."),
+  qualityAnswers: z
+    .array(
+      z.strictObject({
+        zone: z.string().min(1),
+        answers: z.array(qualityAnswerSchema).length(config.qualityReviewersPerRoom),
+      }),
+    )
+    .describe("The quality reviewers' answers for each room."),
 });
 
 const outputFindingSchema = z.looseObject({
@@ -181,7 +179,7 @@ export function createJudgeRoundTool(
       `Decides one round of the visual-judge loop from what its agents returned: drops judge findings without evidence.visible (returned as rejected), ` +
       `turns place-check mismatches and empty answers into spec-miss blocker findings, turns each quality axis median below ${String(config.visualPassScore)} into a major finding, ` +
       `marks repeats of earlier rounds (warning of log lines it could not read), sets stopReason (pass, round-limit at round ${String(config.maxJudgeRounds)}, repeat or null) and appends one line to ${config.judgeLogFile} in the project folder. ` +
-      `Dispatching the agents stays with the caller.`,
+      `All inputs are required. Dispatching the agents stays with the caller.`,
     inputSchema: judgeRoundInput,
     outputSchema: judgeRoundOutput,
     annotations: {

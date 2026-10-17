@@ -246,3 +246,15 @@ await test("a spawned server also serves a client that opens with initialize", a
   );
   await client.close();
 });
+
+const longDescriptionExemptions = new Map([["build_map", "task 80"]]);
+
+await test("every registered tool description stays under 1500 characters", () => {
+  for (const tool of tools) {
+    if (longDescriptionExemptions.has(tool.name)) continue;
+    assert.ok(
+      tool.description.length < 1500,
+      `${tool.name} description is ${String(tool.description.length)} characters`,
+    );
+  }
+});
