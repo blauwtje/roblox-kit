@@ -179,6 +179,36 @@ function operationsOf(kind: PropKind): Operation[] {
         box("blockout", "wall", { bottom: 0 }, { width: w, height: h - 0.3, depth: d - 0.2 }),
         box("form", "trim", { bottom: h - 0.3 }, { width: w, height: 0.3, depth: d }),
       ];
+    case "bin":
+      return [
+        box("blockout", "trim", { bottom: 0 }, { width: w, height: h, depth: d }),
+        box("form", "accent", { bottom: h - 0.2 }, { width: w, height: 0.2, depth: d }),
+      ];
+    case "luggage":
+      return [
+        box("blockout", "wall", { bottom: 0 }, { width: w, height: h - 0.2, depth: d }),
+        box("form", "trim", { bottom: h - 0.2 }, { width: w * 0.4, height: 0.2, depth: d }),
+      ];
+    case "potted-plant":
+      return [
+        box("blockout", "trim", { bottom: 0 }, { width: w * 0.8, height: h * 0.4, depth: d * 0.8 }),
+        box("form", "accent", { bottom: h * 0.4 }, { width: w, height: h * 0.6, depth: d }),
+      ];
+    case "newspaper-stack":
+      return [
+        box("blockout", "wall", { bottom: 0 }, { width: w, height: h, depth: d }),
+        box("form", "trim", { bottom: h - 0.1 }, { width: w * 0.6, height: 0.1, depth: d }),
+      ];
+    case "poster":
+      return [
+        box("blockout", "trim", { bottom: 0 }, { width: w, height: h, depth: d / 2 }),
+        box(
+          "form",
+          "accent",
+          { bottom: 0.2, z: d / 4 },
+          { width: w - 0.4, height: h - 0.4, depth: d / 2 },
+        ),
+      ];
     case "sign":
       return [
         box("blockout", "trim", { bottom: 0 }, { width: w, height: h, depth: d / 2 }),

@@ -28,3 +28,10 @@ await test("a preset's own hero prop wins over a prop recipe, and its prop kit n
     base.propKit.map((name) => `prop-${name}`),
   );
 });
+
+await test("the clutter kinds bin, luggage, potted plant, newspaper stack and poster have recipes", () => {
+  for (const kind of ["bin", "luggage", "potted-plant", "newspaper-stack", "poster"]) {
+    assert.ok(propKinds.includes(kind as (typeof propKinds)[number]), kind);
+    assert.equal(propRecipes[propRecipeKind(kind as (typeof propKinds)[number])]?.replaces, kind);
+  }
+});

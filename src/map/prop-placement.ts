@@ -27,6 +27,11 @@ export const propKinds = [
   "clock",
   "ticket-counter",
   "ticket-machine",
+  "bin",
+  "luggage",
+  "potted-plant",
+  "newspaper-stack",
+  "poster",
 ] as const;
 
 export type PropKind = (typeof propKinds)[number];
@@ -107,6 +112,11 @@ export const propDimensions = Object.freeze({
   clock: { x: 5, y: aboveEye(propAnchors.clockAboveEyeStuds), z: 1.2 },
   "ticket-counter": { x: 14, y: aboveEye(propAnchors.ticketCounterAboveEyeStuds), z: 3 },
   "ticket-machine": { x: 3, y: aboveEye(propAnchors.ticketMachineAboveEyeStuds), z: 2 },
+  bin: { x: 1.5, y: 2, z: 1.5 },
+  luggage: { x: 2.5, y: 1.5, z: 1 },
+  "potted-plant": { x: 1.5, y: 3, z: 1.5 },
+  "newspaper-stack": { x: 1.5, y: 0.6, z: 1 },
+  poster: { x: 3, y: 4, z: 0.2 },
 });
 
 /** The yaw that turns a piece's -Z face toward each side of the room. */
