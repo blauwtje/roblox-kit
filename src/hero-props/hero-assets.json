@@ -163,10 +163,6 @@
     "kind": "departure-board",
     "assetId": "112440369639628"
   },
-  "7ce6317f33a7": {
-    "kind": "sign",
-    "assetId": "107871902578867"
-  },
   "2da8edd2a7d9": {
     "kind": "pendant",
     "assetId": "127045372575746"
@@ -182,5 +178,9 @@
   "44d610669fb8": {
     "kind": "arch-trim",
     "assetId": "101771726099445"
+  },
+  "6235fc2b8d24": {
+    "kind": "sign",
+    "assetId": "107871902578867"
   }
 }
