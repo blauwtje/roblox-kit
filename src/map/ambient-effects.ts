@@ -96,6 +96,6 @@ export function missingSpriteWarnings(
   );
   return missing.map(
     (sprite) =>
-      `Ambient sprite "${sprite}" has no recorded asset, so its emitters are built untextured; draw and upload it with \`node scripts/sprites.ts --upload\` from a clone of the roblox-kit repo.`,
+      `Ambient sprite "${sprite}" has no recorded asset, so its emitters are built untextured; draw and upload it with \`npm run hero-props -- sprites --upload\` from a clone of the roblox-kit repo.`,
   );
 }

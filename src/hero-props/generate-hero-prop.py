@@ -10,7 +10,7 @@ weighted normals, so the bevels catch light while the large faces stay flat.
 Each role object is UV unwrapped and its material, a procedural one of noise and edge wear over the role's
 color, is baked with Cycles to a color, a normal and an occlusion-roughness-metalness map
 (green roughness, blue metalness, as glTF packs them), then replaced by a material reading those maps, so the
-GLB carries the maps and Roblox loads them as a SurfaceAppearance (probe-glb-textures.ts found that it does).
+GLB carries the maps and Roblox loads them as a SurfaceAppearance (a probe of the exported GLB confirmed that it does).
 A Cycles ambient occlusion bake, taken with every role object and a temporary ground plane under the prop in the
 scene, is multiplied into the color map, so creases and the contact with the ground are dark (the plane is
 removed before export).
