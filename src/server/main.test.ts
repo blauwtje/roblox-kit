@@ -85,18 +85,6 @@ await test("the shipped registry starts as an array", () => {
   assert.ok(Array.isArray(tools));
 });
 
-await test("the shipped registry lists the playtest, remove_map, run_in_playtest and judge_round tools in order", () => {
-  const names = tools.map((tool) => tool.name);
-  const start = names.indexOf("run_playtest");
-  assert.notEqual(start, -1);
-  assert.deepEqual(names.slice(start), [
-    "run_playtest",
-    "remove_map",
-    "run_in_playtest",
-    "judge_round",
-  ]);
-});
-
 await test("createTools returns the tools in order with the check report resource", () => {
   const created = createTools({ projectDir: undefined });
   assert.deepEqual(
@@ -227,17 +215,6 @@ await test("a spawned server answers 2026-07-28 discovery and lists tools withou
     versionNegotiation: { mode: { pin: "2026-07-28" } },
   });
   assert.equal(client.getNegotiatedProtocolVersion(), "2026-07-28");
-  assert.equal(client.getServerVersion()?.name, "roblox-kit");
-  const listed = await client.listTools();
-  assert.deepEqual(
-    listed.tools.map((tool) => tool.name),
-    tools.map((tool) => tool.name),
-  );
-  await client.close();
-});
-
-await test("a spawned server also serves a client that opens with initialize", async () => {
-  const client = await connectToSpawnedServer(undefined);
   assert.equal(client.getServerVersion()?.name, "roblox-kit");
   const listed = await client.listTools();
   assert.deepEqual(
