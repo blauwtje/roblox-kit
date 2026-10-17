@@ -257,7 +257,11 @@ export interface GlbChecks {
 }
 
 /** Reads accessor `index` from the BIN chunk as `count` tuples of `components` numbers. */
-function readAccessor(gltf: Gltf, bin: Uint8Array, index: number, components: number): number[][] {
+function readAccessor(
+  { gltf, bin }: { gltf: Gltf; bin: Uint8Array },
+  index: number,
+  components: number,
+): Float32Array {
   const accessor = accessorAt(gltf.accessors, index);
   const componentBytes =
     accessor.componentType === FLOAT_COMPONENT
@@ -289,20 +293,30 @@ function readAccessor(gltf: Gltf, bin: Uint8Array, index: number, components: nu
     }
     return componentBytes === 2 ? view.getUint16(offset, true) : view.getUint8(offset);
   };
-  const values: number[][] = [];
+  const values = new Float32Array(accessor.count * components);
   for (let element = 0; element < accessor.count; element++) {
-    const tuple: number[] = [];
     for (let component = 0; component < components; component++) {
-      tuple.push(read(start + element * stride + component * componentBytes));
+      values[element * components + component] = read(
+        start + element * stride + component * componentBytes,
+      );
     }
-    values.push(tuple);
   }
   return values;
 }
 
-function findRoot(parents: number[], vertex: number): number {
+function gridStep(value: number): number {
+  return Math.round(value * WELD_STEPS_PER_STUD);
+}
+
+function findRoot(parents: Int32Array, vertex: number): number {
   let root = vertex;
   while (parents[root] !== root) root = parents[root] ?? root;
+  let step = vertex;
+  while (step !== root) {
+    const next = parents[step] ?? root;
+    parents[step] = root;
+    step = next;
+  }
   return root;
 }
 
@@ -319,30 +333,49 @@ function weldedTriangles(
     trianglesOf(primitive, gltf.accessors);
     const position = primitive.attributes.POSITION;
     if (position === undefined) continue;
-    const welded = readAccessor(gltf, bin, position, 3).map(([x = 0, y = 0, z = 0]) => {
-      const key = [x, y, z].map((value) => Math.round(value * WELD_STEPS_PER_STUD)).join(",");
-      let id = ids.get(key);
-      if (id === undefined) {
-        id = positions.length;
-        ids.set(key, id);
-        positions.push([x, y, z]);
-      }
-      return id;
-    });
+    const source = { gltf, bin };
+    const welded = weldPositions(readAccessor(source, position, 3), ids, positions);
     const order =
       primitive.indices === undefined
-        ? welded.map((_, vertex) => vertex)
-        : readAccessor(gltf, bin, primitive.indices, 1).map(([vertex = 0]) => vertex);
+        ? Float32Array.from(welded, (_, vertex) => vertex)
+        : readAccessor(source, primitive.indices, 1);
     for (let corner = 0; corner + 2 < order.length; corner += 3) {
-      const triangle = [order[corner], order[corner + 1], order[corner + 2]].map((vertex) => {
-        const id = welded[vertex ?? -1];
-        if (id === undefined) throw new Error("GLB index points past its position accessor");
-        return id;
-      });
-      triangles.push(triangle as Vector);
+      triangles.push(triangleAt(welded, order, corner));
     }
   }
   return { positions, triangles };
+}
+
+function weldPositions(
+  coordinates: Float32Array,
+  ids: Map<string, number>,
+  positions: Vector[],
+): Int32Array {
+  const welded = new Int32Array(coordinates.length / 3);
+  for (let vertex = 0; vertex < welded.length; vertex++) {
+    const point: Vector = [
+      coordinates[vertex * 3] ?? 0,
+      coordinates[vertex * 3 + 1] ?? 0,
+      coordinates[vertex * 3 + 2] ?? 0,
+    ];
+    const key = point.map(gridStep).join(",");
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = positions.length;
+      ids.set(key, id);
+      positions.push(point);
+    }
+    welded[vertex] = id;
+  }
+  return welded;
+}
+
+function triangleAt(welded: Int32Array, order: Float32Array, corner: number): Vector {
+  const ids = [0, 1, 2].map((side) => welded[order[corner + side] ?? -1]);
+  if (ids.some((id) => id === undefined)) {
+    throw new Error("GLB index points past its position accessor");
+  }
+  return ids as Vector;
 }
 
 /**
@@ -356,7 +389,7 @@ export function readGlbParts(glb: Uint8Array): GlbPart[] {
   const parts: GlbPart[] = [];
   for (const mesh of gltf.meshes) {
     const { positions, triangles } = weldedTriangles(gltf, bin, mesh);
-    const parents = positions.map((_, vertex) => vertex);
+    const parents = Int32Array.from(positions, (_, vertex) => vertex);
     for (const [a, b, c] of triangles) {
       parents[findRoot(parents, b)] = findRoot(parents, a);
       parents[findRoot(parents, c)] = findRoot(parents, a);

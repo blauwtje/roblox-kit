@@ -58,26 +58,32 @@ await test("reads the triangles, size and names of a GLB", () => {
   });
 });
 
-await test("rejects a file that is not a GLB", () => {
-  assert.throws(() => readGlbStructure(new Uint8Array(32)), /magic/);
-});
+const rejectRows: { name: string; glb: Uint8Array; error: RegExp }[] = [
+  { name: "a file that is not a GLB", glb: new Uint8Array(32), error: /magic/ },
+  {
+    name: "a position accessor without bounds",
+    glb: assembleGlb({
+      ...twoMeshGltf,
+      accessors: [{ count: 3, type: "VEC3" }],
+      meshes: [{ name: "body", primitives: [{ attributes: { POSITION: 0 } }] }],
+    }),
+    error: /no min and max/,
+  },
+  {
+    name: "a primitive that is not a triangle list",
+    glb: assembleGlb({
+      ...twoMeshGltf,
+      meshes: [{ name: "body", primitives: [{ attributes: { POSITION: 0 }, mode: 1 }] }],
+    }),
+    error: /triangle list/,
+  },
+];
 
-await test("rejects a position accessor without bounds", () => {
-  const gltf = {
-    ...twoMeshGltf,
-    accessors: [{ count: 3, type: "VEC3" }],
-    meshes: [{ name: "body", primitives: [{ attributes: { POSITION: 0 } }] }],
-  };
-  assert.throws(() => readGlbStructure(assembleGlb(gltf)), /no min and max/);
-});
-
-await test("rejects a primitive that is not a triangle list", () => {
-  const gltf = {
-    ...twoMeshGltf,
-    meshes: [{ name: "body", primitives: [{ attributes: { POSITION: 0 }, mode: 1 }] }],
-  };
-  assert.throws(() => readGlbStructure(assembleGlb(gltf)), /triangle list/);
-});
+for (const { name, glb, error } of rejectRows) {
+  await test(`rejects ${name}`, () => {
+    assert.throws(() => readGlbStructure(glb), error);
+  });
+}
 
 const BIN_CHUNK_TYPE = 0x004e4942;
 
@@ -242,6 +248,19 @@ await test("an open part is not judged for winding", () => {
   const open = { ...part, closed: false };
   assert.equal(checkGlbParts([open], tolerance).passed, true);
   assert.equal(checkGlbParts([part], tolerance).passed, false);
+});
+
+await test("reads a 20,000-triangle GLB into its parts in under 100 ms", () => {
+  const boxes = Array.from({ length: 1667 }, (_, index): Box => {
+    const x = index * 2;
+    return { min: [x, 0, 0], max: [x + 1, 1, 1] };
+  });
+  const glb = assembleBoxGlb({ body: boxes });
+  const started = performance.now();
+  const parts = readGlbParts(glb);
+  const elapsed = performance.now() - started;
+  assert.equal(parts.length, 1667);
+  assert.ok(elapsed < 100, `took ${elapsed.toFixed(0)} ms`);
 });
 
 await test("reading parts needs the BIN chunk", () => {
