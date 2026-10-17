@@ -264,6 +264,19 @@ function cutawayOfShot(mapId: string, shot: ViewedZoneShot): CutawayState {
   return { hidden: true, wallPrefixes: nearWallPrefixes(mapId, shot) };
 }
 
+function applyCutaway(
+  target: { connection: StudioConnection; studioId: string; mapId: string },
+  state: CutawayState,
+): Promise<void> {
+  return setCutawayHidden(
+    target.connection,
+    target.studioId,
+    target.mapId,
+    state.hidden,
+    state.wallPrefixes,
+  );
+}
+
 function sameCutaway(first: CutawayState, second: CutawayState): boolean {
   return (
     first.hidden === second.hidden &&
@@ -271,15 +284,15 @@ function sameCutaway(first: CutawayState, second: CutawayState): boolean {
   );
 }
 
-/** Captures one shot through StudioMCP's `screen_capture` after `config.captureSettleMs`; the camera is set for that capture only. */
 async function captureShot(
   connection: StudioConnection,
   studioId: string,
   mapId: string,
   shot: ViewedZoneShot,
+  settleMs: number,
 ): Promise<ImageBlock> {
   // Called through the module object so a test can mock the timer.
-  await timers.setTimeout(config.captureSettleMs);
+  await timers.setTimeout(settleMs);
   const result = await connection.callTool({
     name: "screen_capture",
     studioId,
@@ -299,6 +312,46 @@ async function captureShot(
   return image;
 }
 
+type CapturedShot = { shot: ViewedZoneShot; image: ImageBlock };
+
+async function captureEachShot(
+  target: { connection: StudioConnection; studioId: string; mapId: string },
+  plannedShots: ViewedZoneShot[],
+): Promise<CapturedShot[]> {
+  const captured: CapturedShot[] = [];
+  let applied: CutawayState = { hidden: false, wallPrefixes: [] };
+  let settleMs: number = config.captureSettleMs;
+  for (const shot of plannedShots) {
+    const needed = cutawayOfShot(target.mapId, shot);
+    if (!sameCutaway(needed, applied)) {
+      await applyCutaway(target, needed);
+      applied = needed;
+      settleMs = config.captureSettleMs;
+    }
+    const image = await captureShot(
+      target.connection,
+      target.studioId,
+      target.mapId,
+      shot,
+      settleMs,
+    );
+    settleMs = config.captureCameraSettleMs;
+    captured.push({ shot, image });
+  }
+  return captured;
+}
+
+async function captureInOrder(
+  target: { connection: StudioConnection; studioId: string; mapId: string },
+  plannedShots: ViewedZoneShot[],
+): Promise<CapturedShot[]> {
+  try {
+    return await captureEachShot(target, plannedShots);
+  } finally {
+    await setCutawayHidden(target.connection, target.studioId, target.mapId, false);
+  }
+}
+
 export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof captureZonesOutput> =
   {
     name: "capture_zones",
@@ -308,7 +361,7 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
       `Takes the mapId that build_map returned, the name of a Model under Workspace.${config.mapsFolderName}; the handle lasts while that Model exists in the open place, and a missing Model is an error. ` +
       `Optional zones lists the zone names to capture (default: all; each image costs context, so at most ${String(config.maxImagesPerCall)} images come back per call, the cutaway included; a zone is captured with all its asked views or not at all, and the zones beyond that are listed in remainingZones for a follow-up call, which passes cutaway false to skip the repeated cutaway). ` +
       `Optional views lists the views of each zone (default a and b); view eye stands at player eye height (${String(config.eyeHeightStuds)} studs) ${String(config.eyeInsetStuds)} studs in from the zone's -Z side, looks at the zone center pitched down ${String(config.eyePitchDegrees)} degrees, and is shot with ceilings and all walls shown. ` +
-      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures of the other views, and so is a zone's south (+Z) wall with its trim during view a, which looks over it; all are restored afterwards, also when a capture fails, and a call that finds parts a crashed call left hidden restores them first. Each capture waits ${String(config.captureSettleMs)} ms first so the lighting settles, which makes a call take that long per image. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
+      `Ceilings (parts tagged ${config.ceilingTag}) are hidden during the captures of the other views, and so is a zone's south (+Z) wall with its trim during view a, which looks over it; all are restored afterwards, also when a capture fails, and a call that finds parts a crashed call left hidden restores them first. The first capture and each capture after the ceilings or walls shown changed wait ${String(config.captureSettleMs)} ms first so the lighting settles; a capture that only moves the camera waits ${String(config.captureCameraSettleMs)} ms. Otherwise read-only: only the Studio camera moves, for each capture. Returns { mapId, shots: [{ zone, view, cameraPosition, lookAt, width, height }], remainingZones, warnings } with camera coordinates in studs and image sizes in pixels; warnings names each image whose long edge is outside ${String(config.imageLongEdgeMin)} to ${String(config.imageLongEdgeMax)} pixels. One image content block per shot follows, in the same order.`,
     inputSchema: captureZonesInput,
     outputSchema: captureZonesOutput,
     annotations: {
@@ -334,29 +387,10 @@ export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof c
         input.cutaway,
         input.views,
       );
-      // One at a time: every capture moves the same Studio camera.
-      const captured: { shot: ViewedZoneShot; image: ImageBlock }[] = [];
-      try {
-        // The call start restored every part, so nothing is hidden yet.
-        let applied: CutawayState = { hidden: false, wallPrefixes: [] };
-        for (const shot of plannedShots) {
-          const needed = cutawayOfShot(input.mapId, shot);
-          if (!sameCutaway(needed, applied)) {
-            await setCutawayHidden(
-              context.studio,
-              studioId,
-              input.mapId,
-              needed.hidden,
-              needed.wallPrefixes,
-            );
-            applied = needed;
-          }
-          const image = await captureShot(context.studio, studioId, input.mapId, shot);
-          captured.push({ shot, image });
-        }
-      } finally {
-        await setCutawayHidden(context.studio, studioId, input.mapId, false);
-      }
+      const captured = await captureInOrder(
+        { connection: context.studio, studioId, mapId: input.mapId },
+        plannedShots,
+      );
       const shots = captured.map(({ shot, image }) => ({
         ...shot,
         ...imageSize(image, shot),

@@ -370,7 +370,7 @@ await test("a bad zone name fails before any ceiling is hidden", async () => {
 });
 
 await test(
-  "each screen_capture waits config.captureSettleMs after the previous request",
+  "each screen_capture waits config.captureSettleMs after the previous request when its cutaway changed",
   // A regression that never sets the timer or captures would leave the wait loops below spinning.
   { timeout: 10_000 },
   async () => {
@@ -432,6 +432,28 @@ await test(
     settleTimer.mock.restore();
   },
 );
+
+await test("a capture that only moves the camera waits config.captureCameraSettleMs, the first and each cutaway change wait config.captureSettleMs", async () => {
+  const studio = studioWith(() => okImage());
+  const settleTimer = mock.method(timers, "setTimeout");
+  await run(studio, { mapId: "arena", views: ["eye"], cutaway: false });
+  const waits = settleTimer.mock.calls.map((call) => call.arguments[0]);
+  settleTimer.mock.restore();
+  assert.ok(waits.length >= 2);
+  assert.deepEqual(waits[0], config.captureSettleMs);
+  assert.ok(waits.slice(1).every((wait) => wait === config.captureCameraSettleMs));
+
+  const cutawayStudio = studioWith(() => okImage());
+  const cutawayTimer = mock.method(timers, "setTimeout");
+  await run(cutawayStudio, { mapId: "arena", zones: ["start"] });
+  const cutawayWaits = cutawayTimer.mock.calls.map((call) => call.arguments[0]);
+  cutawayTimer.mock.restore();
+  assert.deepEqual(cutawayWaits, [
+    config.captureSettleMs,
+    config.captureSettleMs,
+    config.captureSettleMs,
+  ]);
+});
 
 await test("views eye shoots each zone with ceilings and walls shown, and views defaults to a and b", async () => {
   const studio = studioWith(() => okImage());

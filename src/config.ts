@@ -145,8 +145,8 @@ export const config = Object.freeze({
   /** Seconds one stats sampling call may take beyond the settle time of its cameras. */
   statsCallMarginSeconds: 10,
 
-  /** Milliseconds capture_zones waits before each screen_capture: a capture right after a build or a lighting change reads the scene's unsettled light, far brighter or darker than a later one. */
   captureSettleMs: 3000,
+  captureCameraSettleMs: 500,
   /** A capture is blank when at least this share of its pixels lies within blankCaptureLuminanceTolerance (0-255) of its median luminance; a hidden viewport measures 0.99, real captures at most 0.76. */
   blankCaptureUniformShare: 0.95,
   blankCaptureLuminanceTolerance: 8,
