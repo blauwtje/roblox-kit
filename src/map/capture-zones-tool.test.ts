@@ -58,13 +58,20 @@ const readsZones = (request: { arguments: Record<string, unknown> }) =>
 const hidesOrRestores = (request: { arguments: Record<string, unknown> }) =>
   codeOf(request).includes('"hidden":');
 
-function studioWith(captures: (captureId: string) => CallToolResult, zonesText = mapZones()) {
+function studioWith(
+  captures: (captureId: string) => CallToolResult,
+  zonesText = mapZones(),
+  failRestore = false,
+) {
   return new FakeStudioConnection(studios, {
     execute_luau: (request) => {
       if (readsZones(request)) {
         return {
           content: [{ type: "text", text: `[${JSON.stringify({ changed: 2 })},${zonesText}]` }],
         };
+      }
+      if (failRestore && !codeOf(request).includes('"hidden":true')) {
+        return { content: [{ type: "text", text: "restore exploded" }], isError: true };
       }
       return ceilingsChanged(2);
     },
@@ -361,6 +368,29 @@ await test("ceilings are restored when a capture fails", async () => {
   }));
   await assert.rejects(run(studio, { mapId: "arena" }), /returned no image/);
   assert.deepEqual(callKinds(studio), ["restore+read", "hide", "capture", "restore"]);
+});
+
+function studioFailingRestore(captures: (captureId: string) => CallToolResult) {
+  return studioWith(captures, mapZones(), true);
+}
+
+await test("a failed restore keeps the capture error and appends the restore message", async () => {
+  const studio = studioFailingRestore(() => ({
+    content: [{ type: "text", text: "viewport closed" }],
+    isError: true,
+  }));
+  await assert.rejects(
+    run(studio, { mapId: "arena" }),
+    /returned no image: viewport closed.*Restoring the cutaway also failed: .*restore exploded/s,
+  );
+});
+
+await test("a restore failure after successful captures names the parts left hidden", async () => {
+  const studio = studioFailingRestore(() => okImage());
+  await assert.rejects(
+    run(studio, { mapId: "arena" }),
+    new RegExp(`captures succeeded.*restore exploded.*${config.ceilingTag}.*"arena"`, "s"),
+  );
 });
 
 await test("a bad zone name fails before any ceiling is hidden", async () => {

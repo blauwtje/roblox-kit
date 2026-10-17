@@ -341,15 +341,36 @@ async function captureEachShot(
   return captured;
 }
 
+const errorText = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 async function captureInOrder(
   target: { connection: StudioConnection; studioId: string; mapId: string },
   plannedShots: ViewedZoneShot[],
 ): Promise<CapturedShot[]> {
+  let captured: CapturedShot[];
   try {
-    return await captureEachShot(target, plannedShots);
-  } finally {
-    await setCutawayHidden(target.connection, target.studioId, target.mapId, false);
+    captured = await captureEachShot(target, plannedShots);
+  } catch (error) {
+    try {
+      await setCutawayHidden(target.connection, target.studioId, target.mapId, false);
+    } catch (restoreError) {
+      const note = ` Restoring the cutaway also failed: ${errorText(restoreError)}`;
+      throw error instanceof Error
+        ? Object.assign(error, { message: error.message + note })
+        : new Error(errorText(error) + note);
+    }
+    throw error;
   }
+  try {
+    await setCutawayHidden(target.connection, target.studioId, target.mapId, false);
+  } catch (restoreError) {
+    throw new Error(
+      `The captures succeeded but restoring the cutaway failed: ${errorText(restoreError)} The ceilings (parts tagged ${config.ceilingTag}) and the near walls of map "${target.mapId}" may still be hidden; the next capture_zones call on this map restores them.`,
+      { cause: restoreError },
+    );
+  }
+  return captured;
 }
 
 export const captureZonesTool: ToolDefinition<typeof captureZonesInput, typeof captureZonesOutput> =
