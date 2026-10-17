@@ -83,3 +83,12 @@ await test("measure_capture is served read-only after analyze_image", async () =
   assert.equal(served?.annotations.readOnlyHint, true);
   await client.close();
 });
+
+await test("compare_images is served after measure_capture and is not read-only", async () => {
+  const client = await connect([]);
+  const listed = (await client.listTools()).tools.map((tool) => tool.name);
+  assert.equal(listed.indexOf("compare_images"), listed.indexOf("measure_capture") + 1);
+  const served = tools.find((tool) => tool.name === "compare_images");
+  assert.equal(served?.annotations.readOnlyHint, false);
+  await client.close();
+});

@@ -14,6 +14,7 @@ import { checkReportResource, createCheckMapTool } from "../map/check-map-tool.t
 import { CheckReportStore } from "../map/check-report-store.ts";
 import { createJudgeRoundTool } from "../eval/judge-round-tool.ts";
 import { createAnalyzeImageTool } from "../vision/analyze-image-tool.ts";
+import { createCompareImagesTool } from "../vision/compare-images-tool.ts";
 import { createMeasureCaptureTool } from "../vision/measure-capture-tool.ts";
 import { removeMapTool } from "../map/remove-map-tool.ts";
 import { createRunInPlaytestTool } from "../playtest/run-in-playtest-tool.ts";
@@ -51,6 +52,7 @@ export function createTools(deps: ToolDependencies): {
       createJudgeRoundTool(deps.projectDir),
       createAnalyzeImageTool(deps.projectDir),
       createMeasureCaptureTool(deps.projectDir),
+      createCompareImagesTool(deps.projectDir),
     ],
     resources: [checkReportResource(checkReports)],
   };
