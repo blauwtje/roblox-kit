@@ -12,7 +12,7 @@ import {
 import type { PropKind, PropRecord } from "./prop-placement.ts";
 import { pointOnWall, roomFrame, runsAlongX, sideOrder } from "./room-frame.ts";
 import type { RoomFrame, Side } from "./room-frame.ts";
-import type { Preset } from "../style/preset-schema.ts";
+import type { Preset, setPiecePlacements } from "../style/preset-schema.ts";
 import type { DoorwayClearanceBox } from "./size-rules.ts";
 
 import { createSeededRandom } from "../shared/seeded-random.ts";
@@ -306,9 +306,6 @@ function signAtDoor(
   return placed(context, beside, attributes, height);
 }
 
-/** The pieces that stand free in the room, with a face toward north and one toward south. */
-const standingKinds: ReadonlySet<PropKind> = new Set(["departure-board", "clock"]);
-
 /**
  * A free-standing piece on the room's east-west center line, a quarter of the room's width west (slot 0) or
  * east (slot 1) of center, so the center stays free for a spawn. Its faces look north and south, where the
@@ -355,11 +352,11 @@ function heroDepthOf(kind: PropKind, heroProps: Preset["heroProps"]): number {
 
 function boardBesideSouthDoor(
   context: RoomContext,
+  kind: PropKind,
   door: Door,
   heroDepth: number,
 ): SetPieceRecord | Misfit {
   const { frame } = context;
-  const kind = "departure-board";
   const size = propSize(kind, frame.wallHeight);
   const along = door.offset - archReach(frame) - propDimensions.clearanceStuds - size.x / 2;
   const reach = wallSpan(frame, "south").length / 2 - cornerReachStuds - size.x / 2;
@@ -371,6 +368,50 @@ function boardBesideSouthDoor(
   const inset = Math.max(size.z, heroDepth) / 2 + 1e-6;
   return placed(context, { kind, side: "south", along, inset, size, facing: "north" });
 }
+
+interface RoomState {
+  pieces: SetPieceRecord[];
+  standingSlot: number;
+  clearances: DoorwayClearanceBox[];
+  propRules: Preset["propRules"];
+  heroProps: Preset["heroProps"];
+  southDoor: Door | undefined;
+}
+
+type Placer = (context: RoomContext, kind: PropKind, state: RoomState) => SetPieceRecord | Misfit;
+
+function standing(context: RoomContext, kind: PropKind, state: RoomState): SetPieceRecord | Misfit {
+  const result = standingPiece(context, kind, state.standingSlot);
+  state.standingSlot += isMisfit(result) ? 0 : 1;
+  return result;
+}
+
+function besideDoor(
+  context: RoomContext,
+  kind: PropKind,
+  state: RoomState,
+): SetPieceRecord | Misfit {
+  if (state.southDoor === undefined || state.pieces.some((piece) => piece.kind === kind)) {
+    return standing(context, kind, state);
+  }
+  return boardBesideSouthDoor(context, kind, state.southDoor, heroDepthOf(kind, state.heroProps));
+}
+
+const placers: Record<(typeof setPiecePlacements)[number], Placer> = {
+  "facing-entry": (context, kind) => pieceFacingEntry(context, kind),
+  "door-sign": (context, kind) => pieceFacingEntry(context, kind),
+  standing,
+  "beside-door": besideDoor,
+  track: (context, kind, state) =>
+    trackPiece(context, kind as "track-bed" | "platform-edge", state.clearances, state.propRules),
+};
+
+const legacyPlacements: Partial<Record<PropKind, (typeof setPiecePlacements)[number]>> = {
+  "track-bed": "track",
+  "platform-edge": "track",
+  "departure-board": "beside-door",
+  clock: "standing",
+};
 
 function setPiecesOfRoom(
   spec: MapSpec,
@@ -393,36 +434,28 @@ function setPiecesOfRoom(
     frame: roomFrame(spec, room),
     nextSeed: () => Math.floor(random() * seedRange),
   };
-  const pieces: SetPieceRecord[] = [];
+  const state: RoomState = {
+    pieces: [],
+    standingSlot: 0,
+    clearances,
+    propRules,
+    heroProps,
+    southDoor: room.doors.find((door) => door.side === "south"),
+  };
   const warnings: string[] = [];
-  let standingSlot = 0;
-  const southDoor = room.doors.find((door) => door.side === "south");
   for (const name of roomType.setPieces.filter((setPiece) => setPiece !== "sign")) {
     const kind = setPieceKind(room, name);
-    let result: SetPieceRecord | Misfit;
-    if (kind === "track-bed" || kind === "platform-edge") {
-      result = trackPiece(context, kind, clearances, propRules);
-    } else if (
-      kind === "departure-board" &&
-      southDoor !== undefined &&
-      !pieces.some((piece) => piece.kind === kind)
-    ) {
-      result = boardBesideSouthDoor(context, southDoor, heroDepthOf(kind, heroProps));
-    } else if (standingKinds.has(kind)) {
-      result = standingPiece(context, kind, standingSlot);
-      standingSlot += isMisfit(result) ? 0 : 1;
-    } else {
-      result = pieceFacingEntry(context, kind);
-    }
+    const strategy = propRules[kind]?.placement ?? legacyPlacements[kind] ?? "facing-entry";
+    const result = placers[strategy](context, kind, state);
     if (isMisfit(result)) {
       warnings.push(`${result.warning} The ${kind} is skipped.`);
     } else {
-      pieces.push(result);
+      state.pieces.push(result);
     }
   }
   const signAttributes = { Label: roomType.signLabel, AccentColor: accent };
   const signs = room.doors.map((door) => signAtDoor(context, door, signAttributes));
-  return { pieces: [...pieces, ...signs], warnings };
+  return { pieces: [...state.pieces, ...signs], warnings };
 }
 
 /**
