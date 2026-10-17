@@ -1,5 +1,6 @@
 [tools]
 luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"
+lune = "lune-org/lune@0.10.5"
 selene = "Kampfkarren/selene@0.32.0"
 stylua = "JohnnyMorganz/StyLua@2.5.2"
 # The networking raw-buffer checks depend on the 0.18.9 wire format: before bumping Blink, rerun `npm run smoke:networking`.

@@ -44,7 +44,7 @@ local function addCrate(
 	local crateCenter = Vector3.new(
 		center.X + room.X * random:NextNumber(-1, 1),
 		center.Y - room.Y,
-		center.Z + BATTEN_THICKNESS / 2 + room.Z * random:NextNumber(-1, 1)
+		center.Z + BATTEN_THICKNESS / 2 + (room.Z - BATTEN_THICKNESS / 2) * random:NextNumber(-1, 1)
 	)
 	local darkening = random:NextNumber(0, MAXIMUM_DARKENING)
 	addPart(targetContainer, name, crateSize, crateCenter, darkened(panel, darkening))
