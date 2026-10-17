@@ -1,0 +1,32 @@
+[
+  {
+    "family": "Fredoka",
+    "weight": 500,
+    "file": "Fredoka-Medium.ttf",
+    "sha256": "3a44b4c2d2241b715b88f419d7ab639b2315405c18b831ffb0008000e285ec22"
+  },
+  {
+    "family": "Fredoka",
+    "weight": 700,
+    "file": "Fredoka-Bold.ttf",
+    "sha256": "cee20027c57071d192df1b5915df355510e46ee5f61018ca36eb1d10fc96b69c"
+  },
+  {
+    "family": "Inter",
+    "weight": 400,
+    "file": "Inter-Regular.ttf",
+    "sha256": "c7293bf56fa4bcf1512bc2f3015e7f246a5366f22847be6fadfb2ab84f164d60"
+  },
+  {
+    "family": "Inter",
+    "weight": 700,
+    "file": "Inter-Bold.ttf",
+    "sha256": "a1392240ff3f79e4b34dbce5b98a675dcdc2c8ff59d1e2653c1cce62e8a49665"
+  },
+  {
+    "family": "Lilita One",
+    "weight": 400,
+    "file": "LilitaOne-Regular.ttf",
+    "sha256": "f5b641c45c69d772ee4eda687bc9fda411d5cad6b0b45371491da4580cbc8d59"
+  }
+]
