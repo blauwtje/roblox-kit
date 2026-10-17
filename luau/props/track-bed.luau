@@ -24,31 +24,12 @@ local RAIL_GAUGE = 5.7
 local MINIMUM_SLEEPER_SPACING = 1.6
 local MAXIMUM_SLEEPER_SPACING = 2.2
 
-type Look = { Color: Color3, Material: Enum.Material }
+local propKit = require("../shared/prop-kit")
+local slotLook = propKit.slotLook
+local addPart = propKit.addPart
 
-local DEFAULT_COLOR = Instance.new("Part").Color
+local DEFAULT_COLOR = propKit.DEFAULT_COLOR
 local DEFAULT_MATERIAL = "Plastic"
-
--- The color and material of a prop slot, named as in `Frame`: its `<Slot>Material` attribute holds an Enum.Material name.
-local function slotLook(attributes: { [string]: any }, slot: string): Look
-	local material = Enum.Material:FromName(attributes[`{slot}Material`]) :: Enum.Material
-	return { Color = attributes[`{slot}Color`], Material = material }
-end
-
-local function addPart(targetContainer: Instance, name: string, size: Vector3, position: Vector3, look: Look): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanTouch = false
-	part.CanQuery = false
-	part.Size = size
-	part.Color = look.Color
-	part.Material = look.Material
-	part.CFrame = CFrame.new(position)
-	part.Parent = targetContainer
-	return part
-end
 
 local Generator = {}
 Generator.Attributes = {
