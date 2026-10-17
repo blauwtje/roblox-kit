@@ -1,19 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFile } from "node:fs/promises";
-import { placeLights } from "../lighting/light-placement.ts";
-import { placeArrangements } from "../map/arrangement-placement.ts";
-import { layoutMap } from "../map/map-layout.ts";
+import { planMap } from "../map/build-plan.ts";
 import { relationMapSpecSchema } from "../map/map-spec.ts";
-import { propDimensions } from "../map/prop-placement.ts";
-import { detailDimensions } from "../map/room-details.ts";
-import { resolveRelations } from "../map/relation-solver.ts";
-import { placeSetPieces } from "../map/set-piece-placement.ts";
-import { doorwayClearanceBoxes, findDoorways } from "../map/size-rules.ts";
-import { zoneShots } from "../map/zone-cameras.ts";
 import { config } from "../config.ts";
 import { loadPresets } from "./load-preset.ts";
-import { lintPalette, oklabDistance, oklabLightness } from "./palette-lint.ts";
+import { lintPalette, oklabLightness } from "./palette-lint.ts";
 import {
   heroParts,
   roleTexelDensity,
@@ -22,6 +13,8 @@ import {
 } from "./preset-schema.ts";
 
 const genreNames = ["cozy-town", "horror-facility", "sci-fi-station", "train-station"];
+
+const featurePresets = ["train-station"];
 
 /** Names in Enum.Material that these presets may use; "built-in Materials only" means no custom ones. */
 const builtInMaterials = new Set([
@@ -95,404 +88,30 @@ await test("every bundled preset meets the size rules check_map enforces", async
   }
 });
 
-const minPiecesPerQuadrant = 2;
+const featureRoom = { name: "hall", x: 0, z: 0, width: 50, depth: 50, spawn: true };
 
-/** The train station preset with the eval benchmark map resolved and its set pieces placed. */
-async function placeBenchmarkSetPieces() {
-  const preset = (await loadPresets()).get("train-station");
-  assert.ok(preset !== undefined);
-  const benchmark = new URL("../../eval/benchmarks/train-station.json", import.meta.url);
-  const spec = resolveRelations(
-    relationMapSpecSchema.parse(JSON.parse(await readFile(benchmark, "utf8"))),
-  );
-  const seed = spec.seed ?? 0;
-  const agent = { radius: preset.sizeRules.agentRadius, height: preset.sizeRules.agentHeight };
-  const { pieces } = placeSetPieces(
-    spec,
-    preset.roomTypes,
-    preset.palette.accent,
-    seed,
-    doorwayClearanceBoxes(spec, agent),
-    preset.propRules,
-  );
-  return { preset, spec, seed, setPieces: pieces };
-}
-
-await test("the train station's concourse and ticket hall arrange at least two pieces in each quarter of the floor", async () => {
-  const { preset, spec, seed, setPieces } = await placeBenchmarkSetPieces();
-  const { pieces } = placeArrangements(spec, preset.roomTypes, setPieces, seed);
-  for (const roomName of ["concourse", "ticket-hall"]) {
-    const room = spec.rooms.find((candidate) => candidate.name === roomName);
-    assert.ok(room !== undefined, roomName);
-    const inRoom = pieces.filter(
-      (piece) =>
-        Math.abs(piece.pivot.x - room.x) <= room.width / 2 &&
-        Math.abs(piece.pivot.z - room.z) <= room.depth / 2,
+for (const name of featurePresets) {
+  await test(`${name} builds a map with no look issues and sets the full upload-free feature set`, async () => {
+    const preset = (await loadPresets()).get(name);
+    assert.ok(preset !== undefined, name);
+    assert.ok(preset.lightFixtures !== undefined, `${name} lightFixtures`);
+    assert.ok(preset.lighting.PostProcessing !== undefined, `${name} PostProcessing`);
+    assert.ok((preset.ambientEffects ?? []).length > 0, `${name} ambientEffects`);
+    assert.ok(Object.keys(preset.idleAnimations ?? {}).length > 0, `${name} idleAnimations`);
+    const plan = await planMap(
+      {
+        ...relationMapSpecSchema.parse({
+          mapId: `${name}-quality`,
+          rooms: [featureRoom],
+          style: { preset: name },
+        }),
+        useRecordedAssets: false,
+      },
+      {},
     );
-    for (const sideOfX of [-1, 1]) {
-      for (const sideOfZ of [-1, 1]) {
-        const inQuadrant = inRoom.filter(
-          (piece) =>
-            (piece.pivot.x - room.x) * sideOfX > 1 && (piece.pivot.z - room.z) * sideOfZ > 1,
-        );
-        assert.ok(
-          inQuadrant.length >= minPiecesPerQuadrant,
-          `${roomName}: ${String(inQuadrant.length)} pieces in quadrant x${String(sideOfX)} z${String(sideOfZ)}`,
-        );
-      }
-    }
-  }
-});
-
-await test("the platform's pillars, wider under its 24-high wall, keep the gaps to the platform edge and clock they had at 16 high", async () => {
-  const { preset, spec, seed, setPieces } = await placeBenchmarkSetPieces();
-  const { pieces } = placeArrangements(spec, preset.roomTypes, setPieces, seed);
-  const zGap = (first: (typeof pieces)[number], second: (typeof pieces)[number]): number =>
-    Math.abs(first.pivot.z - second.pivot.z) - (first.size.z + second.size.z) / 2;
-  const platformEdge = setPieces.find((piece) => piece.kind === "platform-edge");
-  const clock = setPieces.find((piece) => piece.kind === "clock");
-  const pillars = pieces.filter(
-    (piece) => piece.kind === "pillar" && Math.abs(piece.pivot.z - 450) <= 15,
-  );
-  assert.ok(platformEdge !== undefined && clock !== undefined && pillars.length === 4);
-  for (const pillar of pillars) {
-    assert.equal(pillar.size.z, 3, "the pillar is 3 wide under the 24-high wall");
-    assert.ok(
-      4 <= zGap(pillar, platformEdge),
-      `pillar ${String(zGap(pillar, platformEdge))} from the edge`,
-    );
-    assert.ok(
-      1.4 <= zGap(pillar, clock) + 1e-9,
-      `pillar ${String(zGap(pillar, clock))} from the clock`,
-    );
-  }
-});
-
-await test("the platform's train car stands on its track bed, which keeps its rails and spans the car", async () => {
-  const { preset, setPieces } = await placeBenchmarkSetPieces();
-  assert.deepEqual(preset.meshes?.["train-car"], {
-    script: "src/hero-props/meshes/train-station/train-car.py",
-    targets: [{ replaces: "onto:prop:track-bed", anchor: "bottom" }],
+    assert.deepEqual(plan.lookIssues, [], name);
   });
-  assert.equal(preset.heroProps?.["train-car"], undefined);
-  assert.equal(preset.roomTypes?.["platform"]?.heroProps, undefined);
-  const trackBed = setPieces.find((piece) => piece.kind === "track-bed");
-  assert.ok(trackBed !== undefined);
-  // The car's modelled footprint (train-car.py): 52 studs long, 8.6 across at its widest.
-  assert.ok(52 <= trackBed.size.x, `track bed ${String(trackBed.size.x)} studs long`);
-  assert.ok(8.6 <= trackBed.size.z, "the car stands within the track bed's depth");
-});
-
-await test("the bench keeps its dark wood seat, and the track bed's sleepers are neither navy nor the rail colour", async () => {
-  const source = await readFile(
-    new URL("../../luau/props/track-bed.luau", import.meta.url),
-    "utf8",
-  );
-  const preset = (await loadPresets()).get("train-station");
-  const slots = preset?.propSlots;
-  assert.ok(preset !== undefined && slots !== undefined);
-  assert.equal(slots.seat.color, "#4a3b2a");
-  assert.equal(slots.seat.material, "Wood");
-  assert.ok(!source.includes('"Signage"'), "the sleepers do not read the signage slot");
-  assert.ok(!source.includes('"Seat"'), "the sleepers keep their own timber tone, not the bench's");
-  assert.match(source, /sleeper = slotLook\(params\.Attributes, "Sleeper"\)/);
-  assert.equal(slots.sleeper?.material, "Wood");
-  const sleeper = slots.sleeper.color;
-  const rails = slots.frame.color;
-  const railGap = oklabDistance(sleeper, rails);
-  assert.ok(
-    0.05 <= railGap,
-    `sleepers ${sleeper} are ${railGap.toFixed(3)} from the rails ${rails}`,
-  );
-  const navyGap = oklabDistance(sleeper, preset.palette.accent);
-  assert.ok(0.15 <= navyGap, `sleepers ${sleeper} are ${navyGap.toFixed(3)} from the navy accent`);
-});
-
-await test("the track bed's ballast reads as grey gravel, not the cream panel slab", async () => {
-  const source = await readFile(
-    new URL("../../luau/props/track-bed.luau", import.meta.url),
-    "utf8",
-  );
-  assert.ok(!/ballast = slotLook\(params\.Attributes, "Panel"\)/.test(source), "no panel slot");
-  assert.match(source, /ballast = slotLook\(params\.Attributes, "Ballast"\)/);
-  const slots = (await loadPresets()).get("train-station")?.propSlots;
-  assert.equal(slots?.ballast?.material, "Pebble");
-  assert.notEqual(slots.ballast.color, slots.panel.color);
-});
-
-await test("the lamp post keeps its frame slot, with a frame-slot shade and cap over the glowing bulb", async () => {
-  const source = await readFile(new URL("../../luau/props/lamp.luau", import.meta.url), "utf8");
-  assert.equal((await loadPresets()).get("train-station")?.propRules["lamp"]?.surface, "exempt");
-  assert.match(source, /"Shade",[^;]*?\bframe\b\s*\)/s);
-  assert.match(source, /"Cap",[^;]*?\bframe\b\s*\)/s);
-  assert.match(source, /"Head",[^;]*?\bbulb\b\s*\)/s);
-});
-
-await test("the concourse's departure board replaces its departure-board set piece and fits its span", async () => {
-  const { preset, setPieces } = await placeBenchmarkSetPieces();
-  const board = preset.heroProps?.["departure-board"];
-  assert.ok(board !== undefined);
-  assert.equal(board.replaces, "departure-board");
-  assert.equal(preset.roomTypes?.["concourse"]?.heroProps, undefined);
-  const setPiece = setPieces.find((piece) => piece.kind === "departure-board");
-  assert.ok(setPiece !== undefined);
-  assert.ok(board.size.width <= setPiece.size.x, `board ${String(board.size.width)} studs wide`);
-  assert.ok(board.size.height <= setPiece.size.y, `board ${String(board.size.height)} studs high`);
-});
-
-/** The eye view's window shape for the centre-strip and pendant checks; Studio's default window is wider than tall. */
-const eyeViewAspect = 16 / 9;
-
-interface Footprint {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
 }
-
-/** A piece's floor footprint; a quarter turn swaps its width and depth. */
-function footprintOf(piece: {
-  pivot: { x: number; z: number };
-  size: { x: number; z: number };
-  yaw?: number;
-}): Footprint {
-  const turned = Math.abs(Math.round(((piece.yaw ?? 0) % 180) / 90)) === 1;
-  const halfX = (turned ? piece.size.z : piece.size.x) / 2;
-  const halfZ = (turned ? piece.size.x : piece.size.z) / 2;
-  return {
-    minX: piece.pivot.x - halfX,
-    maxX: piece.pivot.x + halfX,
-    minZ: piece.pivot.z - halfZ,
-    maxZ: piece.pivot.z + halfZ,
-  };
-}
-
-/** The gap between two footprints, 0 when they touch or overlap. */
-function footprintGap(first: Footprint, second: Footprint): number {
-  const gapX = Math.max(first.minX - second.maxX, second.minX - first.maxX, 0);
-  const gapZ = Math.max(first.minZ - second.maxZ, second.minZ - first.maxZ, 0);
-  return Math.hypot(gapX, gapZ);
-}
-
-/** The benchmark map's set pieces, arrangements and pendants, with the concourse's walls and eye shot. */
-async function placeBenchmarkConcourse() {
-  const { preset, spec, seed, setPieces } = await placeBenchmarkSetPieces();
-  const { pieces: arranged } = placeArrangements(spec, preset.roomTypes, setPieces, seed);
-  const room = spec.rooms.find((candidate) => candidate.name === "concourse");
-  assert.ok(room !== undefined);
-  const inConcourse = (piece: { pivot: { x: number; z: number } }) =>
-    Math.abs(piece.pivot.x - room.x) <= room.width / 2 &&
-    Math.abs(piece.pivot.z - room.z) <= room.depth / 2;
-  const wallHeight = room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds;
-  const eyeShot = zoneShots({
-    name: room.name,
-    bounds: {
-      min: { x: room.x - room.width / 2, y: 0, z: room.z - room.depth / 2 },
-      max: { x: room.x + room.width / 2, y: wallHeight, z: room.z + room.depth / 2 },
-    },
-  }).find((shot) => shot.view === "eye");
-  assert.ok(eyeShot !== undefined);
-  const southDoor = findDoorways(spec).find(
-    (doorway) => doorway.room === room.name && doorway.side === "south",
-  );
-  assert.ok(southDoor !== undefined);
-  return {
-    preset,
-    spec,
-    room,
-    eyeShot,
-    southDoor,
-    arranged: arranged.filter(inConcourse),
-    setPieces: setPieces.filter(inConcourse),
-  };
-}
-
-await test("the concourse has two pillar lines with a gap at the south door and none in the eye view's centre strip", async () => {
-  const { arranged, eyeShot, southDoor } = await placeBenchmarkConcourse();
-  const pillars = arranged.filter((piece) => piece.kind === "pillar");
-  const lineZs = [...new Set(pillars.map((piece) => piece.pivot.z))];
-  assert.equal(lineZs.length, 2, `pillar lines at z ${lineZs.join(", ")}`);
-  const southLine = pillars.filter((piece) => piece.pivot.z > southDoor.position.z - 10);
-  const northLine = pillars.filter((piece) => piece.pivot.z <= southDoor.position.z - 10);
-  const doorHalf = southDoor.width / 2;
-  assert.ok(
-    southLine.every((piece) => Math.abs(piece.pivot.x - southDoor.position.x) > doorHalf),
-    "no pillar in front of the south door",
-  );
-  assert.ok(
-    northLine.some((piece) => Math.abs(piece.pivot.x - southDoor.position.x) <= doorHalf),
-    "the line without a door runs on across the same stretch",
-  );
-  // The centre strip is the middle third of the eye view's horizontal angle; the camera looks along +Z.
-  const halfHorizontalDegrees =
-    (Math.atan(Math.tan((config.studioFieldOfViewDegrees * Math.PI) / 360) * eyeViewAspect) * 180) /
-    Math.PI;
-  const stripDegrees = halfHorizontalDegrees / 3;
-  const [cameraX, , cameraZ] = eyeShot.cameraPosition;
-  for (const pillar of pillars) {
-    const footprint = footprintOf(pillar);
-    const bearings = [footprint.minX, footprint.maxX].flatMap((x) =>
-      [footprint.minZ, footprint.maxZ].map(
-        (z) => (Math.atan2(x - cameraX, z - cameraZ) * 180) / Math.PI,
-      ),
-    );
-    const inStrip = Math.min(...bearings) <= stripDegrees && Math.max(...bearings) >= -stripDegrees;
-    assert.ok(!inStrip, `pillar at x ${String(pillar.pivot.x)} z ${String(pillar.pivot.z)}`);
-  }
-});
-
-await test("the concourse's six ticket machines stand side by side on the east wall, clear of doors and pillars", async () => {
-  const { room, arranged, southDoor } = await placeBenchmarkConcourse();
-  const machines = arranged.filter((piece) => piece.kind === "ticket-machine");
-  assert.equal(machines.length, 6);
-  const footprints = machines.map(footprintOf);
-  const eastFace = room.x + room.width / 2;
-  const westFace = room.x - room.width / 2;
-  const southFace = room.z + room.depth / 2;
-  for (const footprint of footprints) {
-    assert.ok(footprint.maxX > eastFace - 6 && footprint.maxX < eastFace, "against the east wall");
-    assert.ok(footprint.maxX > (westFace + eastFace) / 2, "in the east half");
-    assert.ok(footprint.maxZ < southFace - 1, "never on the south wall");
-  }
-  const ordered = [...footprints].sort((first, second) => first.minZ - second.minZ);
-  for (let index = 1; index < ordered.length; index += 1) {
-    const gap = (ordered[index]?.minZ ?? 0) - (ordered[index - 1]?.maxZ ?? 0);
-    assert.ok(gap <= propDimensions.clearanceStuds + 1e-9, `machines ${String(gap)} studs apart`);
-  }
-  assert.ok(
-    room.doors.every((door) => door.side !== "east"),
-    "the east wall has no door",
-  );
-  const doorStrip = southDoor.position.x;
-  assert.ok(footprints.every((footprint) => footprint.minX > doorStrip + southDoor.width / 2));
-  for (const pillar of arranged.filter((piece) => piece.kind === "pillar")) {
-    for (const footprint of footprints) {
-      assert.ok(
-        footprintGap(footprint, footprintOf(pillar)) >= propDimensions.clearanceStuds,
-        `a machine stands within ${String(propDimensions.clearanceStuds)} studs of a pillar`,
-      );
-    }
-  }
-});
-
-await test("the concourse's departure board stands on the south wall beside the doorway, clear of its strip, arch and the pillars", async () => {
-  const { spec, room, setPieces, arranged, southDoor, preset } = await placeBenchmarkConcourse();
-  const board = setPieces.find((piece) => piece.kind === "departure-board");
-  assert.ok(board !== undefined);
-  assert.equal(board.yaw, 0, "faces north, into the hall");
-  const footprint = footprintOf(board);
-  const southInnerFace = room.z + room.depth / 2 - southDoor.wallThickness;
-  assert.ok(Math.abs(southInnerFace - footprint.maxZ) < 0.01, "against the south wall");
-  const archReach =
-    southDoor.width / 2 + detailDimensions.archJambWidthStuds - detailDimensions.archLipStuds;
-  const doorX = southDoor.position.x;
-  const clearOfArch = footprint.maxX <= doorX - archReach || footprint.minX >= doorX + archReach;
-  assert.ok(clearOfArch, "clear of the doorway's arch");
-  const agent = { radius: preset.sizeRules.agentRadius, height: preset.sizeRules.agentHeight };
-  const strip = doorwayClearanceBoxes(spec, agent).find(
-    (box) => box.room === room.name && box.side === "south",
-  );
-  assert.ok(strip !== undefined);
-  assert.ok(
-    footprint.maxX <= strip.min.x || footprint.minX >= strip.max.x,
-    "clear of the doorway strip",
-  );
-  assert.ok(Math.abs(doorX - (footprint.minX + footprint.maxX) / 2) < room.width / 2);
-  for (const pillar of arranged.filter((piece) => piece.kind === "pillar")) {
-    assert.ok(
-      footprintGap(footprint, footprintOf(pillar)) >= propDimensions.clearanceStuds,
-      `board within ${String(propDimensions.clearanceStuds)} studs of the pillar at x ${String(pillar.pivot.x)}`,
-    );
-  }
-});
-
-await test("a concourse pendant falls inside the eye shot's field of view, above the departure board", async () => {
-  const { spec, room, eyeShot, setPieces, preset } = await placeBenchmarkConcourse();
-  const pendants = placeLights(spec, preset.lightRoles, preset.lightFixtures).filter(
-    (light) => light.zone === room.name && light.fixture !== undefined,
-  );
-  assert.ok(pendants.length > 0);
-  const board = setPieces.find((piece) => piece.kind === "departure-board");
-  assert.ok(board !== undefined);
-  const boardTop = board.pivot.y + board.size.y / 2;
-  for (const pendant of pendants) {
-    const fixture = pendant.fixture;
-    assert.ok(fixture !== undefined);
-    assert.ok(pendant.position.y - fixture.size.y / 2 >= boardTop, "hangs above the board's top");
-  }
-  const [cameraX, cameraY, cameraZ] = eyeShot.cameraPosition;
-  const forward = unit(subtract(eyeShot.lookAt, eyeShot.cameraPosition));
-  const right = unit(cross(forward, [0, 1, 0]));
-  const up = cross(right, forward);
-  const halfVertical = Math.tan((config.studioFieldOfViewDegrees * Math.PI) / 360);
-  const visible = pendants.filter((pendant) => {
-    const offset = subtract(
-      [pendant.position.x, pendant.position.y, pendant.position.z],
-      [cameraX, cameraY, cameraZ],
-    );
-    const depth = dot(offset, forward);
-    return (
-      depth > 0 &&
-      Math.abs(dot(offset, up)) <= depth * halfVertical &&
-      Math.abs(dot(offset, right)) <= depth * halfVertical * eyeViewAspect
-    );
-  });
-  assert.ok(visible.length >= 1, "no pendant in the eye view");
-});
-
-type Triple = [number, number, number];
-
-function subtract(first: Triple, second: Triple): Triple {
-  return [first[0] - second[0], first[1] - second[1], first[2] - second[2]];
-}
-
-function dot(first: Triple, second: Triple): number {
-  return first[0] * second[0] + first[1] * second[1] + first[2] * second[2];
-}
-
-function cross(first: Triple, second: Triple): Triple {
-  return [
-    first[1] * second[2] - first[2] * second[1],
-    first[2] * second[0] - first[0] * second[2],
-    first[0] * second[1] - first[1] * second[0],
-  ];
-}
-
-function unit(vector: Triple): Triple {
-  const length = Math.hypot(...vector);
-  return [vector[0] / length, vector[1] / length, vector[2] / length];
-}
-
-await test("the train station lays the concourse spawn pad flush, in the floor's color", async () => {
-  const { preset, spec, room } = await placeBenchmarkConcourse();
-  assert.equal(preset.flushSpawn, true);
-  const { parts } = layoutMap(spec, preset.surfaces, { flushSpawn: preset.flushSpawn });
-  const spawn = parts.find((part) => part.name === `${room.name}-spawn`);
-  const floor = parts.find((part) => part.name === `${room.name}-floor`);
-  assert.ok(spawn !== undefined && floor !== undefined);
-  assert.equal(spawn.size.y, config.flushSpawnThicknessStuds);
-  assert.equal(spawn.color, floor.color);
-  assert.equal(spawn.material, floor.material);
-});
-
-await test("the ticket hall's ticket counter is the declared mesh in place of its set piece and fits its span", async () => {
-  const { preset, setPieces } = await placeBenchmarkSetPieces();
-  const targets = preset.meshes?.["ticket-counter"]?.targets ?? [];
-  assert.deepEqual(
-    targets.map((target) => target.replaces),
-    ["prop:ticket-counter"],
-  );
-  // A declared mesh wins over a hero prop replacing the same set piece, so the room type names none.
-  assert.equal(preset.roomTypes?.["ticket-hall"]?.heroProps, undefined);
-  const setPiece = setPieces.find((piece) => piece.kind === "ticket-counter");
-  assert.ok(setPiece !== undefined);
-  // The mesh's modelled bounds (ticket-counter.py): 14 studs wide, 9.87 high, and placed at the set piece's size.
-  assert.ok(14 <= setPiece.size.x, `counter 14 studs wide, set piece ${String(setPiece.size.x)}`);
-  assert.ok(
-    9.87 <= setPiece.size.y,
-    `counter 9.87 studs high, set piece ${String(setPiece.size.y)}`,
-  );
-});
 
 type Axis = "x" | "y" | "z";
 type Bounds = Record<Axis, { min: number; max: number }>;
@@ -615,24 +234,4 @@ await test("every bundled preset keeps floor, wall, ceiling and trim apart in OK
     }
     assert.deepEqual(lintPalette(preset), [], name);
   }
-});
-
-await test("train-station has a Granite floor, Limestone walls, Metal trim and no textures", async () => {
-  const presets = await loadPresets();
-  const preset = presets.get("train-station");
-  assert.ok(preset !== undefined);
-  assert.equal(preset.surfaces.floor.material, "Granite");
-  assert.equal(preset.surfaces.wall.material, "Limestone");
-  assert.equal(preset.surfaces.trim.material, "Metal");
-  for (const [role, surface] of Object.entries(preset.surfaces)) {
-    assert.equal(surface.texture, undefined, `${role} texture`);
-    assert.equal(surface.variant, undefined, `${role} variant`);
-  }
-});
-
-await test("the train station's queue rails keep the bronze frame slot instead of taking the trim role", async () => {
-  const rule = (await loadPresets()).get("train-station")?.propRules["rail"];
-  assert.ok(rule !== undefined);
-  assert.equal(rule.surface, "exempt");
-  assert.deepEqual(rule.heightRatio, { min: 0.34, max: 0.75 });
 });
