@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import fc from "fast-check";
 import { createSeededRandom } from "./seeded-random.ts";
 
 function drawValues(seed: number, count: number): number[] {
@@ -7,8 +8,15 @@ function drawValues(seed: number, count: number): number[] {
   return Array.from({ length: count }, () => random());
 }
 
+const seeds = fc.double({ noNaN: true, noDefaultInfinity: true });
+
 await test("the same seed yields the same sequence", () => {
-  assert.deepEqual(drawValues(42, 20), drawValues(42, 20));
+  fc.assert(
+    fc.property(seeds, (seed) => {
+      assert.deepEqual(drawValues(seed, 20), drawValues(seed, 20));
+    }),
+    { seed: 1 },
+  );
 });
 
 await test("different seeds yield different sequences", () => {
@@ -16,9 +24,14 @@ await test("different seeds yield different sequences", () => {
 });
 
 await test("every value is a float in [0, 1)", () => {
-  for (const value of drawValues(7, 1000)) {
-    assert.ok(value >= 0 && value < 1, `value ${String(value)} is out of range`);
-  }
+  fc.assert(
+    fc.property(seeds, (seed) => {
+      for (const value of drawValues(seed, 200)) {
+        assert.ok(value >= 0 && value < 1, `value ${String(value)} is out of range`);
+      }
+    }),
+    { seed: 1 },
+  );
 });
 
 await test("values are spread across the range", () => {
