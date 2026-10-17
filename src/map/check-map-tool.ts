@@ -2,7 +2,7 @@ import { z } from "zod";
 import { config } from "../config.ts";
 import { trimRecipePrefix } from "../hero-props/prop-recipes.ts";
 import { runLuauBatch, runLuauFile } from "../luau/run-luau-file.ts";
-import type { ToolDefinition } from "../server/tool-definition.ts";
+import type { ResourceDefinition, ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
@@ -172,6 +172,25 @@ function agentSizeFor(preset: Preset | undefined): { radius: number; height: num
     };
   }
   return { radius: preset.sizeRules.agentRadius, height: preset.sizeRules.agentHeight };
+}
+
+/** The resource that serves each report stored by `check_map` at `config.checkReportUriPrefix` plus its id. */
+export function checkReportResource(reports: CheckReportStore): ResourceDefinition {
+  return {
+    name: "check-report",
+    uriTemplate: `${config.checkReportUriPrefix}{reportId}`,
+    title: "Check report",
+    description: "The full report of one check_map call, by reportId.",
+    read(uri, variables) {
+      const report = reports.get(String(variables["reportId"]));
+      if (report === undefined) {
+        throw new Error(
+          `No check report at ${uri}. Reports last only while the roblox-kit server runs; call check_map again for a new one.`,
+        );
+      }
+      return JSON.stringify(report);
+    },
+  };
 }
 
 /** Builds the tool around the store that keeps its full reports and serves them as resources. */

@@ -7,7 +7,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
-import { createServer, serveOverStdio, tools } from "./main.ts";
+import { createServer, createTools, serveOverStdio, tools } from "./main.ts";
 import type { ToolDefinition } from "./tool-definition.ts";
 import { toolResult } from "./tool-result.ts";
 
@@ -95,6 +95,47 @@ await test("the shipped registry lists the playtest, remove_map, run_in_playtest
     "run_in_playtest",
     "judge_round",
   ]);
+});
+
+await test("createTools returns the tools in order with the check report resource", () => {
+  const created = createTools({ projectDir: undefined });
+  assert.deepEqual(
+    created.tools.map((tool) => tool.name),
+    tools.map((tool) => tool.name),
+  );
+  assert.deepEqual(
+    created.resources.map((resource) => resource.name),
+    ["check-report"],
+  );
+});
+
+await test("a resource passed to createServer is served and its throw is refused", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const resource = {
+    name: "note",
+    uriTemplate: "roblox-kit://notes/{id}",
+    title: "Note",
+    description: "A note.",
+    read(uri: string, variables: Record<string, string | string[]>) {
+      if (variables["id"] !== "a") {
+        throw new Error(`No note at ${uri}.`);
+      }
+      return '{"id":"a"}';
+    },
+  };
+  await createServer({ serverInfo, studio, tools: [], resources: [resource] }).connect(
+    serverTransport,
+  );
+  const client = new Client({ name: "test-client", version: "0.0.0" });
+  await client.connect(clientTransport);
+  const read = await client.readResource({ uri: "roblox-kit://notes/a" });
+  assert.deepEqual(read.contents[0], {
+    uri: "roblox-kit://notes/a",
+    mimeType: "application/json",
+    text: '{"id":"a"}',
+  });
+  await assert.rejects(client.readResource({ uri: "roblox-kit://notes/b" }), /No note at/);
+  await client.close();
 });
 
 await test("tools/list follows array order and exposes schemas and annotations", async () => {

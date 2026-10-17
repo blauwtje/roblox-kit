@@ -13,6 +13,20 @@ export interface ToolContext {
   reportProgress?(progress: number, total: number, message: string): Promise<void>;
 }
 
+export const openWorldHintMeaning =
+  "true only when a call loads from or sends to a service beyond the open Studio place and the project folder, such as Roblox's asset cloud; false when it touches only Studio, the playtest or local project files";
+
+/**
+ * One MCP resource template of this server; `read` returns the JSON text served at `uri`, or throws.
+ */
+export interface ResourceDefinition {
+  name: string;
+  uriTemplate: string;
+  title: string;
+  description: string;
+  read(uri: string, variables: Record<string, string | string[]>): string;
+}
+
 /**
  * One MCP tool of this server. The registry in `main.ts` registers an ordered array of these, so
  * `tools/list` follows array order. The handler may throw; the registry turns a throw into an
