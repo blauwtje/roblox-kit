@@ -169,6 +169,16 @@ function mapSpecObject<Room extends z.ZodType<{ name: string }>>(roomSchema: Roo
     seed: z.int().nonnegative().optional(),
     objectives: z.array(objectiveSchema).optional(),
     performanceBudget: performanceBudgetSchema.default(() => defaultPerformanceBudget),
+    npcs: z
+      .strictObject({
+        density: z.number().min(0).max(1),
+        seed: z.int().nonnegative().optional(),
+        maxTotal: z.int().positive().optional(),
+      })
+      .optional(),
+    clutter: z.boolean().default(false),
+    signage: z.boolean().default(false),
+    motion: z.boolean().default(false),
     ...roomStyle,
   });
 }

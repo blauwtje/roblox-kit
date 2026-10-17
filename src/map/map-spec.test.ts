@@ -133,3 +133,23 @@ await test("measureRoom lets a room's sizes win over the map's, which win over t
     doorWidth: 9,
   });
 });
+
+await test("a spec defaults the detail switches to false and checks npcs strictly", () => {
+  const parsed = mapSpecSchema.parse(minimalSpec);
+  assert.equal(parsed.npcs, undefined);
+  assert.deepEqual([parsed.clutter, parsed.signage, parsed.motion], [false, false, false]);
+  const withNpcs = mapSpecSchema.parse({
+    ...minimalSpec,
+    npcs: { density: 0.5, seed: 3, maxTotal: 10 },
+    motion: true,
+  });
+  assert.equal(withNpcs.npcs?.maxTotal, 10);
+  assert.equal(withNpcs.motion, true);
+  for (const npcs of [
+    { density: 1.5 },
+    { density: 0.5, extra: 1 },
+    { density: 0.5, maxTotal: 0 },
+  ]) {
+    assert.equal(mapSpecSchema.safeParse({ ...minimalSpec, npcs }).success, false);
+  }
+});
