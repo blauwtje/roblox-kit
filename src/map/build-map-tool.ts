@@ -7,6 +7,8 @@ import { paletteIssueKinds } from "../style/palette-lint.ts";
 import { lookIssueKinds } from "./look-lint.ts";
 import { planMap } from "./build-plan.ts";
 import { relationMapSpecSchema } from "./map-spec.ts";
+import { fillMapSpec } from "./spec-fill.ts";
+import { loadPresets } from "../style/load-preset.ts";
 import { runBuildPlan } from "./run-build-plan.ts";
 
 export { propsOf } from "./build-plan.ts";
@@ -14,7 +16,12 @@ export { propsOf } from "./build-plan.ts";
 const vectorSchema = z.strictObject({ x: z.number(), y: z.number(), z: z.number() });
 const boundsSchema = z.strictObject({ min: vectorSchema, max: vectorSchema });
 
-const buildMapInput = relationMapSpecSchema.safeExtend({
+const presets = await loadPresets();
+
+const buildMapInput = z.strictObject({
+  ...relationMapSpecSchema.shape,
+  mapId: z.string().min(1).optional(),
+  rooms: relationMapSpecSchema.shape.rooms.optional(),
   /** Which Studio builds the map; optional while exactly one is connected. */
   studioId: z.string().min(1).optional(),
   /**
@@ -52,6 +59,7 @@ const buildMapOutput = z.strictObject({
   ),
   /** Pixels of the plan's distinct material-map images (at the baked map size) and ambient sprites, each counted once; 0 with recorded assets off. */
   texturePixels: z.number().int(),
+  fills: z.array(z.string()).optional(),
 });
 
 /** Builds the map phase by phase; `heroSources` says where recorded hero assets are looked up. */
@@ -60,7 +68,8 @@ async function buildMap(
   context: ToolContext,
   heroSources: HeroPropSources,
 ) {
-  const plan = await planMap(input, heroSources);
+  const { spec, fills } = fillMapSpec(input, presets);
+  const plan = await planMap(spec, heroSources);
   const { partCount, warnings } = await runBuildPlan(plan, context);
   return toolResult({
     mapId: plan.mapId,
@@ -71,6 +80,7 @@ async function buildMap(
     warnings,
     lookIssues: plan.lookIssues,
     texturePixels: plan.texturePixels,
+    ...(fills.length > 0 ? { fills } : {}),
   });
 }
 
