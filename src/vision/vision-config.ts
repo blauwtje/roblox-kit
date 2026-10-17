@@ -19,4 +19,10 @@ export const visionConfig = Object.freeze({
   depthGridColumns: 8,
   depthGridRows: 8,
   depthRatioPerLevel: 0.5,
+  depthEvalMinFrames: 40,
+  depthShipMedianRho: 0.8,
+  depthShipP10Rho: 0.6,
+  depthShipMedianGain: 0.15,
+  depthShipWinShare: 0.75,
+  depthShipMaxMedianMs: 3000,
 });
