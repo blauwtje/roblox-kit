@@ -297,6 +297,7 @@ interface GraphContext {
   /** Rooms in the order the solver places them: each after a room it has an edge to. */
   order: GraphRoomSpec[];
   neighbors: Map<string, string[]>;
+  visitedNodes: number;
 }
 
 function graphDoorWidth(spec: GraphMapSpec, room: GraphRoomSpec): number {
@@ -345,7 +346,13 @@ function graphContext(spec: GraphMapSpec): GraphContext {
       );
     }
   }
-  return { spec, random: createSeededRandom(spec.seed ?? config.defaultSeed), order, neighbors };
+  return {
+    spec,
+    random: createSeededRandom(spec.seed ?? config.defaultSeed),
+    order,
+    neighbors,
+    visitedNodes: 0,
+  };
 }
 
 /** How far two rooms' footprints overlap along one axis; negative when apart. */
@@ -484,6 +491,10 @@ function placeRooms(context: GraphContext, placed: Placement[]): Placement[] | u
   const room = context.order[placed.length];
   if (!room) {
     return placed;
+  }
+  context.visitedNodes += 1;
+  if (context.visitedNodes > config.graphSolverMaxNodes) {
+    return undefined;
   }
   for (const extended of shuffle(extendPlacements(context, placed, room), context.random)) {
     const solved = placeRooms(context, extended);

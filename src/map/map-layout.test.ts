@@ -412,6 +412,20 @@ await test("a graph no layout fits is rejected", () => {
   assert.throws(() => solveRoomGraph(graphSpec(names, edges)), /No layout fits/);
 });
 
+await test("an infeasible 9-room graph is rejected within the node budget", () => {
+  const names = Array.from({ length: 9 }, (_, index) => `r${String(index)}`);
+  const edges: [string, string][] = [["r0", "r8"]];
+  for (let index = 0; index < 9; index += 1) {
+    if (index % 3 < 2) {
+      edges.push([`r${String(index)}`, `r${String(index + 1)}`]);
+    }
+    if (index < 6) {
+      edges.push([`r${String(index)}`, `r${String(index + 3)}`]);
+    }
+  }
+  assert.throws(() => solveRoomGraph(graphSpec(names, edges)), /No layout fits/);
+});
+
 await test("a disconnected graph is rejected", () => {
   assert.throws(
     () => solveRoomGraph(graphSpec(["a", "b", "c"], [["a", "b"]])),

@@ -141,6 +141,8 @@ export const config = Object.freeze({
   /** Full check reports kept in memory; the oldest is dropped past this. */
   maxCheckReports: 50,
 
+  graphSolverMaxNodes: 20_000,
+
   /** Scene limits per zone camera of a spec that sets no performance budget. */
   maxDrawCalls: 1000,
   maxTriangles: 1_000_000,
