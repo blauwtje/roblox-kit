@@ -106,6 +106,13 @@
     }
   },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
+  "propWeights": {
+    "bench": { "weight": 3, "wall": "long" },
+    "lamp": { "weight": 2, "wall": "any" },
+    "pillar": { "weight": 1, "wall": "any" },
+    "stairs": { "weight": 1, "wall": "doorless" },
+    "rail": { "weight": 1, "wall": "long" }
+  },
   "propRules": {
     "bench": {
       "heightRatio": {

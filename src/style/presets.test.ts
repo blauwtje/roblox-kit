@@ -119,6 +119,14 @@ for (const name of featurePresets) {
   });
 }
 
+for (const name of ["train-station", "cozy-town"]) {
+  await test(`${name} weights its kit`, async () => {
+    const preset = (await loadPresets()).get(name);
+    assert.ok(preset !== undefined, name);
+    assert.deepEqual(Object.keys(preset.propWeights ?? {}).sort(), [...preset.propKit].sort());
+  });
+}
+
 type Axis = "x" | "y" | "z";
 type Bounds = Record<Axis, { min: number; max: number }>;
 

@@ -103,6 +103,11 @@
     }
   },
   "propKit": ["bench", "lamp", "rail"],
+  "propWeights": {
+    "bench": { "weight": 3, "wall": "long" },
+    "lamp": { "weight": 2, "wall": "any" },
+    "rail": { "weight": 1, "wall": "long" }
+  },
   "propRules": {
     "bench": {
       "heightRatio": {
