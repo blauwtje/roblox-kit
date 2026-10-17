@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadPresets } from "../style/load-preset.ts";
-import { findLookIssues, type PlannedProp } from "./look-lint.ts";
+import { findEmptyRoomIssues, findLookIssues, type PlannedProp } from "./look-lint.ts";
 import { mapSpecSchema } from "./map-spec.ts";
 
 const preset = (await loadPresets()).get("train-station");
@@ -31,7 +31,7 @@ const kindsOf = (props: PlannedProp[], spec = hall): string[] =>
 
 await test("a well-scaled prop in the middle of a room has no scale, gap or facing issue", () => {
   assert.deepEqual(
-    kindsOf([prop()]).filter((kind) => kind !== "density"),
+    kindsOf([prop()]).filter((kind) => kind !== "density" && kind !== "empty"),
     [],
   );
 });
@@ -132,4 +132,13 @@ await test("the track bed, the platform edge and what stands on the track bed ar
     size: { x: 53, y: 4, z: 12 },
   });
   assert.ok(kindsOf([trackBed, platformEdge, counter, bench], platform).includes("density"));
+});
+
+await test("a big room with one prop is empty; people or more props lift it", () => {
+  const empty = (props: PlannedProp[], people: { position: { x: number; z: number } }[] = []) =>
+    findEmptyRoomIssues(hall, props, people).filter((issue) => issue.kind === "empty");
+  assert.equal(empty([prop()])[0]?.zone, "hall");
+  const crowd = Array.from({ length: 8 }, (_, index) => ({ position: { x: index - 4, z: 5 } }));
+  assert.deepEqual(empty([prop()], crowd), []);
+  assert.deepEqual(empty([prop()], [{ position: { x: 100, z: 0 } }]).length, 1);
 });

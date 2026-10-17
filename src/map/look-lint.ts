@@ -3,11 +3,20 @@ import type { Preset } from "../style/preset-schema.ts";
 import type { MapSpec, RoomSpec } from "./map-spec.ts";
 import { propDimensions, roomBounds, type PropRecord, type RoomBounds } from "./prop-placement.ts";
 import { findPropIssues } from "./prop-rules.ts";
+import { roomFrame } from "./room-frame.ts";
 
 /** A planned prop; kit props, set pieces and arrangement pieces carry a `yaw` in degrees. */
 export type PlannedProp = PropRecord & { yaw?: number };
 
-export const lookIssueKinds = ["scale", "gap", "walkway", "doorway", "facing", "density"] as const;
+export const lookIssueKinds = [
+  "scale",
+  "gap",
+  "walkway",
+  "doorway",
+  "facing",
+  "density",
+  "empty",
+] as const;
 
 /** One look problem of a planned map; it warns and never fails a build. */
 export interface LookIssue {
@@ -17,6 +26,11 @@ export interface LookIssue {
   detail: string;
   /** A JSON merge patch of the build_map input that removes the issue; only walkway and doorway issues carry one. */
   suggestedSpecPatch?: { rooms: RoomSpec[] };
+}
+
+/** Where a planned person stands, in world coordinates. */
+export interface PersonPlace {
+  position: { x: number; z: number };
 }
 
 /** A prop's floor box in coordinates relative to its room's center. */
@@ -246,15 +260,56 @@ function densityIssues(placed: PlacedProp[], spec: MapSpec): LookIssue[] {
   return issues;
 }
 
-/**
- * The look issues of a planned map: prop scale against the preset's rules, dead gaps, walkways and doorways,
- * props facing away from their room and prop density. It reads the plan only, so it runs before Studio is touched.
- */
-export function findLookIssues(spec: MapSpec, props: PlannedProp[], preset: Preset): LookIssue[] {
-  const placed = props.flatMap((prop) => {
+const minItemsPer100SquareStuds = 0.2;
+
+function placeProps(spec: MapSpec, props: PlannedProp[]): PlacedProp[] {
+  return props.flatMap((prop) => {
     const room = spec.rooms.find((candidate) => inRoom(candidate, prop));
     return room === undefined ? [] : [{ prop, room, box: boxOf(room, prop) }];
   });
+}
+
+/** Rooms holding fewer than 0.2 props or people per 100 square studs of inner floor. */
+export function findEmptyRoomIssues(
+  spec: MapSpec,
+  props: PlannedProp[],
+  people: readonly PersonPlace[],
+): LookIssue[] {
+  const placed = placeProps(spec, props);
+  const issues: LookIssue[] = [];
+  for (const room of spec.rooms) {
+    const frame = roomFrame(spec, room);
+    const area = 4 * frame.halfWidth * frame.halfDepth;
+    if (area < config.lookLint.densityMinRoomAreaSquareStuds) {
+      continue;
+    }
+    const props = placed.filter(
+      (entry) =>
+        entry.room === room && !config.lookLint.densityExemptKinds.includes(entry.prop.kind),
+    ).length;
+    const inside = people.filter(
+      ({ position }) =>
+        Math.abs(position.x - room.x) <= frame.halfWidth &&
+        Math.abs(position.z - room.z) <= frame.halfDepth,
+    ).length;
+    const per100 = ((props + inside) / area) * 100;
+    if (per100 < minItemsPer100SquareStuds) {
+      issues.push({
+        kind: "empty",
+        zone: room.name,
+        detail: `Room "${room.name}" holds ${String(props)} props and ${String(inside)} people, ${String(roundTenth(per100))} per 100 square studs; below ${String(minItemsPer100SquareStuds)} it reads empty.`,
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * The look issues of a planned map: prop scale against the preset's rules, dead gaps, walkways and doorways,
+ * props facing away from their room, prop density and rooms too empty of props. It reads the plan only, so it runs before Studio is touched.
+ */
+export function findLookIssues(spec: MapSpec, props: PlannedProp[], preset: Preset): LookIssue[] {
+  const placed = placeProps(spec, props);
   return [
     ...scaleIssues(placed, preset),
     ...gapIssues(placed, spec),
@@ -262,5 +317,6 @@ export function findLookIssues(spec: MapSpec, props: PlannedProp[], preset: Pres
     ...doorwayIssues(spec, preset),
     ...facingIssues(placed),
     ...densityIssues(placed, spec),
+    ...findEmptyRoomIssues(spec, props, []),
   ];
 }
