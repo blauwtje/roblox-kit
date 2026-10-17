@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { readHeroAssets } from "./hero-asset-store.ts";
 import {
   checksFileName,
+  readModeration,
   uploadGlb,
   uploadImage,
   uploadMaterialMaps,
@@ -207,4 +208,19 @@ await test("uploadMaterialMaps refuses a map that is not a PNG and records nothi
   );
   assert.equal(calls.length, 0);
   assert.deepEqual(await readHeroAssets(assetsFile), {});
+});
+
+await test("readModeration reads the moderation state with a readMask GET and throws on an HTTP error", async () => {
+  const state = { moderationResult: { moderationState: "MODERATION_STATE_APPROVED" } };
+  const ok = fakeFetch([json(state)]);
+  assert.equal(
+    await readModeration("77", credentials, { fetchFn: ok.fetchFn }),
+    "MODERATION_STATE_APPROVED",
+  );
+  assert.deepEqual(
+    ok.calls.map((call) => `${call.method} ${call.url}`),
+    ["GET https://apis.roblox.com/assets/v1/assets/77?readMask=moderationResult"],
+  );
+  const bad = fakeFetch([json({}, 403)]);
+  await assert.rejects(readModeration("77", credentials, { fetchFn: bad.fetchFn }), /HTTP 403/);
 });

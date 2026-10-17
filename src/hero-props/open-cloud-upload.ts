@@ -205,6 +205,38 @@ export async function uploadReviewedHeroProp(
 
 const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
+/** Whether `bytes` start with the PNG signature. */
+export const isPng = (bytes: Uint8Array): boolean =>
+  pngSignature.every((byte, index) => bytes[index] === byte);
+
+const moderationSchema = z.object({
+  moderationResult: z.object({ moderationState: z.string() }).optional(),
+});
+
+/**
+ * The moderation state of asset `assetId` (for example `MODERATION_STATE_APPROVED`), read with one GET
+ * of the asset with `readMask=moderationResult`; `MODERATION_STATE_UNSPECIFIED` when none is reported yet.
+ */
+export async function readModeration(
+  assetId: string,
+  credentials: OpenCloudCredentials,
+  transport: OpenCloudTransport = {},
+): Promise<string> {
+  const { fetchFn = fetch } = transport;
+  const url = `${heroConfig.openCloudAssetsUrl}/${encodeURIComponent(assetId)}?readMask=moderationResult`;
+  const response = await fetchFn(url, { headers: { "x-api-key": credentials.apiKey } });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Open Cloud moderation read failed with HTTP ${String(response.status)}: ${body.slice(0, 500)}`,
+    );
+  }
+  return (
+    moderationSchema.parse(JSON.parse(body)).moderationResult?.moderationState ??
+    "MODERATION_STATE_UNSPECIFIED"
+  );
+}
+
 /**
  * The Image asset id of each map whose hash is in `hashes`. A map already recorded under its hash keeps its
  * id without a call; every other map's `<map>.png` in `directory` must be a PNG, is uploaded as an Image named
@@ -228,7 +260,7 @@ export async function uploadMaterialMaps(
       continue;
     }
     const png = new Uint8Array(await readFile(new URL(`${map}.png`, directory)));
-    if (!pngSignature.every((byte, index) => png[index] === byte)) {
+    if (!isPng(png)) {
       throw new Error(`Refusing to upload ${label} ${map}: ${map}.png is not a PNG.`);
     }
     const assetId = await uploadImage(png, `${label}-${map}-${hash}`, credentials, transport);

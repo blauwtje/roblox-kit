@@ -10,3 +10,12 @@ export const imagesConfig = Object.freeze({
   alphaBleedMinPasses: 8,
   alphaBleedMaxPasses: 32,
 });
+
+/** Tunables of image upload caching and moderation waits. */
+export const imageStoreConfig = Object.freeze({
+  kitAssetsFile: new URL("../hero-props/image-assets.json", import.meta.url),
+  userAssetsPath: ".roblox-kit/image-assets.json",
+  moderationPollIntervalMs: 2000,
+  moderationMaxPolls: 30,
+  maxImageSide: 4096,
+});
