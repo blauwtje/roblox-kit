@@ -49,7 +49,7 @@ await test("no mesh script that imports lib redefines a name lib exports", async
   assert.deepEqual(clashes, []);
 });
 
-const maxMeshLines = 2600;
+const maxMeshLines = 4100;
 
 async function meshScripts(): Promise<string[]> {
   return (await readdir(meshes, { recursive: true }))
@@ -66,14 +66,10 @@ await test("no mesh script imports shared", async () => {
   assert.deepEqual(importers, []);
 });
 
-await test(
-  `the mesh library and scripts hold at most ${String(maxMeshLines)} lines`,
-  { todo: true },
-  async () => {
-    let lines = 0;
-    for (const path of await meshScripts()) {
-      lines += (await readFile(path, "utf8")).split("\n").length - 1;
-    }
-    assert.ok(lines <= maxMeshLines, `${String(lines)} lines`);
-  },
-);
+await test(`the mesh library and scripts hold at most ${String(maxMeshLines)} lines`, async () => {
+  let lines = 0;
+  for (const path of await meshScripts()) {
+    lines += (await readFile(path, "utf8")).split("\n").length - 1;
+  }
+  assert.ok(lines <= maxMeshLines, `${String(lines)} lines`);
+});
