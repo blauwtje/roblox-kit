@@ -74,33 +74,51 @@ await test("every prop is a bundled kind, stands on the floor and has an integer
   }
 });
 
-await test("props stay inside their room's walls", () => {
-  const props = placeProps(hallSpec, kit, 1);
-  const wallThickness = 1;
-  for (const prop of propsIn(hallSpec, "hall", props)) {
-    const box = worldSize(prop);
-    assert.ok(Math.abs(prop.pivot.x - 10) + box.x / 2 <= 30 - wallThickness, `${prop.kind} x`);
-    assert.ok(Math.abs(prop.pivot.z + 20) + box.z / 2 <= 20 - wallThickness, `${prop.kind} z`);
-  }
-});
-
-await test("props do not overlap each other or block the doorway", () => {
+await test("across seeds props stay in their room, apart from each other and clear of the doorway", () => {
   for (let seed = 0; seed < 20; seed += 1) {
-    const props = placeProps(hallSpec, kit, seed);
+    const props = propsIn(hallSpec, "hall", placeProps(hallSpec, kit, seed));
     for (const [index, prop] of props.entries()) {
       const box = worldSize(prop);
+      const label = `seed ${String(seed)}: ${prop.kind}`;
+      assert.ok(Math.abs(prop.pivot.x - 10) + box.x / 2 <= 29, `${label} x`);
+      assert.ok(Math.abs(prop.pivot.z + 20) + box.z / 2 <= 19, `${label} z`);
       for (const other of props.slice(index + 1)) {
         const otherBox = worldSize(other);
         const apartX = Math.abs(prop.pivot.x - other.pivot.x) >= (box.x + otherBox.x) / 2;
         const apartZ = Math.abs(prop.pivot.z - other.pivot.z) >= (box.z + otherBox.z) / 2;
-        assert.ok(apartX || apartZ, `seed ${String(seed)}: ${prop.kind} overlaps ${other.kind}`);
+        assert.ok(apartX || apartZ, `${label} overlaps ${other.kind}`);
       }
-      // The door is 6 studs wide (the config default) at x = 15 in the north wall at z = -40.
       const beforeDoor =
         Math.abs(prop.pivot.x - 15) < 3 + box.x / 2 && prop.pivot.z - box.z / 2 < -40 + 8;
-      assert.ok(!beforeDoor, `seed ${String(seed)}: ${prop.kind} blocks the door`);
+      assert.ok(!beforeDoor, `${label} blocks the door`);
     }
   }
+});
+
+function facingYaw(prop: PropRecord): number {
+  if (Math.abs(prop.pivot.z) > Math.abs(prop.pivot.x)) {
+    return prop.pivot.z > 0 ? 0 : 180;
+  }
+  return prop.pivot.x > 0 ? 90 : 270;
+}
+
+await test("across seeds a kit prop keeps its own-frame size and faces the room from every wall", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "orientation",
+    rooms: [{ name: "room", x: 0, z: 0, width: 80, depth: 80 }],
+  });
+  const wallHeight = config.defaultWallHeightStuds;
+  const seen = new Set<number>();
+  for (let seed = 0; seed < 10; seed += 1) {
+    for (const prop of placeProps(spec, ["bench", "stairs", "rail"], seed)) {
+      const label = `${prop.kind} at ${JSON.stringify(prop.pivot)}`;
+      assert.deepEqual(prop.size, propSize(prop.kind, wallHeight), label);
+      const expectedYaw = facingYaw(prop);
+      assert.equal(prop.yaw, expectedYaw, `${label} yaw`);
+      seen.add(prop.yaw);
+    }
+  }
+  assert.equal(seen.size, 4, "props landed against all four walls");
 });
 
 await test("a room too small for a prop gets none", () => {
@@ -118,23 +136,6 @@ await test("a pillar is as tall as the wall and a lamp never taller", () => {
     if (prop.kind === "pillar") {
       assert.equal(prop.size.y, 6);
     }
-  }
-});
-
-await test("props of a north wall run along X and props of an east wall run along Z", () => {
-  const spec = mapSpecSchema.parse({
-    mapId: "orient",
-    rooms: [{ name: "room", x: 0, z: 0, width: 80, depth: 80 }],
-  });
-  const benches = placeProps(spec, ["bench"], 5);
-  assert.ok(benches.length > 0);
-  for (const bench of benches) {
-    const againstZWall = Math.abs(bench.pivot.z) > Math.abs(bench.pivot.x);
-    assert.equal(
-      worldSize(bench).x > worldSize(bench).z,
-      againstZWall,
-      `bench at ${JSON.stringify(bench.pivot)}`,
-    );
   }
 });
 

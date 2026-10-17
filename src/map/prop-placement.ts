@@ -1,10 +1,11 @@
 import { config } from "../config.ts";
 import { createSeededRandom } from "../shared/seeded-random.ts";
 import { detailDimensions } from "./room-details.ts";
-import type { MapSpec, RoomSpec } from "./map-spec.ts";
+import { measureRoom } from "./map-spec.ts";
+import type { MapSpec, RoomSpec, Side } from "./map-spec.ts";
 import type { Vector } from "./map-layout.ts";
-
-type Side = RoomSpec["doors"][number]["side"];
+import { pointOnWall, rotatedHalfExtents, runsAlongX, sideOrder, wallBox } from "./room-frame.ts";
+import type { RoomFrame } from "./room-frame.ts";
 
 /** The generator kinds that have a source in `luau/props/`; a preset's prop kit names some of them. */
 export const propKinds = [
@@ -108,8 +109,6 @@ export const propDimensions = Object.freeze({
   "ticket-machine": { x: 3, y: aboveEye(propAnchors.ticketMachineAboveEyeStuds), z: 2 },
 });
 
-const sides: Side[] = ["north", "south", "east", "west"];
-
 /** The yaw that turns a piece's -Z face toward each side of the room. */
 export const yawFacing: Record<Side, number> = { north: 0, west: 90, south: 180, east: 270 };
 
@@ -159,14 +158,17 @@ export function propSize(kind: PropKind, wallHeight: number): Vector {
 }
 
 export function roomBounds(spec: MapSpec, room: RoomSpec): RoomBounds {
-  const wallThickness =
-    room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds;
+  const { wallThickness, wallHeight, doorWidth } = measureRoom(spec, room);
   return {
     halfWidth: room.width / 2 - wallThickness,
     halfDepth: room.depth / 2 - wallThickness,
-    wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
-    doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
+    wallHeight,
+    doorWidth,
   };
+}
+
+function originFrame(bounds: RoomBounds): RoomFrame {
+  return { x: 0, z: 0, wallThickness: 0, ...bounds };
 }
 
 /** How far a corner pillar reaches along a wall, kept free at each corner. */
@@ -188,39 +190,11 @@ export function cornerFootprints(bounds: RoomBounds): Footprint[] {
 /** The strip in front of a doorway that props keep free. */
 export function doorwayFootprint(bounds: RoomBounds, door: RoomSpec["doors"][number]): Footprint {
   const halfOpening = bounds.doorWidth / 2 + propDimensions.clearanceStuds;
-  const depth = propDimensions.doorwayDepthStuds;
-  const alongMin = door.offset - halfOpening;
-  const alongMax = door.offset + halfOpening;
-  switch (door.side) {
-    case "north":
-      return {
-        minX: alongMin,
-        maxX: alongMax,
-        minZ: -bounds.halfDepth,
-        maxZ: -bounds.halfDepth + depth,
-      };
-    case "south":
-      return {
-        minX: alongMin,
-        maxX: alongMax,
-        minZ: bounds.halfDepth - depth,
-        maxZ: bounds.halfDepth,
-      };
-    case "east":
-      return {
-        minX: bounds.halfWidth - depth,
-        maxX: bounds.halfWidth,
-        minZ: alongMin,
-        maxZ: alongMax,
-      };
-    case "west":
-      return {
-        minX: -bounds.halfWidth,
-        maxX: -bounds.halfWidth + depth,
-        minZ: alongMin,
-        maxZ: alongMax,
-      };
-  }
+  return wallBox(originFrame(bounds), door.side, {
+    alongMin: door.offset - halfOpening,
+    alongMax: door.offset + halfOpening,
+    depth: propDimensions.doorwayDepthStuds,
+  });
 }
 
 export function overlaps(first: Footprint, second: Footprint): boolean {
@@ -243,23 +217,15 @@ function grown(footprint: Footprint, margin: number): Footprint {
 
 /** The footprint of a prop of `size` against `side`, `along` the wall from the room center. */
 function footprintAgainst(bounds: RoomBounds, side: Side, along: number, size: Vector): Footprint {
-  const gap = propDimensions.clearanceStuds;
-  const runsAlongX = side === "north" || side === "south";
-  const halfX = (runsAlongX ? size.x : size.z) / 2;
-  const halfZ = (runsAlongX ? size.z : size.x) / 2;
-  if (runsAlongX) {
-    const centerZ =
-      side === "north" ? -bounds.halfDepth + gap + halfZ : bounds.halfDepth - gap - halfZ;
-    return {
-      minX: along - halfX,
-      maxX: along + halfX,
-      minZ: centerZ - halfZ,
-      maxZ: centerZ + halfZ,
-    };
-  }
-  const centerX =
-    side === "west" ? -bounds.halfWidth + gap + halfX : bounds.halfWidth - gap - halfX;
-  return { minX: centerX - halfX, maxX: centerX + halfX, minZ: along - halfZ, maxZ: along + halfZ };
+  const { halfX, halfZ } = rotatedHalfExtents(size, runsAlongX(side) ? 0 : 90);
+  const inset = propDimensions.clearanceStuds + (runsAlongX(side) ? halfZ : halfX);
+  const center = pointOnWall(originFrame(bounds), side, { along, inset });
+  return {
+    minX: center.x - halfX,
+    maxX: center.x + halfX,
+    minZ: center.z - halfZ,
+    maxZ: center.z + halfZ,
+  };
 }
 
 /** Props of one room: each is tried at random spots along the walls and dropped when none is free. */
@@ -285,9 +251,8 @@ function roomProps(
     const size = propSize(kind, bounds.wallHeight);
     const propSeed = Math.floor(random() * 2 ** 31);
     for (let attempt = 0; attempt < propDimensions.attemptsPerProp; attempt += 1) {
-      const side = pickFrom(sides, random);
-      const runsAlongX = side === "north" || side === "south";
-      const wallHalfSpan = runsAlongX ? bounds.halfWidth : bounds.halfDepth;
+      const side = pickFrom(sideOrder, random);
+      const wallHalfSpan = runsAlongX(side) ? bounds.halfWidth : bounds.halfDepth;
       const reach = wallHalfSpan - size.x / 2;
       const along = (random() * 2 - 1) * reach;
       const footprint = footprintAgainst(bounds, side, along, size);
