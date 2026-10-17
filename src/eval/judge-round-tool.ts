@@ -5,11 +5,14 @@ import { config } from "../config.ts";
 import { relationMapSpecSchema } from "../map/map-spec.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
+import { decodeImage } from "../vision/decode-image.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import { resolveStyle, type StyleSelection } from "../style/resolve-style.ts";
+import { imageStatsOf } from "./code-score.ts";
 import {
   judgeFindingSchema,
   judgeRound,
+  type GateInput,
   type JudgeRoundInput,
   type LoggedRound,
 } from "./judge-round.ts";
@@ -36,6 +39,18 @@ const placeAnswerSchema = z.strictObject({
   furnished: z.enum(["furnished", "empty"]),
 });
 
+const gateInputSchema = z.strictObject({
+  check: z.strictObject({
+    passed: z.boolean(),
+    counts: z.record(z.string(), z.int().min(0)),
+    sceneStats: z.array(
+      z.strictObject({ zone: z.string(), drawCalls: z.int(), triangles: z.int() }),
+    ),
+    budget: z.strictObject({ maxDrawCalls: z.int(), maxTriangles: z.int() }),
+  }),
+  images: z.array(z.strictObject({ imageId: z.string().min(1), path: z.string().min(1) })),
+});
+
 const judgeRoundInput = z.strictObject({
   round: z.int().min(1).describe("The round of this loop, starting at 1."),
   spec: relationMapSpecSchema.describe("The spec build_map built, with its mapId."),
@@ -52,6 +67,11 @@ const judgeRoundInput = z.strictObject({
       }),
     )
     .describe("The quality reviewers' answers for each room."),
+  gate: gateInputSchema
+    .optional()
+    .describe(
+      "Runs the deterministic capture gate first; a failed gate ends the round on its blocker findings.",
+    ),
 });
 
 const outputFindingSchema = z.looseObject({
@@ -70,6 +90,7 @@ const judgeRoundOutput = z.strictObject({
   findings: z.array(outputFindingSchema),
   /** The judge's findings that showed nothing (no `evidence.visible`); they are not in `findings`. */
   rejected: z.array(z.looseObject({})),
+  gate: z.strictObject({ passed: z.boolean(), codeScore: z.number() }).optional(),
   stopReason: z.enum(["pass", "round-limit", "repeat"]).nullable(),
   /** Log lines that could not be read as rounds and so did not count toward repeat detection. */
   warnings: z.array(z.string()),
@@ -168,6 +189,17 @@ async function acceptedNamesOf(
   );
 }
 
+async function gateInputOf(gate: z.output<typeof gateInputSchema>): Promise<GateInput> {
+  const images = await Promise.all(
+    gate.images.map(async ({ imageId, path }) => ({
+      imageId,
+      stats: imageStatsOf(decodeImage(await readFile(path))),
+    })),
+  );
+  const { passed, counts, sceneStats, budget } = gate.check;
+  return { checkPassed: passed, counts, sceneStats, budget, images };
+}
+
 /** `projectDir` is the user's project folder (`PROJECT_DIR`); a bad value fails each call before any write, not the server. */
 export function createJudgeRoundTool(
   projectDir: string | undefined,
@@ -179,7 +211,7 @@ export function createJudgeRoundTool(
       `Decides one round of the visual-judge loop from what its agents returned: drops judge findings without evidence.visible (returned as rejected), ` +
       `turns place-check mismatches and empty answers into spec-miss blocker findings, turns each quality axis median below ${String(config.visualPassScore)} into a major finding, ` +
       `marks repeats of earlier rounds (warning of log lines it could not read), sets stopReason (pass, round-limit at round ${String(config.maxJudgeRounds)}, repeat or null) and appends one line to ${config.judgeLogFile} in the project folder. ` +
-      `All inputs are required. Dispatching the agents stays with the caller.`,
+      `The optional gate (check_map result and capture paths) runs first and its failure ends the round on blocker findings. Other inputs are required. Dispatching the agents stays with the caller.`,
     inputSchema: judgeRoundInput,
     outputSchema: judgeRoundOutput,
     annotations: {
@@ -198,8 +230,10 @@ export function createJudgeRoundTool(
           : [
               `${String(skipped)} line(s) of ${config.judgeLogFile} could not be read as rounds and were skipped, so repeats of those rounds are not detected.`,
             ];
+      const { gate, ...rest } = input;
       const roundInput: JudgeRoundInput = {
-        ...input,
+        ...rest,
+        ...(gate === undefined ? {} : { gate: await gateInputOf(gate) }),
         acceptedNames: await acceptedNamesOf(input.spec.style),
       };
       const { result, rejected } = judgeRound(roundInput, logged, new Date().toISOString());

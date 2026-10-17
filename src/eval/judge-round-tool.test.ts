@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { config } from "../config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
+import { encodePng } from "../vision/encode-png.ts";
 import { createJudgeRoundTool } from "./judge-round-tool.ts";
 
 const spec = {
@@ -125,5 +126,67 @@ await test("a missing, empty, relative or unexpanded project folder fails before
     }
     assert.equal(existsSync(join(folder, ".roblox-kit")), false);
     assert.equal(existsSync(join(folder, ".gitignore")), false);
+  });
+});
+
+const budget = { maxDrawCalls: config.maxDrawCalls, maxTriangles: config.maxTriangles };
+const cleanCheck = {
+  passed: true,
+  counts: { overlapping: 0, floating: 0 },
+  sceneStats: [],
+  budget,
+};
+
+async function capture(folder: string, name: string, colorAt: (x: number) => number) {
+  const width = 64;
+  const height = 64;
+  const data = new Uint8Array(width * height * 4);
+  for (let i = 0; i < width * height; i++) {
+    const value = colorAt(i % width);
+    data.set([value, value, value, 255], i * 4);
+  }
+  const path = join(folder, name);
+  await writeFile(path, encodePng({ width, height, data }));
+  return { imageId: `hall:${name}`, path };
+}
+
+await test("a gate over a flat black capture and a failed check ends the round on blockers", async () => {
+  await inProject(async (folder) => {
+    const black = await capture(folder, "black.png", () => 0);
+    const result = await call(folder, {
+      findings: [finding],
+      gate: { check: { ...cleanCheck, passed: false }, images: [black] },
+    });
+    assert.deepEqual(field(result, "gate"), { passed: false, codeScore: 100 });
+    const findings = field(result, "findings") as { severity: string; cites: string }[];
+    assert.ok(findings.length >= 2);
+    assert.ok(findings.every((found) => found.severity === "blocker"));
+    assert.ok(findings.some((found) => found.cites === "check_map passed"));
+    assert.equal((await logLines(folder))[0]?.findings.length, findings.length);
+  });
+});
+
+await test("a gate over a varied capture and a clean check passes and leaves the judge's findings", async () => {
+  await inProject(async (folder) => {
+    const varied = await capture(folder, "varied.png", (x) => (x % 8 < 4 ? 40 : 150));
+    const result = await call(folder, {
+      findings: [finding],
+      gate: { check: cleanCheck, images: [varied] },
+    });
+    assert.deepEqual(field(result, "gate"), { passed: true, codeScore: 100 });
+    assert.equal((field(result, "findings") as unknown[]).length, 1);
+  });
+});
+
+await test("a round without a gate answers no gate field", async () => {
+  await inProject(async (folder) => {
+    assert.equal(field(await call(folder, {}), "gate"), undefined);
+  });
+});
+
+await test("a gate whose capture file is missing fails the call", async () => {
+  await inProject(async (folder) => {
+    const gate = { check: cleanCheck, images: [{ imageId: "a", path: join(folder, "none.png") }] };
+    await assert.rejects(call(folder, { gate }), /ENOENT/);
   });
 });
