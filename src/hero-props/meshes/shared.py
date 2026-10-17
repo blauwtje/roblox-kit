@@ -188,16 +188,37 @@ def export_glb(objects, name):
     bpy.ops.export_scene.gltf(filepath=os.path.join(MAPS, f"{name}.glb"), use_selection=True)
 
 
+GPU_BACKENDS = ("METAL", "OPTIX", "CUDA", "HIP", "ONEAPI")
+
+
+def pick_backend(preferences):
+    """The backend named by ROBLOX_KIT_BLENDER_DEVICE, else the first GPU backend with a device, else CPU."""
+    named = os.environ.get("ROBLOX_KIT_BLENDER_DEVICE")
+    if named:
+        return named.upper()
+    for backend in GPU_BACKENDS:
+        try:
+            preferences.compute_device_type = backend
+            preferences.get_devices()
+        except TypeError:
+            continue
+        if any(device.type == backend for device in preferences.devices):
+            return backend
+    return "CPU"
+
+
 def set_up_cycles():
-    """Cycles on the GPU where Metal is available, which the bakes need."""
+    """Cycles on the environment's chosen bake device, else the first available GPU backend, else the CPU."""
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     preferences = bpy.context.preferences.addons["cycles"].preferences
-    preferences.compute_device_type = "METAL"
-    preferences.get_devices()
-    for device in preferences.devices:
-        device.use = True
-    scene.cycles.device = "GPU"
+    backend = pick_backend(preferences)
+    if backend != "CPU":
+        preferences.compute_device_type = backend
+        preferences.get_devices()
+        for device in preferences.devices:
+            device.use = True
+    scene.cycles.device = "CPU" if backend == "CPU" else "GPU"
     scene.cycles.samples = 64
 
 

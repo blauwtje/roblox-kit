@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blenderPath, runBlender } from "./blender-path.ts";
+import { config } from "../config.ts";
+import { blenderPath, runBlender, type BlenderExec } from "./blender-path.ts";
 
 const macPath = "/Applications/Blender.app/Contents/MacOS/Blender";
 
@@ -51,5 +52,22 @@ await test("runBlender names the script and the last 20 stderr lines when Blende
   } finally {
     if (previous === undefined) delete process.env.BLENDER_PATH;
     else process.env.BLENDER_PATH = previous;
+  }
+});
+
+await test("runBlender passes the bake device named in the environment to Blender", async () => {
+  let seen: Record<string, string | undefined> = {};
+  const exec: BlenderExec = (_file, _args, options) => {
+    seen = options.env;
+    return Promise.resolve();
+  };
+  const previous = process.env[config.blenderDeviceEnv];
+  process.env[config.blenderDeviceEnv] = "CUDA";
+  try {
+    await runBlender("/scripts/make.py", [], exec);
+    assert.equal(seen[config.blenderDeviceEnv], "CUDA");
+  } finally {
+    if (previous === undefined) Reflect.deleteProperty(process.env, config.blenderDeviceEnv);
+    else process.env[config.blenderDeviceEnv] = previous;
   }
 });

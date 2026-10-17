@@ -55,6 +55,7 @@ await test("reads the triangles, size and names of a GLB", () => {
     materialNames: ["shell", "glass"],
     materialMaps: [["color", "normal", "roughness-metalness"], ["color"]],
     imageHashes: [],
+    imageBytes: [],
   });
 });
 
@@ -175,7 +176,15 @@ await test("GlbStructure.imageHashes holds the sha256 of each embedded image's b
   glb.set(first, 20 + json.length);
   glb.set(second, 24 + json.length);
   const hash = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
-  assert.deepEqual(readGlbStructure(glb).imageHashes, [hash(first), hash(second)]);
+  const read = readGlbStructure(glb);
+  assert.deepEqual(read.imageHashes, [hash(first), hash(second)]);
+  assert.deepEqual(
+    read.imageBytes?.map((bytes) => [...bytes]),
+    [
+      [1, 2, 3, 4],
+      [9, 8, 7, 6],
+    ],
+  );
 });
 
 const tolerance = config.heroPropContactToleranceStuds;

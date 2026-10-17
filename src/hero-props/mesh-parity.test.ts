@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
+import { deflateSync } from "node:zlib";
+import { config } from "../config.ts";
 import { scriptedMeshHash } from "./generate-scripted-mesh.ts";
 import type { GlbStructure } from "./glb-structure.ts";
 import { readHeroAssets } from "./hero-asset-store.ts";
@@ -46,13 +48,35 @@ await test("a base tree of identical sources hashes like the current mesh and sk
   }
 });
 
+function solidPng(width: number, height: number, level: number): Uint8Array {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, level)]);
+  const chunk = (type: string, body: Buffer): Buffer => {
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0);
+    out.write(type, 4, "latin1");
+    body.copy(out, 8);
+    return out;
+  };
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(Buffer.concat(Array.from({ length: height }, () => row)))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 const structure: GlbStructure = {
   triangles: 1200,
   size: [2, 16, 2],
   meshNames: ["pillar"],
   materialNames: ["pillar"],
   materialMaps: [["color", "normal", "roughness-metalness"]],
-  imageHashes: ["aa", "bb", "cc"],
+  imageBytes: [solidPng(4, 4, 10)],
 };
 
 await test("meshes differ by triangles, bounds beyond 0.01, materials, maps and image hashes", () => {
@@ -63,14 +87,12 @@ await test("meshes differ by triangles, bounds beyond 0.01, materials, maps and 
     size: [2, 16.02, 2],
     materialNames: ["steel"],
     materialMaps: [["color"]],
-    imageHashes: ["aa", "bb", "dd"],
   };
   const found = meshDifferences(structure, changed).join("; ");
   assert.match(found, /triangles 1200 vs 1204/);
   assert.match(found, /y bound 16\.000 vs 16\.020/);
   assert.match(found, /material names \["pillar"\] vs \["steel"\]/);
   assert.match(found, /material maps/);
-  assert.match(found, /image hashes \["aa","bb","cc"\] vs \["aa","bb","dd"\]/);
 });
 
 await test("rekeyMesh moves the base record only for a passed parity", async () => {
@@ -87,4 +109,19 @@ await test("rekeyMesh moves the base record only for a passed parity", async () 
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
+});
+
+await test("image pixels may differ by bake noise but not by a real change or a size change", () => {
+  const tolerance = config.heroPropImageTolerance;
+  const withImage = (bytes: Uint8Array): GlbStructure => ({ ...structure, imageBytes: [bytes] });
+  const noisy = withImage(solidPng(4, 4, 10 + Math.floor(tolerance)));
+  assert.deepEqual(meshDifferences(structure, noisy), []);
+  const changed = withImage(solidPng(4, 4, 255));
+  assert.match(meshDifferences(structure, changed).join("; "), /image 0 pixels differ/);
+  const resized = withImage(solidPng(8, 4, 10));
+  assert.match(meshDifferences(structure, resized).join("; "), /image 0 size 4x4x3 vs 8x4x3/);
+  assert.match(
+    meshDifferences(structure, { ...structure, imageBytes: [] }).join("; "),
+    /image count 1 vs 0/,
+  );
 });

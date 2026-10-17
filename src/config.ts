@@ -214,6 +214,8 @@ export const config = Object.freeze({
   blenderPathEnv: "BLENDER_PATH",
   /** Tried in order when that variable is unset: a name looked up on PATH, then an absolute install path. */
   blenderFallbackPaths: ["blender", "/Applications/Blender.app/Contents/MacOS/Blender"],
+  blenderDeviceEnv: "ROBLOX_KIT_BLENDER_DEVICE",
+  heroPropImageTolerance: 100,
   blenderTimeoutMs: 120_000,
 
   /** ProfileStore, the player-saving library the `data` skill's templates are type-checked against, as `<scope>/<name>` on Wally. */

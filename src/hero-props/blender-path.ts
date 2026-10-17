@@ -11,7 +11,11 @@ const errorLogLines = 20;
 export type BlenderExec = (
   file: string,
   args: string[],
-  options: { timeout: number; maxBuffer: number },
+  options: {
+    timeout: number;
+    maxBuffer: number;
+    env: Record<string, string | undefined>;
+  },
 ) => Promise<unknown>;
 
 function isExecutable(file: string): boolean {
@@ -46,6 +50,10 @@ export function blenderPath(
   );
 }
 
+function blenderEnvironment(): Record<string, string | undefined> {
+  return { ...process.env, [config.blenderDeviceEnv]: process.env[config.blenderDeviceEnv] };
+}
+
 /** Runs `script` with headless Blender, passing `args` after `--`; a failure throws an error naming the script with the last 20 stderr lines. */
 export async function runBlender(
   script: string,
@@ -56,7 +64,11 @@ export async function runBlender(
     await exec(
       blenderPath(process.env),
       ["-b", "--factory-startup", "--python-exit-code", "1", "-P", script, "--", ...args],
-      { timeout: config.blenderTimeoutMs, maxBuffer: blenderBufferBytes },
+      {
+        timeout: config.blenderTimeoutMs,
+        maxBuffer: blenderBufferBytes,
+        env: blenderEnvironment(),
+      },
     );
   } catch (error) {
     const stderr = (error as { stderr?: unknown }).stderr;

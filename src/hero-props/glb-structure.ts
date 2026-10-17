@@ -86,19 +86,20 @@ export interface GlbStructure {
   /** Per material, parallel to `materialNames`, the texture maps it reads: "color", "normal" and "roughness-metalness" (glTF packs roughness in green and metalness in blue of one image). */
   materialMaps: string[][];
   imageHashes?: string[];
+  imageBytes?: Uint8Array[];
 }
 
 function sha256(data: Uint8Array | string): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
-function imageHashesOf(gltf: Gltf, bin: Uint8Array | undefined): string[] {
+function imageBytesOf(gltf: Gltf, bin: Uint8Array | undefined): Uint8Array[] {
   return gltf.images.map((image, index) => {
     if (image.bufferView === undefined) {
       if (image.uri === undefined) {
         throw new Error(`GLB image ${String(index)} has neither a buffer view nor a uri`);
       }
-      return sha256(image.uri);
+      return new TextEncoder().encode(image.uri);
     }
     const view = gltf.bufferViews[image.bufferView];
     if (view === undefined || bin === undefined) {
@@ -106,7 +107,7 @@ function imageHashesOf(gltf: Gltf, bin: Uint8Array | undefined): string[] {
     }
     const end = view.byteOffset + view.byteLength;
     if (end > bin.byteLength) throw new Error(`GLB image ${String(index)} runs past the BIN chunk`);
-    return sha256(bin.subarray(view.byteOffset, end));
+    return bin.subarray(view.byteOffset, end);
   });
 }
 
@@ -213,13 +214,15 @@ export function readGlbStructure(glb: Uint8Array): GlbStructure {
       triangles += trianglesOf(primitive, gltf.accessors);
     }
   }
+  const imageBytes = imageBytesOf(gltf, bin);
   return {
     triangles,
     size: sizeOf(gltf),
     meshNames: gltf.meshes.map((mesh) => mesh.name ?? ""),
     materialNames: gltf.materials.map((material) => material.name ?? ""),
     materialMaps: gltf.materials.map(mapsOf),
-    imageHashes: imageHashesOf(gltf, bin),
+    imageHashes: imageBytes.map(sha256),
+    imageBytes,
   };
 }
 

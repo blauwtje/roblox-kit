@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { z } from "zod";
 import type { GlbStructure } from "./glb-structure.ts";
+import { config } from "../config.ts";
+import { decodePng } from "./png-pixels.ts";
 import { heroAssetsFile, readHeroAssets, rekeyHeroAsset } from "./hero-asset-store.ts";
 import { scriptedMeshHash, type MeshSourceReader } from "./generate-scripted-mesh.ts";
 import { loadPresets } from "../style/load-preset.ts";
@@ -130,12 +132,54 @@ export function meshDifferences(base: GlbStructure, current: GlbStructure): stri
   const rows = [
     ["material names", base.materialNames, current.materialNames],
     ["material maps", base.materialMaps, current.materialMaps],
-    ["image hashes", base.imageHashes ?? [], current.imageHashes ?? []],
   ] as const;
   for (const [label, before, after] of rows) {
     if (listed(before) === listed(after)) continue;
     found.push(`${label} ${listed(before)} vs ${listed(after)}`);
   }
+  found.push(...imageDifferences(base.imageBytes ?? [], current.imageBytes ?? []));
+  return found;
+}
+
+/** The largest per-channel mean absolute difference (0 to 255) between two same-size images. */
+export function imageNoise(base: Uint8Array, current: Uint8Array): number {
+  const before = decodePng(base);
+  const after = decodePng(current);
+  const sums = new Array<number>(before.channels).fill(0);
+  before.data.forEach((value, index) => {
+    const channel = index % before.channels;
+    sums[channel] = (sums[channel] ?? 0) + Math.abs(value - (after.data[index] ?? 0));
+  });
+  return Math.max(...sums) / (before.width * before.height);
+}
+
+function imageDifferences(base: Uint8Array[], current: Uint8Array[]): string[] {
+  if (base.length !== current.length) {
+    return [`image count ${String(base.length)} vs ${String(current.length)}`];
+  }
+  const found: string[] = [];
+  base.forEach((bytes, index) => {
+    const other = current[index] ?? new Uint8Array();
+    const before = decodePng(bytes);
+    const after = decodePng(other);
+    const label = `image ${String(index)}`;
+    if (
+      before.width !== after.width ||
+      before.height !== after.height ||
+      before.channels !== after.channels
+    ) {
+      found.push(
+        `${label} size ${String(before.width)}x${String(before.height)}x${String(before.channels)} vs ${String(after.width)}x${String(after.height)}x${String(after.channels)}`,
+      );
+      return;
+    }
+    const noise = imageNoise(bytes, other);
+    if (noise > config.heroPropImageTolerance) {
+      found.push(
+        `${label} pixels differ by ${noise.toFixed(2)} per channel (tolerance ${String(config.heroPropImageTolerance)})`,
+      );
+    }
+  });
   return found;
 }
 
