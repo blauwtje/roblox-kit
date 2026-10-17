@@ -90,6 +90,27 @@ await test("starts a new StudioMCP for the next call after the first one exits",
   await client.close();
 });
 
+await test("keeps the Studio list for the session and asks again after a reconnect", async () => {
+  const fake = fakeStudioMcpServers();
+  const client = new StudioMcpClient({
+    clientInfo,
+    timeoutMs: 5000,
+    createTransport: fake.createTransport,
+  });
+
+  await client.listStudios();
+  await client.listStudios();
+  assert.equal(fake.listCallCount(), 1);
+
+  await fake.servers[0]?.close();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(await client.listStudios(), studioList.studios);
+  assert.equal(fake.listCallCount(), 2);
+  assert.equal(fake.servers.length, 2);
+  await client.close();
+});
+
 await test("names a Studio by its id when list_roblox_studios reports a null name", async () => {
   const fake = fakeStudioMcpServers([{ studios: [{ id: "studio-b", name: null }] }]);
   const client = new StudioMcpClient({

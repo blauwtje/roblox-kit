@@ -56,6 +56,7 @@ function spawnStudioMcp(): Transport {
 export class StudioMcpClient implements StudioConnection {
   readonly #options: StudioMcpClientOptions;
   #session: Promise<Client> | undefined;
+  #studios: StudioInfo[] | undefined;
 
   constructor(options: StudioMcpClientOptions) {
     this.#options = options;
@@ -67,6 +68,9 @@ export class StudioMcpClient implements StudioConnection {
    * timeout and only then returned empty.
    */
   async listStudios(): Promise<StudioInfo[]> {
+    if (this.#studios !== undefined) {
+      return this.#studios;
+    }
     const discoveryTimeoutMs = this.#options.discoveryTimeoutMs ?? config.studioDiscoveryTimeoutMs;
     const pollIntervalMs =
       this.#options.discoveryPollIntervalMs ?? config.studioDiscoveryPollIntervalMs;
@@ -75,6 +79,9 @@ export class StudioMcpClient implements StudioConnection {
     while (studios.length === 0 && Date.now() < deadline) {
       await sleep(pollIntervalMs);
       studios = await this.#askStudios();
+    }
+    if (studios.length > 0) {
+      this.#studios = studios;
     }
     return studios;
   }
@@ -109,6 +116,7 @@ export class StudioMcpClient implements StudioConnection {
   async close(): Promise<void> {
     const session = this.#session;
     this.#session = undefined;
+    this.#studios = undefined;
     await (await session)?.close();
   }
 
@@ -117,8 +125,13 @@ export class StudioMcpClient implements StudioConnection {
     args: Record<string, unknown>,
     timeoutMs: number = this.#options.timeoutMs,
   ): Promise<CallToolResult> {
-    const client = await this.#connectedClient();
-    return client.callTool({ name, arguments: args }, { timeout: timeoutMs });
+    try {
+      const client = await this.#connectedClient();
+      return await client.callTool({ name, arguments: args }, { timeout: timeoutMs });
+    } catch (error) {
+      this.#studios = undefined;
+      throw error;
+    }
   }
 
   #connectedClient(): Promise<Client> {
@@ -132,6 +145,7 @@ export class StudioMcpClient implements StudioConnection {
     });
     const forgetSession = (): void => {
       this.#session = undefined;
+      this.#studios = undefined;
     };
     client.onclose = forgetSession;
     try {
