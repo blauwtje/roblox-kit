@@ -12,7 +12,7 @@ const slot = { material: "Plastic", color: "#808080" };
 
 function validPreset(exposure = 0.5) {
   return {
-    palette: { colors: ["#111111", "#222222", "#333333"], accent: "#ff8800" },
+    palette: { accent: "#ff8800" },
     surfaces: { floor: surface, wall: surface, trim: surface, ceiling: surface, accent: surface },
     lighting: {
       LightingStyle: "Soft",

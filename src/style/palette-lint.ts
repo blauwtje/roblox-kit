@@ -1,5 +1,6 @@
 import { config } from "../config.ts";
 import type { LookIssue } from "../map/look-lint.ts";
+import { srgbToOklab } from "../vision/oklab.ts";
 import type { Preset } from "./preset-schema.ts";
 
 export const paletteIssueKinds = ["palette", "value"] as const;
@@ -11,34 +12,16 @@ export const paletteIssueKinds = ["palette", "value"] as const;
  */
 export type PaletteIssue = Omit<LookIssue, "kind"> & { kind: (typeof paletteIssueKinds)[number] };
 
-export interface Oklab {
-  /** Lightness, 0 black to 1 white. */
-  l: number;
-  a: number;
-  b: number;
-}
+import type { Oklab } from "../vision/oklab.ts";
+export type { Oklab };
 
 /** Roles that must read apart by lightness: the four that fill a room's shell. */
 const separatedRoles = ["floor", "wall", "ceiling", "trim"] as const;
 
-function linearChannel(hex: string, offset: number): number {
-  const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
-  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-}
-
-/** A `#rrggbb` color in OKLab (Ottosson's matrices, linear sRGB input). */
+/** A `#rrggbb` color in OKLab. */
 export function hexToOklab(hex: string): Oklab {
-  const red = linearChannel(hex, 1);
-  const green = linearChannel(hex, 3);
-  const blue = linearChannel(hex, 5);
-  const long = Math.cbrt(0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue);
-  const medium = Math.cbrt(0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue);
-  const short = Math.cbrt(0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue);
-  return {
-    l: 0.2104542553 * long + 0.793617785 * medium - 0.0040720468 * short,
-    a: 1.9779984951 * long - 2.428592205 * medium + 0.4505937099 * short,
-    b: 0.0259040371 * long + 0.7827717662 * medium - 0.808675766 * short,
-  };
+  const channel = (offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+  return srgbToOklab(channel(1), channel(3), channel(5));
 }
 
 export function oklabLightness(hex: string): number {
@@ -52,12 +35,21 @@ export function oklabDistance(first: string, second: string): number {
   return Math.hypot(one.l - two.l, one.a - two.a, one.b - two.b);
 }
 
-/** One `palette` issue per labeled color that is not within `paletteMatchDistance` of a palette or accent color. */
+/** The lint palette: the preset's surface, prop slot and accent colors. `palette.colors` is not read. */
+export function lintPaletteColors(preset: Preset): string[] {
+  return [
+    ...Object.values(preset.surfaces).map((surface) => surface.color),
+    ...Object.values(preset.propSlots).map((look) => look.color),
+    preset.palette.accent,
+  ];
+}
+
+/** One `palette` issue per labeled color that is not within `paletteMatchDistance` of a lint palette color. */
 export function lintColorsAgainstPalette(
   colors: Record<string, string>,
   preset: Preset,
 ): PaletteIssue[] {
-  const palette = [...preset.palette.colors, preset.palette.accent];
+  const palette = lintPaletteColors(preset);
   const issues: PaletteIssue[] = [];
   for (const [label, color] of Object.entries(colors)) {
     const nearest = Math.min(...palette.map((member) => oklabDistance(color, member)));
@@ -72,20 +64,9 @@ export function lintColorsAgainstPalette(
   return issues;
 }
 
-/** The preset's surface and prop slot colors against its palette, and floor, wall, ceiling and trim against each other by lightness. */
+/** Floor, wall, ceiling and trim against each other by lightness; surface and slot colors are the palette itself. */
 export function lintPalette(preset: Preset): PaletteIssue[] {
-  const entries: [string, string][] = [
-    ...Object.entries(preset.surfaces).map(([role, surface]): [string, string] => [
-      role,
-      surface.color,
-    ]),
-    ...Object.entries(preset.propSlots).map(([slot, look]): [string, string] => [
-      `${slot} slot`,
-      look.color,
-    ]),
-  ];
-  const colors = Object.fromEntries(entries);
-  const issues = lintColorsAgainstPalette(colors, preset);
+  const issues: PaletteIssue[] = [];
   for (const [index, first] of separatedRoles.entries()) {
     for (const second of separatedRoles.slice(index + 1)) {
       const firstLightness = oklabLightness(preset.surfaces[first].color);

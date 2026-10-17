@@ -5,6 +5,7 @@ import { loadPresets } from "./load-preset.ts";
 import {
   hexToOklab,
   lintColorsAgainstPalette,
+  lintPaletteColors,
   lintPalette,
   oklabDistance,
   oklabLightness,
@@ -16,10 +17,12 @@ assert.ok(loaded !== undefined);
 const preset: Preset = loaded;
 
 /** The preset with its four lightness-bearing surface roles and palette replaced. */
-function withSurfaces(
-  colors: { floor: string; wall: string; ceiling: string; trim: string },
-  palette: string[] = Object.values(colors),
-): Preset {
+function withSurfaces(colors: {
+  floor: string;
+  wall: string;
+  ceiling: string;
+  trim: string;
+}): Preset {
   const surfaces = { ...preset.surfaces };
   for (const role of ["floor", "wall", "ceiling", "trim"] as const) {
     surfaces[role] = { ...surfaces[role], color: colors[role] };
@@ -34,7 +37,7 @@ function withSurfaces(
     ...preset,
     surfaces,
     propSlots,
-    palette: { colors: palette.slice(0, 4), accent: surfaces.accent.color },
+    palette: { accent: surfaces.accent.color },
   };
 }
 
@@ -61,25 +64,21 @@ await test("well separated surfaces drawn from the palette give no issue", () =>
   assert.deepEqual(lintPalette(withSurfaces(separated)), []);
 });
 
-await test("a surface color outside the palette is a palette issue naming the role", () => {
-  const issues = lintPalette(withSurfaces(separated, ["#303030", "#808080", "#f0f0f0", "#111111"]));
-  const palette = issues.filter((issue) => issue.kind === "palette");
-  assert.deepEqual(
-    palette.map((issue) => issue.zone),
-    ["trim"],
-  );
-  assert.match(String(palette[0]?.detail), /#585858/);
+await test("the lint palette is the surface, slot and accent colors, not palette.colors", () => {
+  const base = withSurfaces(separated);
+  const colors = lintPaletteColors({
+    ...base,
+    palette: { colors: ["#ff00ff", "#00ffff", "#ffff00"], accent: "#123456" },
+  });
+  assert.ok(colors.includes("#585858") && colors.includes("#123456"));
+  assert.ok(!colors.includes("#ff00ff"));
 });
 
-await test("a prop slot color outside the palette is a palette issue naming the slot", () => {
-  const base = withSurfaces(separated);
-  const issues = lintPalette({
-    ...base,
-    propSlots: { ...base.propSlots, glass: { ...base.propSlots.glass, color: "#ff00ff" } },
-  });
+await test("a labeled color outside surfaces, slots and accent is a palette issue", () => {
+  const issues = lintColorsAgainstPalette({ glass: "#ff00ff" }, withSurfaces(separated));
   assert.deepEqual(
     issues.map((issue) => [issue.kind, issue.zone]),
-    [["palette", "glass slot"]],
+    [["palette", "glass"]],
   );
 });
 
@@ -113,9 +112,7 @@ await test("two surfaces closer in lightness than the minimum are a value issue 
 });
 
 await test("palette issues never carry a suggested spec patch", () => {
-  const issues = lintPalette(
-    withSurfaces({ ...separated, wall: "#303030" }, ["#000000", "#010101", "#020202"]),
-  );
+  const issues = lintPalette(withSurfaces({ ...separated, wall: "#303030" }));
   assert.ok(issues.length > 0);
   assert.ok(issues.every((issue) => issue.suggestedSpecPatch === undefined));
 });

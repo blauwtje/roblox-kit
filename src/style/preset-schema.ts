@@ -587,7 +587,7 @@ function undeclaredNpcRoles(preset: {
 export const presetSchema = z
   .strictObject({
     palette: z.strictObject({
-      colors: z.array(hexColor).min(3).max(6),
+      colors: z.array(hexColor).min(3).max(6).optional(),
       accent: hexColor,
     }),
     surfaces: z.strictObject({
