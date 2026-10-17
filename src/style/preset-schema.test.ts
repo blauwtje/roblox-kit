@@ -10,6 +10,10 @@ const propSlotNames = ["frame", "seat", "panel", "glass", "screen", "signage", "
 const ratio = { min: 0.1, max: 3 };
 const ratios = { heightRatio: ratio, widthRatio: ratio, depthRatio: ratio };
 
+function ratioRule(value: unknown, key = "heightRatio") {
+  return { [key]: value, freeRotation: false, surface: "exempt" };
+}
+
 function validPreset() {
   return {
     palette: { colors: ["#111111", "#222222", "#333333"], accent: "#ff8800" },
@@ -76,45 +80,133 @@ await test("presetSchema accepts patternSurfaces of floor and ceiling, and rejec
   assert.equal(presetSchema.safeParse({ ...preset, patternSurfaces: ["wall"] }).success, false);
 });
 
-await test("presetSchema rejects ExposureCompensation outside -5 to 5", () => {
-  for (const exposure of [5.1, -5.1, 9]) {
-    const preset = validPreset();
-    preset.lighting.ExposureCompensation = exposure;
-    assert.equal(presetSchema.safeParse(preset).success, false, `exposure ${String(exposure)}`);
-  }
-});
+const colorList = (count: number) =>
+  Array.from({ length: count }, (_, index) => `#${String(index + 1).repeat(6)}`);
 
-await test("presetSchema rejects Atmosphere Density outside 0 to 1", () => {
-  for (const density of [-0.1, 5]) {
-    const preset = validPreset();
-    preset.lighting.Atmosphere.Density = density;
-    assert.equal(presetSchema.safeParse(preset).success, false, `density ${String(density)}`);
-  }
-});
+const rangeRows: {
+  name: string;
+  build: (value: unknown) => unknown;
+  accepted: unknown[];
+  rejected: unknown[];
+}[] = [
+  {
+    name: "ExposureCompensation -5 to 5",
+    build: (value) => {
+      const preset = validPreset();
+      preset.lighting.ExposureCompensation = value as number;
+      return preset;
+    },
+    accepted: [-5, 0, 5],
+    rejected: [5.1, -5.1, 9],
+  },
+  {
+    name: "Atmosphere Density 0 to 1",
+    build: (value) => {
+      const preset = validPreset();
+      preset.lighting.Atmosphere.Density = value as number;
+      return preset;
+    },
+    accepted: [0, 1],
+    rejected: [-0.1, 1.1, 5],
+  },
+  {
+    name: "light range up to 120",
+    build: (value) => {
+      const preset = validPreset();
+      preset.lightRoles.hero = { ...light, range: value as number };
+      return preset;
+    },
+    accepted: [1, 120],
+    rejected: [0, 121],
+  },
+  {
+    name: "3 to 6 palette colors",
+    build: (value) => {
+      const preset = validPreset();
+      preset.palette.colors = colorList(value as number);
+      return preset;
+    },
+    accepted: [3, 6],
+    rejected: [2, 7],
+  },
+  {
+    name: "avatar height min not above max and positive",
+    build: (value) => {
+      const preset = validPreset();
+      preset.sizeRules.avatarHeight = value as { min: number; max: number };
+      return preset;
+    },
+    accepted: [
+      { min: 6, max: 6 },
+      { min: 5, max: 6.5 },
+    ],
+    rejected: [
+      { min: 7, max: 6 },
+      { min: 0, max: 1 },
+      { min: 1, max: 2, extra: 1 },
+    ],
+  },
+  {
+    name: "prop height ratio min not above max and positive",
+    build: (value) => ({
+      ...validPreset(),
+      propRules: { ...validPreset().propRules, lamp: { ...ratios, ...ratioRule(value) } },
+    }),
+    accepted: [
+      { min: 1, max: 2 },
+      { min: 1, max: 1 },
+    ],
+    rejected: [
+      { min: 2, max: 1 },
+      { min: 0, max: 1 },
+      { min: 1, max: 2, extra: 1 },
+    ],
+  },
+  {
+    name: "prop width ratio min not above max",
+    build: (value) => ({
+      ...validPreset(),
+      propRules: {
+        ...validPreset().propRules,
+        lamp: { ...ratios, ...ratioRule(value, "widthRatio") },
+      },
+    }),
+    accepted: [{ min: 1, max: 2 }],
+    rejected: [{ min: 2, max: 1 }],
+  },
+  {
+    name: "hero prop triangle budget up to 20000",
+    build: (value) => ({
+      ...validPreset(),
+      heroProps: { car: { ...heroCar, triangleBudget: value } },
+    }),
+    accepted: [1, 20000],
+    rejected: [0, 20001, 1.5],
+  },
+  {
+    name: "hero cylinder segments 3 to 64",
+    build: (value) => heroWith([{ ...heroCylinder, segments: value }]),
+    accepted: [3, 64],
+    rejected: [2, 65, 8.5],
+  },
+  {
+    name: "hero array count 2 to 64",
+    build: (value) => heroWith([heroBox, { ...heroArray, count: value }]),
+    accepted: [2, 64],
+    rejected: [1, 65],
+  },
+  {
+    name: "idle sway degrees above 0 up to 45",
+    build: (value) => ({
+      ...validPreset(),
+      idleAnimations: { sign: { swayDegrees: value, periodSeconds: 4, hinge: "top" } },
+    }),
+    accepted: [0.5, 45],
+    rejected: [0, 46],
+  },
+];
 
-await test("presetSchema rejects a light Range over 120 and accepts 120", () => {
-  const preset = validPreset();
-  preset.lightRoles.hero = { ...light, range: 120 };
-  assert.equal(presetSchema.safeParse(preset).success, true);
-  preset.lightRoles.hero = { ...light, range: 121 };
-  assert.equal(presetSchema.safeParse(preset).success, false);
-});
-
-await test("presetSchema needs 3 to 6 palette colors and a hex color", () => {
-  const twoColors = validPreset();
-  twoColors.palette.colors = ["#111111", "#222222"];
-  assert.equal(presetSchema.safeParse(twoColors).success, false);
-  const sevenColors = validPreset();
-  sevenColors.palette.colors = [
-    "#111111",
-    "#222222",
-    "#333333",
-    "#444444",
-    "#555555",
-    "#666666",
-    "#777777",
-  ];
-  assert.equal(presetSchema.safeParse(sevenColors).success, false);
+await test("presetSchema needs a hex color", () => {
   const badColor = validPreset();
   badColor.palette.accent = "orange";
   assert.equal(presetSchema.safeParse(badColor).success, false);
@@ -347,20 +439,6 @@ await test("presetSchema requires every prop slot and a hex color in it", () => 
   assert.equal(presetSchema.safeParse(badColor).success, false);
 });
 
-await test("presetSchema rejects a height range whose min exceeds its max or is not positive", () => {
-  for (const heightRatio of [
-    { min: 2, max: 1 },
-    { min: 0, max: 1 },
-    { min: 1, max: 2, extra: 1 },
-  ]) {
-    const preset = { ...validPreset(), propRules: { bench: { heightRatio, freeRotation: false } } };
-    assert.equal(presetSchema.safeParse(preset).success, false);
-  }
-  const preset = validPreset();
-  preset.sizeRules.avatarHeight = { min: 7, max: 6 };
-  assert.equal(presetSchema.safeParse(preset).success, false);
-});
-
 await test("presetOverridesSchema accepts a partial avatar height and a prop rules override", () => {
   const overrides = {
     lightingIntent: "dim",
@@ -499,6 +577,15 @@ const heroBox = {
   role: "wall",
   center: shapeCenter,
   size: fixtureSize,
+};
+const heroCylinder = {
+  op: "cylinder",
+  phase: "form",
+  role: "wall",
+  center: shapeCenter,
+  radius: 1,
+  length: 2,
+  axis: "y",
 };
 const heroCut = { op: "cut", phase: "structure", center: shapeCenter, size: fixtureSize };
 const heroArray = { op: "array", phase: "structure", count: 4, step: { x: 3, y: 0, z: 0 } };
@@ -794,6 +881,19 @@ await test("presetSchema takes declared meshes with their targets and placement"
   assert.ok(presetSchema.safeParse(validPreset()).success);
   assert.ok(presetOverridesSchema.safeParse({ meshes }).success);
 });
+
+for (const row of rangeRows) {
+  await test(`presetSchema range: ${row.name}`, () => {
+    for (const value of row.accepted) {
+      const result = presetSchema.safeParse(row.build(value));
+      assert.equal(result.success, true, `accepts ${JSON.stringify(value)}`);
+    }
+    for (const value of row.rejected) {
+      const result = presetSchema.safeParse(row.build(value));
+      assert.equal(result.success, false, `rejects ${JSON.stringify(value)}`);
+    }
+  });
+}
 
 await test("presetSchema rejects a bad mesh declaration", () => {
   const target = { replaces: "prop:bench" };
