@@ -167,10 +167,6 @@
     "kind": "pendant",
     "assetId": "127045372575746"
   },
-  "fc2d880e2df8": {
-    "kind": "ticket-counter",
-    "assetId": "125360312908808"
-  },
   "dd97afe68a02": {
     "kind": "train-car",
     "assetId": "137669787957055"
@@ -182,5 +178,9 @@
   "6235fc2b8d24": {
     "kind": "sign",
     "assetId": "107871902578867"
+  },
+  "61b04d45e060": {
+    "kind": "ticket-counter",
+    "assetId": "125360312908808"
   }
 }
