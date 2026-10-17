@@ -34,7 +34,15 @@ interface RunResult {
 const runnerFile = new URL("../../scripts/lune/run-prop-generators.luau", import.meta.url);
 const budgetMilliseconds = 1500;
 const seeds = [1, 2, 3, 4, 5, 6];
-const seedInvariantKinds: readonly PropKind[] = ["sign", "ticket-machine"];
+const seedInvariantKinds: readonly PropKind[] = [
+  "sign",
+  "ticket-machine",
+  "bin",
+  "luggage",
+  "potted-plant",
+  "newspaper-stack",
+  "poster",
+];
 const epsilon = 1e-3;
 
 function nominalSize(kind: PropKind): Triple {
