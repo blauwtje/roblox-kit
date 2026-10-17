@@ -4,6 +4,7 @@ import { evaluateDepth, type DepthEvalFrame, type DepthGrid } from "../src/visio
 import { heuristicDepthGrid } from "../src/vision/heuristic-depth.ts";
 import { estimateHorizon } from "../src/vision/lines.ts";
 import { srgbToOklab } from "../src/vision/oklab.ts";
+import { installDepthModel, loadDepthModel, type DepthModel } from "./depth-model.ts";
 import { runScript } from "./lib/run-script.ts";
 
 const depthUrl = new URL("../eval/depth/", import.meta.url);
@@ -19,7 +20,7 @@ async function readGrid(url: URL): Promise<{ cells: number[][]; ms: number } | n
   }
 }
 
-async function loadFrame(name: string): Promise<DepthEvalFrame> {
+async function loadFrame(name: string, runModel: DepthModel | null): Promise<DepthEvalFrame> {
   const dir = new URL(`${name}/`, depthUrl);
   const truth = await readGrid(new URL("truth.json", dir));
   if (truth === null) throw new Error(`eval/depth/${name}/truth.json is missing.`);
@@ -33,21 +34,30 @@ async function loadFrame(name: string): Promise<DepthEvalFrame> {
   const horizon = estimateHorizon(lightness, image);
   const cells = heuristicDepthGrid(image, horizon.horizonRow).cells;
   const heuristic: DepthGrid = { cells, ms: performance.now() - started };
-  const model = await readGrid(new URL("model.json", dir));
+  const model = runModel ? await runModel(image) : await readGrid(new URL("model.json", dir));
   return { truth: truth.cells, heuristic, ...(model ? { model } : {}) };
 }
 
 await runScript({
   name: "eval-depth",
   usage:
-    "Usage: node scripts/eval-depth.ts\nScores eval/depth/*/ (image.jpg, truth.json, optional model.json {cells, ms}; larger = farther) and appends to eval/results.jsonl.",
-  run: async () => {
+    "Usage: node scripts/eval-depth.ts [--install]\n--install puts onnxruntime-node and the SHA-256-checked q4f16 weights in .roblox-kit/cache/depth/; without the cache the model arm is skipped (model.json still counts).\nScores eval/depth/*/ (image.jpg, truth.json, optional model.json {cells, ms}; larger = farther) and appends to eval/results.jsonl.",
+  options: { install: { type: "boolean" } },
+  run: async (values) => {
+    if (values.install === true) {
+      await installDepthModel();
+      console.log("Depth model installed in .roblox-kit/cache/depth/.");
+      return 0;
+    }
+    const runModel = await loadDepthModel();
+    if (runModel === null)
+      console.error("Depth model not installed (run with --install): skipping the model arm.");
     const entries = await readdir(depthUrl, { withFileTypes: true }).catch(() => []);
     const names = entries
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
-    const frames = await Promise.all(names.map(loadFrame));
+    const frames = await Promise.all(names.map((name) => loadFrame(name, runModel)));
     const result = evaluateDepth(frames);
     const line = { kind: "depth-eval", ranAt: new Date().toISOString(), ...result };
     await appendFile(resultsUrl, `${JSON.stringify(line)}\n`);
