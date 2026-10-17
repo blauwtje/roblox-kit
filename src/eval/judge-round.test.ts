@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import {
   gateOf as gateResultOf,
   judgeFindingSchema,
@@ -141,8 +142,8 @@ await test("an accepted room name matches the place check", () => {
 });
 
 await test("each axis median below the pass score is one major finding citing the preset and axis on the eye image", () => {
-  const weak = answer(config.visualPassScore - 3);
-  const strong = answer(config.visualPassScore + 1);
+  const weak = answer(evalConfig.visualPassScore - 3);
+  const strong = answer(evalConfig.visualPassScore + 1);
   const mixed = { ...strong, lighting: weak.lighting };
   const { result } = judgeRound(
     inputOf({ qualityAnswers: [{ zone: "hall", answers: [mixed, mixed, strong] }] }),
@@ -155,7 +156,7 @@ await test("each axis median below the pass score is one major finding citing th
   assert.equal(found.severity, "major");
   assert.equal(found.cites, "train-station lighting");
   assert.equal(found.evidence.imageId, "hall:eye");
-  assert.equal(found.axisMedians?.lighting, config.visualPassScore - 3);
+  assert.equal(found.axisMedians?.lighting, evalConfig.visualPassScore - 3);
   assert.equal(found.reachesPassScore, false);
   assert.equal(result.scores[0]?.zone, "hall");
 });
@@ -196,10 +197,10 @@ await test("stopReason is pass before round-limit before repeat, else null", () 
     "pass",
   );
   assert.equal(
-    judgeRound(inputOf({ round: config.maxJudgeRounds + 1 }), [], date).result.stopReason,
+    judgeRound(inputOf({ round: evalConfig.maxJudgeRounds + 1 }), [], date).result.stopReason,
     "pass",
   );
-  const limit = inputOf({ round: config.maxJudgeRounds, findings: [finding()] });
+  const limit = inputOf({ round: evalConfig.maxJudgeRounds, findings: [finding()] });
   assert.equal(judgeRound(limit, [logged(1), logged(2)], date).result.stopReason, "round-limit");
   assert.equal(judgeRound(inputOf({ findings: [finding()] }), [], date).result.stopReason, null);
 });
@@ -268,7 +269,7 @@ await test("a failing gate ends the round on its blockers and reads no reviewer 
 
 await test("a failing gate stops at the round limit like any blocker", () => {
   const failing = inputOf({
-    round: config.maxJudgeRounds,
+    round: evalConfig.maxJudgeRounds,
     gate: gateOf({ checkPassed: false }),
   });
   assert.equal(judgeRound(failing, [], date).result.stopReason, "round-limit");
@@ -288,9 +289,9 @@ await test("the gate fails a code score under the minimum, and a bright capture"
 
 await test("early rounds get fewer and smaller images, only the last round the full set", () => {
   const last = { images: config.maxImagesPerCall, longEdge: config.imageLongEdgeMax };
-  assert.equal(config.judgeEarlyRounds.length, config.maxJudgeRounds - 1);
+  assert.equal(evalConfig.judgeEarlyRounds.length, evalConfig.maxJudgeRounds - 1);
   let previous = { images: 0, longEdge: 0 };
-  for (let round = 1; round < config.maxJudgeRounds; round += 1) {
+  for (let round = 1; round < evalConfig.maxJudgeRounds; round += 1) {
     const budget = roundImageBudget(round);
     assert.ok(budget.images < last.images, `round ${String(round)} images`);
     assert.ok(budget.longEdge < last.longEdge, `round ${String(round)} long edge`);
@@ -298,6 +299,6 @@ await test("early rounds get fewer and smaller images, only the last round the f
     assert.ok(budget.images >= previous.images && budget.longEdge >= previous.longEdge);
     previous = budget;
   }
-  assert.deepEqual(roundImageBudget(config.maxJudgeRounds), last);
-  assert.deepEqual(roundImageBudget(config.maxJudgeRounds + 1), last);
+  assert.deepEqual(roundImageBudget(evalConfig.maxJudgeRounds), last);
+  assert.deepEqual(roundImageBudget(evalConfig.maxJudgeRounds + 1), last);
 });

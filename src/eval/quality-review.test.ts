@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import {
   axisEvidence,
   axisMedians,
@@ -50,7 +50,7 @@ await test("one outlier reviewer moves no axis median, and evidence is kept per 
 
 await test("a room passes only when every axis reaches the pass score, so one weak axis fails it", () => {
   const passing = axisMedians([answer([7, 8, 9, 10, 7, 7])]);
-  assert.equal(config.visualPassScore, 7);
+  assert.equal(evalConfig.visualPassScore, 7);
   assert.equal(reachesPassScore(passing), true);
   for (const axis of Object.keys(passing) as (keyof typeof passing)[]) {
     assert.equal(reachesPassScore({ ...passing, [axis]: 6 }), false, axis);

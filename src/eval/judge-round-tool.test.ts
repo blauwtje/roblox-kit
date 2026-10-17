@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { encodePng } from "../vision/encode-png.ts";
 import { createJudgeRoundTool } from "./judge-round-tool.ts";
@@ -56,7 +57,7 @@ async function inProject(run: (folder: string) => Promise<void>): Promise<void> 
 }
 
 async function logLines(folder: string): Promise<{ round: number; findings: unknown[] }[]> {
-  const text = await readFile(join(folder, config.judgeLogFile), "utf8");
+  const text = await readFile(join(folder, evalConfig.judgeLogFile), "utf8");
   return text
     .trim()
     .split("\n")

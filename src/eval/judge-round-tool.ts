@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import { relationMapSpecSchema } from "../map/map-spec.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
@@ -63,7 +63,7 @@ const judgeRoundInput = z.strictObject({
     .array(
       z.strictObject({
         zone: z.string().min(1),
-        answers: z.array(qualityAnswerSchema).length(config.qualityReviewersPerRoom),
+        answers: z.array(qualityAnswerSchema).length(evalConfig.qualityReviewersPerRoom),
       }),
     )
     .describe("The quality reviewers' answers for each room."),
@@ -109,7 +109,7 @@ const loggedRoundSchema = z.looseObject({
   ),
 });
 
-const ignoredEntry = `${config.judgeLogFile.split("/")[0] ?? ""}/`;
+const ignoredEntry = `${evalConfig.judgeLogFile.split("/")[0] ?? ""}/`;
 
 /** The project folder when it is an absolute path the host really expanded; throws before anything is written otherwise. */
 function checkedProjectDir(projectDir: string | undefined): string {
@@ -209,8 +209,8 @@ export function createJudgeRoundTool(
     title: "Judge a visual-judge round",
     description:
       `Decides one round of the visual-judge loop from what its agents returned: drops judge findings without evidence.visible (returned as rejected), ` +
-      `turns place-check mismatches and empty answers into spec-miss blocker findings, turns each quality axis median below ${String(config.visualPassScore)} into a major finding, ` +
-      `marks repeats of earlier rounds (warning of log lines it could not read), sets stopReason (pass, round-limit at round ${String(config.maxJudgeRounds)}, repeat or null) and appends one line to ${config.judgeLogFile} in the project folder. ` +
+      `turns place-check mismatches and empty answers into spec-miss blocker findings, turns each quality axis median below ${String(evalConfig.visualPassScore)} into a major finding, ` +
+      `marks repeats of earlier rounds (warning of log lines it could not read), sets stopReason (pass, round-limit at round ${String(evalConfig.maxJudgeRounds)}, repeat or null) and appends one line to ${evalConfig.judgeLogFile} in the project folder. ` +
       `The optional gate (check_map result and capture paths) runs first and its failure ends the round on blocker findings. Other inputs are required. Dispatching the agents stays with the caller.`,
     inputSchema: judgeRoundInput,
     outputSchema: judgeRoundOutput,
@@ -222,13 +222,13 @@ export function createJudgeRoundTool(
     },
     async handler(input) {
       const folder = checkedProjectDir(projectDir);
-      const logFile = join(folder, config.judgeLogFile);
+      const logFile = join(folder, evalConfig.judgeLogFile);
       const { rounds: logged, skipped } = parseLog(await readIfPresent(logFile));
       const warnings =
         skipped === 0
           ? []
           : [
-              `${String(skipped)} line(s) of ${config.judgeLogFile} could not be read as rounds and were skipped, so repeats of those rounds are not detected.`,
+              `${String(skipped)} line(s) of ${evalConfig.judgeLogFile} could not be read as rounds and were skipped, so repeats of those rounds are not detected.`,
             ];
       const { gate, ...rest } = input;
       const roundInput: JudgeRoundInput = {

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import { askHeadlessReviewer } from "../shared/ask-headless-reviewer.ts";
 import { loadPresets } from "../style/load-preset.ts";
 
@@ -104,9 +104,9 @@ export function axisEvidence(answers: QualityAnswer[]): AxisEvidence {
   return evidence;
 }
 
-/** Whether every axis median reaches `config.visualPassScore`; one weak axis fails the room. */
+/** Whether every axis median reaches `evalConfig.visualPassScore`; one weak axis fails the room. */
 export function reachesPassScore(medians: AxisMedians): boolean {
-  return qualityAxes.every((axis) => medians[axis] >= config.visualPassScore);
+  return qualityAxes.every((axis) => medians[axis] >= evalConfig.visualPassScore);
 }
 
 /**
@@ -142,7 +142,7 @@ async function askReviewer(
     schema: qualityAnswerSchema,
     images,
     brief,
-    timeoutMs: config.qualityReviewTimeoutMs,
+    timeoutMs: evalConfig.qualityReviewTimeoutMs,
   });
 }
 
@@ -156,7 +156,7 @@ async function presetLightingIntent(genre: string): Promise<string> {
 }
 
 /**
- * Scores one room: `config.qualityReviewersPerRoom` fresh reviewers each rate its captures (eye view first)
+ * Scores one room: `evalConfig.qualityReviewersPerRoom` fresh reviewers each rate its captures (eye view first)
  * against the references and the preset's lighting intent, and each axis takes the median of the scores
  * and keeps every evidence note. A reviewer that fails, times out or answers
  * off-schema fails the room with its error, so one room cannot stop the others.
@@ -170,7 +170,7 @@ export async function reviewRoomQuality(
 ): Promise<QualityResult> {
   try {
     const lightingIntent = await presetLightingIntent(genre);
-    const reviewers = Array.from({ length: config.qualityReviewersPerRoom }, () =>
+    const reviewers = Array.from({ length: evalConfig.qualityReviewersPerRoom }, () =>
       askReviewer(genre, roomType, lightingIntent, referencePaths, capturePaths),
     );
     const answers = await Promise.all(reviewers);

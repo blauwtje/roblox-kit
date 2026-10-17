@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import { placeMatches, type PlaceAnswer } from "./blind-place-check.ts";
 import { codeScoreOf, type CodeScoreInput, type ImageStats } from "./code-score.ts";
 import {
@@ -122,8 +123,8 @@ export interface RoundImageBudget {
 
 /** The images a round may capture: the early rounds' smaller set from `config`, the full set from round `maxJudgeRounds` on. */
 export function roundImageBudget(round: number): RoundImageBudget {
-  const early = config.judgeEarlyRounds[round - 1];
-  if (round >= config.maxJudgeRounds || early === undefined) {
+  const early = evalConfig.judgeEarlyRounds[round - 1];
+  if (round >= evalConfig.maxJudgeRounds || early === undefined) {
     return { images: config.maxImagesPerCall, longEdge: config.imageLongEdgeMax };
   }
   return early;
@@ -166,7 +167,7 @@ function extremeLuminance(histogram: number[]): { share: number; name: string } 
 
 /**
  * The deterministic gate that runs before any reviewer: `check_map` must have passed, the code score must reach
- * `config.gateMinCodeScore`, and no capture may be mostly one color, mostly black or white, or without edges.
+ * `evalConfig.gateMinCodeScore`, and no capture may be mostly one color, mostly black or white, or without edges.
  * `imageId` of a check_map finding is the first image, since the check is of the whole map.
  */
 export function gateOf(input: GateInput): GateResult {
@@ -187,49 +188,49 @@ export function gateOf(input: GateInput): GateResult {
     );
   }
   const codeScore = codeScoreOf(input);
-  if (codeScore < config.gateMinCodeScore) {
+  if (codeScore < evalConfig.gateMinCodeScore) {
     findings.push(
       gateFinding(
         "placement",
         "code score",
         mapImageId,
         `The code score is ${String(codeScore)}.`,
-        `The code score ${String(codeScore)} is below ${String(config.gateMinCodeScore)}.`,
+        `The code score ${String(codeScore)} is below ${String(evalConfig.gateMinCodeScore)}.`,
       ),
     );
   }
   for (const { imageId, stats } of input.images) {
     const extreme = extremeLuminance(stats.luminanceHistogram);
-    if (stats.flatColorShare > config.gateMaxFlatColorShare) {
+    if (stats.flatColorShare > evalConfig.gateMaxFlatColorShare) {
       findings.push(
         gateFinding(
           "readability",
           "flat color share",
           imageId,
           `${String(Math.round(stats.flatColorShare * 100))}% of the image is one color.`,
-          `The capture is mostly one color (${stats.flatColorShare.toFixed(2)} over ${String(config.gateMaxFlatColorShare)}).`,
+          `The capture is mostly one color (${stats.flatColorShare.toFixed(2)} over ${String(evalConfig.gateMaxFlatColorShare)}).`,
         ),
       );
     }
-    if (extreme.share > config.gateMaxExtremeLuminanceShare) {
+    if (extreme.share > evalConfig.gateMaxExtremeLuminanceShare) {
       findings.push(
         gateFinding(
           "lighting",
           "luminance histogram",
           imageId,
           `${String(Math.round(extreme.share * 100))}% of the image is in the ${extreme.name}est luminance bin.`,
-          `The capture is almost all ${extreme.name} (${extreme.share.toFixed(2)} over ${String(config.gateMaxExtremeLuminanceShare)}).`,
+          `The capture is almost all ${extreme.name} (${extreme.share.toFixed(2)} over ${String(evalConfig.gateMaxExtremeLuminanceShare)}).`,
         ),
       );
     }
-    if (stats.edgeDensity < config.gateMinEdgeDensity) {
+    if (stats.edgeDensity < evalConfig.gateMinEdgeDensity) {
       findings.push(
         gateFinding(
           "readability",
           "edge density",
           imageId,
           `Edge density is ${stats.edgeDensity.toFixed(4)}.`,
-          `The capture has almost no edges (${stats.edgeDensity.toFixed(4)} under ${String(config.gateMinEdgeDensity)}).`,
+          `The capture has almost no edges (${stats.edgeDensity.toFixed(4)} under ${String(evalConfig.gateMinEdgeDensity)}).`,
         ),
       );
     }
@@ -295,7 +296,7 @@ function axisFinding(
     severity: "major",
     cites: `${preset} ${axis}`,
     evidence: { imageId: `${zone}:eye`, visible: evidence[axis].join(" ") },
-    reasoning: `The median ${axis} score of ${zone} is ${String(medians[axis])}, below the pass score ${String(config.visualPassScore)}.`,
+    reasoning: `The median ${axis} score of ${zone} is ${String(medians[axis])}, below the pass score ${String(evalConfig.visualPassScore)}.`,
     verdict: `${zone} falls short on ${axis} against ${preset}.`,
     repeat: false,
     axisMedians: medians,
@@ -358,10 +359,8 @@ export function judgeRound(
     const medians = axisMedians(review.answers);
     const evidence = axisEvidence(review.answers);
     scores.push({ zone: review.zone, medians, evidence });
-    for (const axis of qualityAxes) {
-      if (medians[axis] < config.visualPassScore) {
-        accepted.push(axisFinding(review.zone, genre, axis, medians, evidence));
-      }
+    for (const axis of qualityAxes.filter((a) => medians[a] < evalConfig.visualPassScore)) {
+      accepted.push(axisFinding(review.zone, genre, axis, medians, evidence));
     }
   }
 
@@ -382,7 +381,7 @@ export function judgeRound(
   let stopReason: StopReason = null;
   if (sentBack.length === 0) {
     stopReason = "pass";
-  } else if (input.round >= config.maxJudgeRounds) {
+  } else if (input.round >= evalConfig.maxJudgeRounds) {
     stopReason = "round-limit";
   } else if (sentBack.some((finding) => finding.repeat)) {
     stopReason = "repeat";
