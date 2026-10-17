@@ -191,3 +191,27 @@ await test("a pillar's width follows its wall height", () => {
   assert.equal(pillarWidth(24), 2 * pillarWidth(12));
   assert.deepEqual(propSize("pillar", 24), { x: 3, y: 24, z: 3 });
 });
+
+await test("weights bias the kind pick and keep a kind to its allowed walls", () => {
+  const weights = {
+    bench: { weight: 50, wall: "long" as const },
+    lamp: { weight: 1, wall: "any" as const },
+    stairs: { weight: 1, wall: "doorless" as const },
+  };
+  const props = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].flatMap(
+    (seed) => placeProps(hallSpec, ["bench", "lamp", "stairs"], { seed, weights }),
+  );
+  const benches = props.filter((prop) => prop.kind === "bench");
+  const stairs = props.filter((prop) => prop.kind === "stairs");
+  assert.ok(benches.every((prop) => prop.yaw === 0 || prop.yaw === 180));
+  assert.ok(stairs.every((prop) => prop.yaw !== 180));
+  const others = props.length - benches.length;
+  assert.ok(
+    benches.length > others * 5,
+    `bench ${String(benches.length)}, other ${String(others)}`,
+  );
+});
+
+await test("absent weights keep the uniform output", () => {
+  assert.deepEqual(placeProps(hallSpec, kit, { seed: 3 }), placeProps(hallSpec, kit, 3));
+});

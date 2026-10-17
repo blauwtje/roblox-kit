@@ -143,6 +143,48 @@ function pickFrom<Item>(items: readonly Item[], random: () => number): Item {
   return item;
 }
 
+/** The seed of a placement and the optional preset weights that steer it. */
+export interface PlaceRun {
+  seed: number;
+  weights?: Record<string, PropWeight>;
+}
+
+/** A preset's pick weight for a prop kind and the walls it may stand against. */
+export interface PropWeight {
+  weight: number;
+  wall: "any" | "long" | "doorless";
+}
+
+interface WeightedKit {
+  kinds: PropKind[];
+  weights?: Record<string, PropWeight>;
+}
+
+function pickKind(kit: WeightedKit, random: () => number): PropKind {
+  const { weights } = kit;
+  if (weights === undefined) {
+    return pickFrom(kit.kinds, random);
+  }
+  const weightOf = (kind: PropKind): number => weights[kind]?.weight ?? 1;
+  let remaining = random() * kit.kinds.reduce((sum, kind) => sum + weightOf(kind), 0);
+  const picked = kit.kinds.find((kind) => {
+    remaining -= weightOf(kind);
+    return remaining < 0;
+  });
+  return picked ?? pickFrom(kit.kinds, random);
+}
+
+function wallsFor(kind: PropKind, room: RoomSpec, kit: WeightedKit): readonly Side[] {
+  const wall = kit.weights?.[kind]?.wall ?? "any";
+  const allowed = sideOrder.filter((side) => {
+    if (wall === "long") {
+      return room.width === room.depth || runsAlongX(side) === room.width > room.depth;
+    }
+    return wall === "any" || !room.doors.some((door) => door.side === side);
+  });
+  return allowed.length > 0 ? allowed : sideOrder;
+}
+
 export function isPropKind(name: string): name is PropKind {
   return (propKinds as readonly string[]).includes(name);
 }
@@ -232,7 +274,7 @@ function footprintAgainst(bounds: RoomBounds, side: Side, along: number, size: V
 function roomProps(
   spec: MapSpec,
   room: RoomSpec,
-  propKit: PropKind[],
+  kit: WeightedKit,
   random: () => number,
 ): PropRecord[] {
   const bounds = roomBounds(spec, room);
@@ -247,11 +289,12 @@ function roomProps(
   ];
   const props: PropRecord[] = [];
   for (let propNumber = 0; propNumber < wantedCount; propNumber += 1) {
-    const kind = pickFrom(propKit, random);
+    const kind = pickKind(kit, random);
+    const walls = wallsFor(kind, room, kit);
     const size = propSize(kind, bounds.wallHeight);
     const propSeed = Math.floor(random() * 2 ** 31);
     for (let attempt = 0; attempt < propDimensions.attemptsPerProp; attempt += 1) {
-      const side = pickFrom(sideOrder, random);
+      const side = pickFrom(walls, random);
       const wallHalfSpan = runsAlongX(side) ? bounds.halfWidth : bounds.halfDepth;
       const reach = wallHalfSpan - size.x / 2;
       const along = (random() * 2 - 1) * reach;
@@ -283,8 +326,10 @@ function roomProps(
  * Props from a preset's prop kit for every room of a placed map, standing against the walls and clear of
  * doorways, corner pillars and each other. Deterministic: the same spec, kit and seed give the same props.
  * Throws on a kit name with no generator, since the build would have nothing to run for it.
+ * `run` is the seed, or the seed with a preset's `propWeights`, which bias the kind pick and limit the walls a kind uses; absent keeps the uniform pick.
  */
-export function placeProps(spec: MapSpec, propKit: string[], seed: number): PropRecord[] {
+export function placeProps(spec: MapSpec, propKit: string[], run: number | PlaceRun): PropRecord[] {
+  const { seed, weights } = typeof run === "number" ? { seed: run, weights: undefined } : run;
   const kinds = propKit.map((name) => {
     if (!isPropKind(name)) {
       throw new Error(
@@ -300,7 +345,7 @@ export function placeProps(spec: MapSpec, propKit: string[], seed: number): Prop
     roomProps(
       spec,
       room,
-      kinds,
+      { kinds, weights },
       createSeededRandom(seed + roomIndex * propDimensions.roomSeedStride),
     ),
   );

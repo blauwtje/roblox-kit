@@ -338,7 +338,7 @@ export function propsOf(
   const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
   return {
     props: [
-      ...placeProps(plainSpec, style.propKit, seed),
+      ...placeProps(plainSpec, style.propKit, { seed, weights: style.propWeights }),
       ...setPieces.pieces,
       ...arrangements.pieces,
     ].map((prop) => withSlots(prop, style)),
