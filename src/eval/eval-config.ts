@@ -12,4 +12,13 @@ export const evalConfig = Object.freeze({
   gateMaxExtremeLuminanceShare: 0.99,
   gateMinEdgeDensity: 0.0002,
   visualPassScore: 7,
+  placeCheckTimeoutMs: 180_000,
+  reviewerBackendEnv: "ROBLOX_KIT_REVIEWER_BACKEND",
+  reviewerBackend: "claude",
+  reviewerModelEnv: "ROBLOX_KIT_REVIEWER_MODEL",
+  reviewerEffortEnv: "ROBLOX_KIT_REVIEWER_EFFORT",
+  calibrationReferenceMeanFloor: 6,
+  calibrationBadAnchorMeanCeiling: 4,
+  calibrationAxisGap: 2,
+  evalWaveRoomTypes: ["platform", "concourse", "ticket-hall"],
 });

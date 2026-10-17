@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
-import { config } from "../src/config.ts";
+import { evalConfig } from "../src/eval/eval-config.ts";
 import { blindPlaceCheck } from "../src/eval/blind-place-check.ts";
 import type { PlaceCheckResult } from "../src/eval/blind-place-check.ts";
 import { codeScoreOf } from "../src/eval/code-score.ts";
@@ -84,7 +84,7 @@ function typedRooms(spec: RelationMapSpec): TypedRoom[] {
 }
 
 function currentWaveRooms(spec: RelationMapSpec): TypedRoom[] {
-  return typedRooms(spec).filter((room) => config.evalWaveRoomTypes.includes(room.roomType));
+  return typedRooms(spec).filter((room) => evalConfig.evalWaveRoomTypes.includes(room.roomType));
 }
 
 function captureOf(captures: string[], room: string, view: string): string | undefined {

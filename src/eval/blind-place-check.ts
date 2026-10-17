@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { evalConfig } from "./eval-config.ts";
 import { askHeadlessReviewer } from "../shared/ask-headless-reviewer.ts";
 
 const promptUrl = new URL("../../skills/visual-judge/place-check-prompt.md", import.meta.url);
@@ -112,7 +112,7 @@ async function askReviewer(imagePaths: string[]): Promise<PlaceAnswer> {
     schema: placeAnswerSchema,
     images,
     brief,
-    timeoutMs: config.placeCheckTimeoutMs,
+    timeoutMs: evalConfig.placeCheckTimeoutMs,
   });
 }
 

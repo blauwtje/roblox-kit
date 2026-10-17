@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { config } from "../config.ts";
+import { evalConfig } from "../eval/eval-config.ts";
 
 const run = promisify(execFile);
 
@@ -60,9 +60,9 @@ function claudeCommand(env: Environment, jsonSchema: string): ReviewerCommand {
     "--json-schema",
     jsonSchema,
   ];
-  const model = env[config.reviewerModelEnv];
+  const model = env[evalConfig.reviewerModelEnv];
   if (model) args.push("--model", model);
-  const effort = env[config.reviewerEffortEnv];
+  const effort = env[evalConfig.reviewerEffortEnv];
   if (effort) args.push("--effort", effort);
   return { command: "claude", args };
 }
@@ -70,9 +70,9 @@ function claudeCommand(env: Environment, jsonSchema: string): ReviewerCommand {
 const reviewerBackends: Record<string, (env: Environment, jsonSchema: string) => ReviewerCommand> =
   { claude: claudeCommand };
 
-/** The command of the backend named by `config.reviewerBackendEnv`, else `config.reviewerBackend`. Throws for an unknown backend. */
+/** The command of the backend named by `evalConfig.reviewerBackendEnv`, else `evalConfig.reviewerBackend`. Throws for an unknown backend. */
 export function reviewerCommand(env: Environment, jsonSchema: string): ReviewerCommand {
-  const name = env[config.reviewerBackendEnv] || config.reviewerBackend;
+  const name = env[evalConfig.reviewerBackendEnv] || evalConfig.reviewerBackend;
   const build = Object.hasOwn(reviewerBackends, name) ? reviewerBackends[name] : undefined;
   if (!build) {
     const known = Object.keys(reviewerBackends).join(", ");

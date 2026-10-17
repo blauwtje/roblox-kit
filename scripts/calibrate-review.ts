@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { config } from "../src/config.ts";
+import { evalConfig } from "../src/eval/eval-config.ts";
 import {
   median,
   qualityAxes,
@@ -76,8 +76,8 @@ function meanAxisMedian(medians: AxisMedians): number {
 
 function withinBound(kind: CalibrationImage["kind"], mean: number): boolean {
   return kind === "reference"
-    ? mean >= config.calibrationReferenceMeanFloor
-    : mean <= config.calibrationBadAnchorMeanCeiling;
+    ? mean >= evalConfig.calibrationReferenceMeanFloor
+    : mean <= evalConfig.calibrationBadAnchorMeanCeiling;
 }
 
 async function calibrate(image: CalibrationImage): Promise<CalibrationRow> {
@@ -90,8 +90,8 @@ async function calibrate(image: CalibrationImage): Promise<CalibrationRow> {
   );
   const bound =
     image.kind === "reference"
-      ? `mean >= ${String(config.calibrationReferenceMeanFloor)}`
-      : `mean <= ${String(config.calibrationBadAnchorMeanCeiling)}`;
+      ? `mean >= ${String(evalConfig.calibrationReferenceMeanFloor)}`
+      : `mean <= ${String(evalConfig.calibrationBadAnchorMeanCeiling)}`;
   const medians = result.medians ?? null;
   const mean = medians === null ? null : meanAxisMedian(medians);
   const row: CalibrationRow = {
@@ -119,8 +119,8 @@ function axisRows(rows: CalibrationRow[]): AxisRow[] {
       axis,
       referenceMedian,
       badAnchorMedian,
-      bound: `reference - bad >= ${String(config.calibrationAxisGap)}`,
-      inBound: referenceMedian - badAnchorMedian >= config.calibrationAxisGap,
+      bound: `reference - bad >= ${String(evalConfig.calibrationAxisGap)}`,
+      inBound: referenceMedian - badAnchorMedian >= evalConfig.calibrationAxisGap,
     };
   });
 }

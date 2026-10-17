@@ -163,19 +163,7 @@ export const config = Object.freeze({
   imageLongEdgeMax: 1568,
   /** Images capture_zones returns per call, which is also one judge round's cap (1,924 tokens each at 1456x1030); further zones go to remainingZones. */
   maxImagesPerCall: 8,
-  /** Milliseconds one blind place check of `npm run eval:studio` (a headless `claude -p` reading two images) may take. */
-  placeCheckTimeoutMs: 180_000,
-  /** The headless reviewer backend: the environment variable that overrides it, and the default. Only `claude` (`claude -p`) is built; another backend is a new entry in `reviewerBackends` in `src/shared/ask-headless-reviewer.ts`. */
-  reviewerBackendEnv: "ROBLOX_KIT_REVIEWER_BACKEND",
-  reviewerBackend: "claude",
-  /** Optional environment variables naming the reviewer's model and effort; each is passed to the backend's CLI only when set, so no model or effort is chosen here. */
-  reviewerModelEnv: "ROBLOX_KIT_REVIEWER_MODEL",
-  reviewerEffortEnv: "ROBLOX_KIT_REVIEWER_EFFORT",
   captureFolder: ".roblox-kit/captures",
-  calibrationReferenceMeanFloor: 6,
-  calibrationBadAnchorMeanCeiling: 4,
-  calibrationAxisGap: 2,
-  evalWaveRoomTypes: ["platform", "concourse", "ticket-hall"],
 
   /** Folder, under the repository root, that generated hero-prop GLBs go to, one `<preset>-<kind>-<hash>` folder each. */
   heroPropsFolder: ".roblox-kit/hero-props",
