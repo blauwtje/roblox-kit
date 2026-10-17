@@ -113,3 +113,10 @@ await test("loadPresets names the file that is not valid JSON", async () => {
     await assert.rejects(loadPresets(folder), /Preset broken\.json is not valid JSON/);
   });
 });
+
+await test("bundled presets keep only the accent in their palette", async () => {
+  const presets = await loadPresets();
+  for (const [name, preset] of presets) {
+    assert.deepEqual(Object.keys(preset.palette), ["accent"], name);
+  }
+});
