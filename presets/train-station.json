@@ -107,11 +107,26 @@
   },
   "propKit": ["bench", "lamp", "pillar", "stairs", "rail"],
   "propWeights": {
-    "bench": { "weight": 4, "wall": "long" },
-    "lamp": { "weight": 1, "wall": "any" },
-    "pillar": { "weight": 1, "wall": "any" },
-    "stairs": { "weight": 3, "wall": "doorless" },
-    "rail": { "weight": 1, "wall": "long" }
+    "bench": {
+      "weight": 4,
+      "wall": "long"
+    },
+    "lamp": {
+      "weight": 1,
+      "wall": "any"
+    },
+    "pillar": {
+      "weight": 1,
+      "wall": "any"
+    },
+    "stairs": {
+      "weight": 3,
+      "wall": "doorless"
+    },
+    "rail": {
+      "weight": 1,
+      "wall": "long"
+    }
   },
   "propRules": {
     "bench": {
@@ -860,7 +875,31 @@
         }
       ],
       "signLabel": "CONCOURSE",
-      "roomNames": ["waiting area", "hall", "station hall", "lobby"]
+      "roomNames": ["waiting area", "hall", "station hall", "lobby"],
+      "npcs": [
+        {
+          "role": "commuter",
+          "density": 0.6
+        },
+        {
+          "role": "guard",
+          "density": 0.15
+        }
+      ],
+      "clutter": [
+        {
+          "kind": "luggage",
+          "density": 0.3
+        },
+        {
+          "kind": "bin",
+          "density": 0.2
+        },
+        {
+          "kind": "newspaper-stack",
+          "density": 0.15
+        }
+      ]
     },
     "platform": {
       "setPieces": ["track-bed", "platform-edge", "clock"],
@@ -885,7 +924,27 @@
         }
       ],
       "signLabel": "PLATFORM 1",
-      "roomNames": ["track", "station platform"]
+      "roomNames": ["track", "station platform"],
+      "npcs": [
+        {
+          "role": "commuter",
+          "density": 0.5
+        },
+        {
+          "role": "guard",
+          "density": 0.2
+        }
+      ],
+      "clutter": [
+        {
+          "kind": "luggage",
+          "density": 0.25
+        },
+        {
+          "kind": "bin",
+          "density": 0.2
+        }
+      ]
     },
     "ticket-hall": {
       "setPieces": ["ticket-counter"],
@@ -919,7 +978,17 @@
         }
       ],
       "signLabel": "TICKETS",
-      "roomNames": ["ticket counter", "ticket office", "booking hall"]
+      "roomNames": ["ticket counter", "ticket office", "booking hall"],
+      "npcs": [
+        {
+          "role": "clerk",
+          "density": 0.2
+        },
+        {
+          "role": "commuter",
+          "density": 0.3
+        }
+      ]
     }
   },
   "idleAnimations": {
@@ -929,35 +998,80 @@
       "hinge": "top"
     },
     "lamp": {
+      "kind": "flicker",
       "swayDegrees": 0.6,
       "periodSeconds": 6,
       "hinge": "bottom"
+    },
+    "clock": {
+      "kind": "tick",
+      "swayDegrees": 1,
+      "periodSeconds": 1,
+      "hinge": "top"
+    },
+    "departure-board": {
+      "kind": "flip",
+      "swayDegrees": 1,
+      "periodSeconds": 8,
+      "hinge": "top"
     }
   },
   "meshes": {
     "pillar": {
       "script": "src/hero-props/meshes/train-station/pillar.py",
-      "targets": [{ "replaces": "prop:pillar", "anchor": "bottom" }]
+      "targets": [
+        {
+          "replaces": "prop:pillar",
+          "anchor": "bottom"
+        }
+      ]
     },
     "bench": {
       "script": "src/hero-props/meshes/train-station/bench.py",
-      "targets": [{ "replaces": "prop:bench", "anchor": "bottom" }]
+      "targets": [
+        {
+          "replaces": "prop:bench",
+          "anchor": "bottom"
+        }
+      ]
     },
     "ticket-machine": {
       "script": "src/hero-props/meshes/train-station/ticket-machine.py",
-      "targets": [{ "replaces": "prop:ticket-machine", "anchor": "bottom", "yaw": 180 }]
+      "targets": [
+        {
+          "replaces": "prop:ticket-machine",
+          "anchor": "bottom",
+          "yaw": 180
+        }
+      ]
     },
     "clock": {
       "script": "src/hero-props/meshes/train-station/clock.py",
-      "targets": [{ "replaces": "prop:clock", "anchor": "center" }]
+      "targets": [
+        {
+          "replaces": "prop:clock",
+          "anchor": "center"
+        }
+      ]
     },
     "departure-board": {
       "script": "src/hero-props/meshes/train-station/departure-board.py",
-      "targets": [{ "replaces": "prop:departure-board", "anchor": "center" }]
+      "targets": [
+        {
+          "replaces": "prop:departure-board",
+          "anchor": "center"
+        }
+      ]
     },
     "sign": {
       "script": "src/hero-props/meshes/train-station/sign.py",
-      "targets": [{ "replaces": "prop:sign", "anchor": "center", "label": "CONCOURSE" }]
+      "targets": [
+        {
+          "replaces": "prop:sign",
+          "anchor": "center",
+          "label": "CONCOURSE"
+        }
+      ]
     },
     "pendant": {
       "script": "src/hero-props/meshes/train-station/pendant.py",
@@ -965,24 +1079,47 @@
         {
           "replaces": "fixture:pendant",
           "anchor": "center",
-          "glow": { "diameter": 0.8, "drop": 0.54 }
+          "glow": {
+            "diameter": 0.8,
+            "drop": 0.54
+          }
         }
       ]
     },
     "ticket-counter": {
       "script": "src/hero-props/meshes/train-station/ticket-counter.py",
-      "targets": [{ "replaces": "prop:ticket-counter", "anchor": "center", "yaw": 180 }]
+      "targets": [
+        {
+          "replaces": "prop:ticket-counter",
+          "anchor": "center",
+          "yaw": 180
+        }
+      ]
     },
     "train-car": {
       "script": "src/hero-props/meshes/train-station/train-car.py",
-      "targets": [{ "replaces": "onto:prop:track-bed", "anchor": "bottom" }]
+      "targets": [
+        {
+          "replaces": "onto:prop:track-bed",
+          "anchor": "bottom"
+        }
+      ]
     },
     "arch-trim": {
       "script": "src/hero-props/meshes/train-station/arch-trim.py",
       "targets": [
-        { "replaces": "arch", "part": "arch" },
-        { "replaces": "band:crown", "part": "crown" },
-        { "replaces": "band:baseboard", "part": "baseboard" }
+        {
+          "replaces": "arch",
+          "part": "arch"
+        },
+        {
+          "replaces": "band:crown",
+          "part": "crown"
+        },
+        {
+          "replaces": "band:baseboard",
+          "part": "baseboard"
+        }
       ]
     }
   },
@@ -1051,5 +1188,101 @@
       "min": 5,
       "max": 6.5
     }
+  },
+  "npcRoles": {
+    "commuter": {
+      "outfits": [
+        {
+          "head": "#e0b48c",
+          "torso": "#5a6b7d",
+          "arms": "#5a6b7d",
+          "legs": "#2b2f36",
+          "scale": {
+            "min": 0.95,
+            "max": 1.05
+          }
+        },
+        {
+          "head": "#e0b48c",
+          "torso": "#8a5a44",
+          "arms": "#8a5a44",
+          "legs": "#3a3226",
+          "scale": {
+            "min": 0.95,
+            "max": 1.05
+          }
+        },
+        {
+          "head": "#e0b48c",
+          "torso": "#4f6b53",
+          "arms": "#4f6b53",
+          "legs": "#2b2f36",
+          "scale": {
+            "min": 0.9,
+            "max": 1.0
+          }
+        }
+      ],
+      "speed": {
+        "min": 8,
+        "max": 12
+      },
+      "chatLines": ["Is this the 8:15?", "Mind the gap.", "Running late again."],
+      "behaviors": {
+        "walk": 4,
+        "idle": 2,
+        "sit": 2,
+        "chat": 1
+      }
+    },
+    "clerk": {
+      "outfits": [
+        {
+          "head": "#e0b48c",
+          "torso": "#1c2a44",
+          "arms": "#1c2a44",
+          "legs": "#2b2f36",
+          "scale": {
+            "min": 0.95,
+            "max": 1.05
+          }
+        }
+      ],
+      "speed": {
+        "min": 6,
+        "max": 8
+      },
+      "chatLines": ["Next, please.", "Single or return?"],
+      "behaviors": {
+        "idle": 4,
+        "chat": 1
+      }
+    },
+    "guard": {
+      "outfits": [
+        {
+          "head": "#e0b48c",
+          "torso": "#1c2a44",
+          "arms": "#1c2a44",
+          "legs": "#1c2a44",
+          "scale": {
+            "min": 1.0,
+            "max": 1.1
+          }
+        }
+      ],
+      "speed": {
+        "min": 8,
+        "max": 10
+      },
+      "chatLines": ["Stand back from the yellow line.", "All aboard."],
+      "behaviors": {
+        "walk": 3,
+        "idle": 3
+      }
+    }
+  },
+  "signage": {
+    "destinations": ["Riverton", "Harbor Cross", "Old Mill", "Northgate", "Eastfield"]
   }
 }

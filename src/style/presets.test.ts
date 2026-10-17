@@ -264,3 +264,21 @@ await test("the train-station preset declares a placement on each set-piece prop
     assert.equal(preset.propRules[kind]?.placement, placement, kind);
   }
 });
+
+await test("the train-station preset declares its people, clutter, destinations and prop motion", async () => {
+  const preset = (await loadPresets()).get("train-station");
+  assert.ok(preset !== undefined);
+  assert.deepEqual(Object.keys(preset.npcRoles ?? {}).sort(), ["clerk", "commuter", "guard"]);
+  for (const typeName of ["concourse", "platform"]) {
+    const roomType = preset.roomTypes?.[typeName];
+    assert.ok((roomType?.npcs ?? []).length > 0, `${typeName} npcs`);
+    assert.ok((roomType?.clutter ?? []).length > 0, `${typeName} clutter`);
+  }
+  assert.ok((preset.signage?.destinations ?? []).length > 0, "destinations");
+  const kinds = Object.fromEntries(
+    Object.entries(preset.idleAnimations ?? {}).map(([kind, idle]) => [kind, idle.kind]),
+  );
+  assert.equal(kinds["clock"], "tick");
+  assert.equal(kinds["lamp"], "flicker");
+  assert.equal(kinds["departure-board"], "flip");
+});
