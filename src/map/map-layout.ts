@@ -3,8 +3,11 @@ import type { Preset } from "../style/preset-schema.ts";
 import { createSeededRandom } from "../shared/seeded-random.ts";
 import {
   extentOf,
+  measureRoom,
   otherAxisOf,
   sideSteps,
+  sides,
+  type Side,
   type GraphMapSpec,
   type GraphRoomSpec,
   type MapSpec,
@@ -70,8 +73,6 @@ export interface MapLayout {
   terrainFills: TerrainFill[];
 }
 
-type Side = RoomSpec["doors"][number]["side"];
-
 interface RoomStyle {
   floorMaterial: string;
   wallMaterial: string;
@@ -97,8 +98,6 @@ interface DoorGap extends Interval {
   height?: number | undefined;
 }
 
-const sides: Side[] = ["north", "south", "east", "west"];
-
 /** Room settings win over map settings, which win over the style's surface material, which wins over the config defaults. */
 function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): RoomStyle {
   const floorMaterial =
@@ -115,9 +114,7 @@ function resolveStyle(spec: MapSpec, room: RoomSpec, surfaces: SurfaceColors): R
       config.defaultWallMaterial,
     ceilingMaterial: surfaces.ceiling?.material ?? config.defaultCeilingMaterial,
     spawnMaterial: surfaces.accent?.material ?? floorMaterial,
-    wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
-    wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
-    doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
+    ...measureRoom(spec, room),
     floorColor: surfaces.floor.color,
     wallColor: surfaces.wall.color,
     ceilingColor: surfaces.ceiling?.color ?? defaultCeilingColor,
@@ -300,14 +297,6 @@ interface GraphContext {
   visitedNodes: number;
 }
 
-function graphDoorWidth(spec: GraphMapSpec, room: GraphRoomSpec): number {
-  return room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds;
-}
-
-function graphWallThickness(spec: GraphMapSpec, room: GraphRoomSpec): number {
-  return room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds;
-}
-
 /** Orders rooms breadth-first from the first one, so each follows a room it joins; a room the graph does not reach is an error. */
 function graphContext(spec: GraphMapSpec): GraphContext {
   const neighbors = new Map<string, string[]>(spec.rooms.map((room) => [room.name, []]));
@@ -338,8 +327,8 @@ function graphContext(spec: GraphMapSpec): GraphContext {
     );
   }
   for (const edge of spec.graph.edges) {
-    const widthA = graphDoorWidth(spec, roomsByName.get(edge.a) as GraphRoomSpec);
-    const widthB = graphDoorWidth(spec, roomsByName.get(edge.b) as GraphRoomSpec);
+    const widthA = measureRoom(spec, roomsByName.get(edge.a) as GraphRoomSpec).doorWidth;
+    const widthB = measureRoom(spec, roomsByName.get(edge.b) as GraphRoomSpec).doorWidth;
     if (widthA !== widthB) {
       throw new Error(
         `Rooms "${edge.a}" and "${edge.b}" are joined but their doors are ${String(widthA)} and ${String(widthB)} wide; set the same doorWidth on both.`,
@@ -378,8 +367,8 @@ function joiningDoors(
     if (Math.abs(faceGap) > config.overlapToleranceStuds) {
       continue;
     }
-    const width = graphDoorWidth(context.spec, placement.room);
-    const margin = 2 * graphWallThickness(context.spec, placement.room);
+    const width = measureRoom(context.spec, placement.room).doorWidth;
+    const margin = 2 * measureRoom(context.spec, placement.room).wallThickness;
     if (overlapOnAxis(placement, other, across) < width + margin) {
       return undefined;
     }
@@ -420,7 +409,7 @@ function extendPlacements(
   if (!anchor) {
     return [];
   }
-  const width = graphDoorWidth(context.spec, room);
+  const width = measureRoom(context.spec, room).doorWidth;
   const results: Placement[][] = [];
   for (const step of Object.values(sideSteps)) {
     const { axis, sign } = step;

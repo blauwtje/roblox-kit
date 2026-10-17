@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
-import { graphMapSpecSchema, mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
+import {
+  graphMapSpecSchema,
+  mapSpecSchema,
+  measureRoom,
+  relationMapSpecSchema,
+} from "./map-spec.ts";
 
 const room = { name: "hall", x: 0, z: 0, width: 20, depth: 20 };
 const minimalSpec = { mapId: "m", rooms: [room] };
@@ -159,4 +164,17 @@ await test("a graph spec's rooms have no center and its edges name two different
   );
   assert.equal(parse([], [rooms[0] as object, rooms[0] as object]).success, false);
   assert.equal(graphMapSpecSchema.safeParse({ mapId: "m", rooms }).success, false);
+});
+
+await test("measureRoom lets a room's sizes win over the map's, which win over the config defaults", () => {
+  assert.deepEqual(measureRoom({}, {}), {
+    wallHeight: config.defaultWallHeightStuds,
+    wallThickness: config.defaultWallThicknessStuds,
+    doorWidth: config.defaultDoorWidthStuds,
+  });
+  assert.deepEqual(measureRoom({ wallHeight: 20, doorWidth: 9 }, { wallHeight: 30 }), {
+    wallHeight: 30,
+    wallThickness: config.defaultWallThicknessStuds,
+    doorWidth: 9,
+  });
 });

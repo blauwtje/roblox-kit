@@ -239,7 +239,27 @@ export type RelationRoomSpec = RelationMapSpec["rooms"][number];
 export type GraphMapSpec = z.output<typeof graphMapSpecSchema>;
 export type GraphRoomSpec = GraphMapSpec["rooms"][number];
 
-type DoorSide = RoomSpec["doors"][number]["side"];
+export const sides = ["north", "south", "east", "west"] as const;
+export type Side = (typeof sides)[number];
+type DoorSide = Side;
+
+/** The wall and door sizes of one room, in studs. */
+export interface RoomMeasure {
+  wallHeight: number;
+  wallThickness: number;
+  doorWidth: number;
+}
+
+type MeasureSource = Pick<MapSpec, "wallHeight" | "wallThickness" | "doorWidth">;
+
+/** Room settings win over map settings, which win over the `config` defaults. */
+export function measureRoom(spec: MeasureSource, room: MeasureSource): RoomMeasure {
+  return {
+    wallHeight: room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds,
+    wallThickness: room.wallThickness ?? spec.wallThickness ?? config.defaultWallThicknessStuds,
+    doorWidth: room.doorWidth ?? spec.doorWidth ?? config.defaultDoorWidthStuds,
+  };
+}
 
 /** What walking out of a door on each side means: the axis it moves along, its sign (north is -Z, south +Z, east +X, west -X) and the side a door facing it sits on. */
 export const sideSteps: Record<DoorSide, { axis: "x" | "z"; sign: 1 | -1; opposite: DoorSide }> = {

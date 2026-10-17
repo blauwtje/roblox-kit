@@ -1,6 +1,6 @@
 import { config } from "../config.ts";
 import type { Vector } from "../map/map-layout.ts";
-import type { MapSpec, RoomSpec } from "../map/map-spec.ts";
+import { measureRoom, type MapSpec, type RoomSpec, type Side } from "../map/map-spec.ts";
 import { cornerReachStuds, roomBounds } from "../map/prop-placement.ts";
 import type { RoomBounds } from "../map/prop-placement.ts";
 import type { Preset } from "../style/preset-schema.ts";
@@ -9,7 +9,6 @@ import { progressionFactor, progressionScale, roomProgression } from "../style/r
 export type LightRoleName = keyof Preset["lightRoles"];
 
 type LightFixtures = NonNullable<Preset["lightFixtures"]>;
-type WallSide = RoomSpec["doors"][number]["side"];
 
 /** A Neon ball a fixture shows in place of its box: its `diameter` and how far `drop` it hangs below the box's centre. */
 export interface FixtureGlow {
@@ -60,7 +59,7 @@ function repeatedOffsets(limit: number, spacing: number): number[] {
 /** Whether a fixture `along` a wall, reaching `halfExtent` either side, would cover a door gap of the wall. */
 function blocksDoor(
   room: RoomSpec,
-  side: WallSide,
+  side: Side,
   doorWidth: number,
   along: number,
   halfExtent: number,
@@ -167,7 +166,7 @@ export function placeLights(
     const roomStart = placements.length;
     // Rooms deeper from the spawn room get a shorter reach, which reads as dimmer light.
     const reach = progressionFactor(progression.get(room.name) ?? 0, progressionScale.lightRange);
-    const wallHeight = room.wallHeight ?? spec.wallHeight ?? config.defaultWallHeightStuds;
+    const { wallHeight } = measureRoom(spec, room);
     const isHeroRoom = lightFixtures !== undefined || room === heroRoom;
     const role = isHeroRoom ? "hero" : "zoneMarker";
     placements.push({
