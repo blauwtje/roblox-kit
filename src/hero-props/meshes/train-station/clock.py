@@ -12,28 +12,20 @@ faces. Every part is one material switched by a "paint" attribute, joined into o
 enlarged) and baked to color (with occlusion grime), roughness, metalness and tangent normal maps by `shared.py`.
 """
 
+import importlib
 import math
 import os
 import sys
+from typing import NamedTuple
 
 import bmesh
 import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from shared import (  # noqa: E402
-    bake,
-    export_glb,
-    linear,
-    link_object,
-    mix_color,
-    mix_float,
-    noise,
-    OUTPUT,
-    ramp_node,
-    set_up_cycles,
-    triangle_count,
-)
+geometry = importlib.import_module("lib.geometry")
+materials = importlib.import_module("lib.materials")
+run = importlib.import_module("lib.run")
 
 CENTER_Z = 8.37  # drum centre; + bezel radius 2.5 = 10.87
 DIAL_Y, DIAL_R = 0.46, 2.31
@@ -48,19 +40,6 @@ BRONZE, GILT, DIAL, BLACK = range(4)
 HOUR_ANGLE, MINUTE_ANGLE = math.radians(305), math.radians(60)  # 10:10, clockwise from 12
 
 
-def math_node(nodes, links, operation, a, b, c=None):
-    node = nodes.new("ShaderNodeMath")
-    node.operation = operation
-    for index, value in enumerate((a, b, c)):
-        if value is None:
-            continue
-        if isinstance(value, float):
-            node.inputs[index].default_value = value
-        else:
-            links.new(value, node.inputs[index])
-    return node.outputs["Value"]
-
-
 def dial_print():
     """Renders the enamel print flat in Workbench, seen from +Z with 12 o'clock toward +Y, and loads it."""
     scene = bpy.context.scene
@@ -68,7 +47,7 @@ def dial_print():
 
     def flat(name, hex_color):
         material = bpy.data.materials.new(name)
-        material.diffuse_color = linear(hex_color)
+        material.diffuse_color = materials.linear(hex_color)
         return material
 
     enamel, ink = flat("enamel", ENAMEL), flat("ink", INK)
@@ -156,7 +135,7 @@ def dial_print():
     scene.view_settings.view_transform = "Standard"
     scene.render.resolution_x = scene.render.resolution_y = PRINT_SIZE
     scene.render.resolution_percentage = 100
-    path = f"{OUTPUT}-dial-print.png"
+    path = f"{run.OUTPUT}-dial-print.png"
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     for obj in made + [camera]:
@@ -167,159 +146,137 @@ def dial_print():
 
 
 def clock_material(print_image):
-    material = bpy.data.materials.new("paint")
+    material, stack = materials.paint_stack(
+        [
+            ([(0.2, "#29231d"), (0.8, "#382f25")], "#6e5a3e"),
+            ([(0.3, "#a17c38"), (0.7, "#cfa758")], "#ead296"),
+        ],
+        0.015,
+    )
     tree = material.node_tree
     nodes, links = tree.nodes, tree.links
-    bsdf = nodes["Principled BSDF"]
-    coords = nodes.new("ShaderNodeTexCoord").outputs["Object"]
-    geometry = nodes.new("ShaderNodeNewGeometry")
+    bsdf, coords, surface = stack["bsdf"], stack["coords"], stack["geometry"]
+    patch, wear, worn = stack["patch"], stack["wear"], stack["worn"]
     separate = nodes.new("ShaderNodeSeparateXYZ")
     links.new(coords, separate.inputs["Vector"])
     height = separate.outputs["Z"]
     normal_z = nodes.new("ShaderNodeSeparateXYZ")
-    links.new(geometry.outputs["Normal"], normal_z.inputs["Vector"])
-    # Which finish a part has, from the attribute each part carries, since joining loses objects.
-    paint_attribute = nodes.new("ShaderNodeAttribute")
-    paint_attribute.attribute_name = "paint"
-    code = paint_attribute.outputs["Fac"]
-    mask = {kind: math_node(nodes, links, "COMPARE", code, float(kind), 0.5) for kind in range(4)}
-    patch = noise(nodes, links, coords, 2.5, 6.0)
-    bronze = ramp_node(nodes, [(0.2, "#29231d"), (0.8, "#382f25")])
-    links.new(patch, bronze.inputs["Fac"])
-    # Edge wear where a bevelled normal leaves the true normal, broken up by noise: bare metal under the bronze
-    # paint, a rubbed bright edge on the gilt.
-    bevel = nodes.new("ShaderNodeBevel")
-    bevel.inputs["Radius"].default_value = 0.015
-    facing = nodes.new("ShaderNodeVectorMath")
-    facing.operation = "DOT_PRODUCT"
-    links.new(bevel.outputs["Normal"], facing.inputs[0])
-    links.new(geometry.outputs["Normal"], facing.inputs[1])
-    edge_ramp = ramp_node(nodes, [(0.9, "#ffffff"), (0.97, "#000000")])
-    links.new(facing.outputs["Value"], edge_ramp.inputs["Fac"])
-    edge = edge_ramp.outputs["Color"]
-    chip_ramp = ramp_node(nodes, [(0.45, "#000000"), (0.58, "#ffffff")])
-    links.new(noise(nodes, links, coords, 14.0, 6.0), chip_ramp.inputs["Fac"])
-    wear = math_node(nodes, links, "MULTIPLY", edge, chip_ramp.outputs["Color"])
-    paint_wear = math_node(nodes, links, "MULTIPLY", wear, mask[BRONZE])
-    worn = mix_color(nodes, links, "MIX", paint_wear, bronze.outputs["Color"], linear("#6e5a3e"))
-    gilt = ramp_node(nodes, [(0.3, "#a17c38"), (0.7, "#cfa758")])
-    links.new(noise(nodes, links, coords, 7.0, 6.0), gilt.inputs["Fac"])
-    polished = mix_color(nodes, links, "MIX", edge, gilt.outputs["Color"], linear("#ead296"))
-    gilded = mix_color(nodes, links, "MIX", mask[GILT], worn, polished)
-    # The dial print, mapped by object x and z; seen from the back (+Y), the viewer's right is -X.
-    back = math_node(nodes, links, "GREATER_THAN", separate.outputs["Y"], 0.0)
-    sign = math_node(nodes, links, "SUBTRACT", 1.0, math_node(nodes, links, "MULTIPLY", back, 2.0))
-    mirrored = math_node(nodes, links, "MULTIPLY", separate.outputs["X"], sign)
-    u = math_node(nodes, links, "ADD", math_node(nodes, links, "MULTIPLY", mirrored, 1 / (2 * PRINT_R)), 0.5)
-    v = math_node(nodes, links, "ADD", math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "SUBTRACT", height, CENTER_Z), 1 / (2 * PRINT_R)), 0.5)
-    combine = nodes.new("ShaderNodeCombineXYZ")
-    links.new(u, combine.inputs["X"])
-    links.new(v, combine.inputs["Y"])
-    printed = nodes.new("ShaderNodeTexImage")
-    printed.image = print_image
-    printed.extension = "EXTEND"
-    links.new(combine.outputs["Vector"], printed.inputs["Vector"])
-    yellowing = ramp_node(nodes, [(0.3, "#ebe2cc"), (0.75, "#ffffff")])
-    links.new(noise(nodes, links, coords, 1.6, 4.0), yellowing.inputs["Fac"])
-    enamel = mix_color(nodes, links, "MULTIPLY", 1.0, printed.outputs["Color"], yellowing.outputs["Color"])
-    dialled = mix_color(nodes, links, "MIX", mask[DIAL], gilded, enamel)
-    black = ramp_node(nodes, [(0.3, "#121110"), (0.7, "#1c1a17")])
+    links.new(surface.outputs["Normal"], normal_z.inputs["Vector"])
+    mask = {kind: materials.math_node(tree, "COMPARE", (stack["dark_amount"], float(kind), 0.5)) for kind in range(4)}
+    paint_wear = materials.math_node(tree, "MULTIPLY", (wear, mask[BRONZE]))
+    printed = materials.printed_face(tree, coords, print_image, CENTER_Z, PRINT_R)
+    yellowing = materials.ramp_node(nodes, [(0.3, "#ebe2cc"), (0.75, "#ffffff")])
+    links.new(materials.noise(tree, coords, (1.6, 4.0)), yellowing.inputs["Fac"])
+    enamel = materials.mix_color(tree, "MULTIPLY", (1.0, printed, yellowing.outputs["Color"]))
+    dialled = materials.mix_color(tree, "MIX", (mask[DIAL], worn, enamel))
+    black = materials.ramp_node(nodes, [(0.3, "#121110"), (0.7, "#1c1a17")])
     links.new(patch, black.inputs["Fac"])
-    blacked = mix_color(nodes, links, "MIX", mask[BLACK], dialled, black.outputs["Color"])
+    blacked = materials.mix_color(tree, "MIX", (mask[BLACK], dialled, black.outputs["Color"]))
     # Rust only on the plinth, where feet and mop buckets chip the paint.
-    rust_ramp = ramp_node(nodes, [(0.6, "#000000"), (0.72, "#ffffff")])
-    links.new(noise(nodes, links, coords, 4.0, 10.0), rust_ramp.inputs["Fac"])
+    rust_ramp = materials.ramp_node(nodes, [(0.6, "#000000"), (0.72, "#ffffff")])
+    links.new(materials.noise(tree, coords, (4.0, 10.0)), rust_ramp.inputs["Fac"])
     low = nodes.new("ShaderNodeMapRange")
     low.inputs["From Min"].default_value = 0.0
     low.inputs["From Max"].default_value = 0.45
     low.inputs["To Min"].default_value = 1.0
     low.inputs["To Max"].default_value = 0.0
     links.new(height, low.inputs["Value"])
-    rust = math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "MULTIPLY", rust_ramp.outputs["Color"], low.outputs["Result"]), mask[BRONZE])
-    rusty = mix_color(nodes, links, "MIX", rust, blacked, linear("#5c3720"))
+    rust = materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "MULTIPLY", (rust_ramp.outputs["Color"], low.outputs["Result"])), mask[BRONZE]))
+    rusty = materials.mix_color(tree, "MIX", (rust, blacked, materials.linear("#5c3720")))
     # Dust settles on surfaces that face up.
-    dust_ramp = ramp_node(nodes, [(0.55, "#000000"), (0.9, "#595959")])
+    dust_ramp = materials.ramp_node(nodes, [(0.55, "#000000"), (0.9, "#595959")])
     links.new(normal_z.outputs["Z"], dust_ramp.inputs["Fac"])
-    dust = math_node(nodes, links, "MULTIPLY", dust_ramp.outputs["Color"], math_node(nodes, links, "SUBTRACT", 1.0, mask[DIAL]))
-    dusty = mix_color(nodes, links, "MIX", dust, rusty, linear("#a39a88"))
+    dust = materials.math_node(tree, "MULTIPLY", (dust_ramp.outputs["Color"], materials.math_node(tree, "SUBTRACT", (1.0, mask[DIAL]))))
+    dusty = materials.mix_color(tree, "MIX", (dust, rusty, materials.linear("#a39a88")))
     # Faint vertical streaks: noise stretched along the column.
     streak_mapping = nodes.new("ShaderNodeMapping")
     streak_mapping.inputs["Scale"].default_value = (9.0, 9.0, 0.6)
     links.new(coords, streak_mapping.inputs["Vector"])
-    streak_ramp = ramp_node(nodes, [(0.55, "#ffffff"), (0.8, "#e2dbcf")])
-    links.new(noise(nodes, links, streak_mapping.outputs["Vector"], 2.0, 4.0), streak_ramp.inputs["Fac"])
-    streaked = mix_color(nodes, links, "MULTIPLY", 1.0, dusty, streak_ramp.outputs["Color"])
+    streak_ramp = materials.ramp_node(nodes, [(0.55, "#ffffff"), (0.8, "#e2dbcf")])
+    links.new(materials.noise(tree, streak_mapping.outputs["Vector"], (2.0, 4.0)), streak_ramp.inputs["Fac"])
+    streaked = materials.mix_color(tree, "MULTIPLY", (1.0, dusty, streak_ramp.outputs["Color"]))
     # Scuffs and floor grime fade out by about knee height.
-    floor_ramp = ramp_node(nodes, [(0.0, "#8f8472"), (1.0, "#ffffff")])
+    floor_ramp = materials.ramp_node(nodes, [(0.0, "#8f8472"), (1.0, "#ffffff")])
     floor_range = nodes.new("ShaderNodeMapRange")
     floor_range.inputs["From Max"].default_value = 1.2
     links.new(height, floor_range.inputs["Value"])
-    scuff_noise = math_node(nodes, links, "ADD", floor_range.outputs["Result"], noise(nodes, links, coords, 6.0, 4.0))
-    links.new(math_node(nodes, links, "MULTIPLY", scuff_noise, 0.75), floor_ramp.inputs["Fac"])
-    floored = mix_color(nodes, links, "MULTIPLY", 1.0, streaked, floor_ramp.outputs["Color"])
+    scuff_noise = materials.math_node(tree, "ADD", (floor_range.outputs["Result"], materials.noise(tree, coords, (6.0, 4.0))))
+    links.new(materials.math_node(tree, "MULTIPLY", (scuff_noise, 0.75)), floor_ramp.inputs["Fac"])
+    floored = materials.mix_color(tree, "MULTIPLY", (1.0, streaked, floor_ramp.outputs["Color"]))
     occlusion = nodes.new("ShaderNodeAmbientOcclusion")
     occlusion.inputs["Distance"].default_value = 0.2
-    grime_ramp = ramp_node(nodes, [(0.0, "#73695a"), (1.0, "#ffffff")])
+    grime_ramp = materials.ramp_node(nodes, [(0.0, "#73695a"), (1.0, "#ffffff")])
     links.new(occlusion.outputs["AO"], grime_ramp.inputs["Fac"])
-    grimy = mix_color(nodes, links, "MULTIPLY", 1.0, floored, grime_ramp.outputs["Color"])
+    grimy = materials.mix_color(tree, "MULTIPLY", (1.0, floored, grime_ramp.outputs["Color"]))
     links.new(grimy, bsdf.inputs["Base Color"])
     # Paint, enamel and hands are dielectric; gilt is metal, and so are bare worn edges, but rust is not.
-    unrusted = math_node(nodes, links, "SUBTRACT", 1.0, rust)
-    worn_metal = math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "MULTIPLY", paint_wear, 0.7), unrusted)
-    gilt_metal = math_node(nodes, links, "MULTIPLY", mask[GILT], 0.55)
-    links.new(math_node(nodes, links, "ADD", worn_metal, gilt_metal), bsdf.inputs["Metallic"])
+    unrusted = materials.math_node(tree, "SUBTRACT", (1.0, rust))
+    worn_metal = materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "MULTIPLY", (paint_wear, 0.7)), unrusted))
+    gilt_metal = materials.math_node(tree, "MULTIPLY", (mask[GILT], 0.55))
+    links.new(materials.math_node(tree, "ADD", (worn_metal, gilt_metal)), bsdf.inputs["Metallic"])
     paint_roughness = nodes.new("ShaderNodeMapRange")
     paint_roughness.inputs["To Min"].default_value = 0.42
     paint_roughness.inputs["To Max"].default_value = 0.6
     links.new(patch, paint_roughness.inputs["Value"])
-    rough = mix_float(nodes, links, paint_wear, paint_roughness.outputs["Result"], 0.35)
-    rough = mix_float(nodes, links, mask[GILT], rough, mix_float(nodes, links, edge, 0.4, 0.26))
-    rough = mix_float(nodes, links, mask[DIAL], rough, 0.22)
-    rough = mix_float(nodes, links, mask[BLACK], rough, 0.45)
-    rough = mix_float(nodes, links, rust, rough, 0.9)
-    rough = mix_float(nodes, links, dust, rough, 0.85)
+    rough = materials.mix_float(tree, (paint_wear, paint_roughness.outputs["Result"], 0.35))
+    rough = materials.mix_float(tree, (mask[GILT], rough, materials.mix_float(tree, (wear, 0.4, 0.26))))
+    rough = materials.mix_float(tree, (mask[DIAL], rough, 0.22))
+    rough = materials.mix_float(tree, (mask[BLACK], rough, 0.45))
+    rough = materials.mix_float(tree, (rust, rough, 0.9))
+    rough = materials.mix_float(tree, (dust, rough, 0.85))
     links.new(rough, bsdf.inputs["Roughness"])
     # Orange-peel paint and a cast surface: a fine, weak bump, left off the enamel.
     bump = nodes.new("ShaderNodeBump")
-    links.new(math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "SUBTRACT", 1.0, mask[DIAL]), 0.12), bump.inputs["Strength"])
+    links.new(materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "SUBTRACT", (1.0, mask[DIAL])), 0.12)), bump.inputs["Strength"])
     bump.inputs["Distance"].default_value = 0.004
-    links.new(noise(nodes, links, coords, 40.0, 4.0), bump.inputs["Height"])
+    links.new(materials.noise(tree, coords, (40.0, 4.0)), bump.inputs["Height"])
     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
     return material
 
 
-def mark_paint(obj, value):
-    paint = obj.data.attributes.new("paint", "FLOAT", "POINT")
-    paint.data.foreach_set("value", [float(value)] * len(obj.data.vertices))
+class Part(NamedTuple):
+    paint: int
+    bevel: float = 0.0
+    recalc: bool = True
 
 
-def finish(name, bm, paint, bevel=0.0, recalc=True):
-    if recalc:
+class Turn(NamedTuple):
+    segments: int
+    paint: int
+    axis: str = "Z"
+    radial: object = None
+    caps: tuple = (False, False)
+
+
+def add_part(name, bm, part):
+    if part.recalc:
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
-    obj = link_object(name, mesh, MATERIAL)
-    mark_paint(obj, paint)
-    if bevel:
+    obj = materials.link_object(name, mesh, MATERIAL)
+    materials.mark_paint(obj, float(part.paint))
+    if part.bevel:
         modifier = obj.modifiers.new("bevel", "BEVEL")
-        modifier.width = bevel
+        modifier.width = part.bevel
         modifier.segments = 2
     return obj
 
 
-def box(name, width, depth, z0, z1, paint, bevel):
+def block(name, size, part):
+    width, depth, z0, z1 = size
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
     for vert in bm.verts:
         vert.co = Vector((vert.co.x * width, vert.co.y * depth, (z0 + z1) / 2 + vert.co.z * (z1 - z0)))
-    return finish(name, bm, paint, bevel)
+    return add_part(name, bm, part)
 
 
-def lathe(name, rings, segments, paint, axis="Z", radial=None, caps=(False, False)):
+def turn(name, rings, shape):
     """A turned part from (radius, h) rings along an axis (h is the absolute coordinate on that axis; Y and X
     lathes turn round the drum centre's line). Trace the profile with the solid on its left (out along the
     bottom, up the outside) so faces point out; a ring of radius 0 is a pole."""
+    segments, axis, radial, caps = shape.segments, shape.axis, shape.radial, shape.caps
 
     def point(radius, h, theta):
         a, b = radius * math.cos(theta), radius * math.sin(theta)
@@ -354,17 +311,12 @@ def lathe(name, rings, segments, paint, axis="Z", radial=None, caps=(False, Fals
         bm.faces.new(list(reversed(rows[0])))
     if caps[1] and len(rows[-1]) > 1:
         bm.faces.new(rows[-1])
-    return finish(name, bm, paint, recalc=False)
+    return add_part(name, bm, Part(shape.paint, recalc=False))
 
 
-def mirror_y(rings):
+def retrace(rings):
     """The same Y-lathe profile on the back face, retraced so its faces still point out."""
     return [(radius, -h) for radius, h in reversed(rings)]
-
-
-def smoothstep(edge0, edge1, value):
-    t = min(1.0, max(0.0, (value - edge0) / (edge1 - edge0)))
-    return t * t * (3 - 2 * t)
 
 
 DROP = 0.135  # astragal and capital lowered to meet the larger drum
@@ -374,18 +326,18 @@ SHAFT_BOTTOM, SHAFT_TOP, FLUTES = 2.93, 5.25 - DROP, 12
 def column():
     """Stepped bronze plinth, a turned vase base, a plain lower shaft, a collar with a gilt bead, a fluted shaft,
     a gilt astragal and a bell capital cupping the drum."""
-    box("plinth", 1.2, 1.2, 0.0, 0.24, BRONZE, 0.03)
-    box("plinth-step", 0.98, 0.98, 0.22, 0.38, BRONZE, 0.03)
+    block("plinth", (1.2, 1.2, 0.0, 0.24), Part(BRONZE, 0.03))
+    block("plinth-step", (0.98, 0.98, 0.22, 0.38), Part(BRONZE, 0.03))
     base = [
         (0.44, 0.36), (0.465, 0.42), (0.455, 0.48), (0.41, 0.515), (0.375, 0.55), (0.36, 0.62), (0.38, 0.68),
         (0.355, 0.72), (0.31, 0.75), (0.31, 0.82), (0.33, 0.92), (0.315, 1.04), (0.27, 1.13), (0.232, 1.2), (0.212, 1.27),
     ]
-    lathe("base", base, 24, BRONZE)
-    lathe("base-ring", [(0.2, 1.26), (0.235, 1.28), (0.25, 1.32), (0.235, 1.36), (0.2, 1.38)], 24, GILT)
-    lathe("lower-shaft", [(0.206, 1.37), (0.204, 2.0), (0.2, 2.6)], 24, BRONZE)
-    lathe("collar-low", [(0.198, 2.58), (0.235, 2.6), (0.252, 2.635), (0.252, 2.69), (0.235, 2.715)], 24, BRONZE)
-    lathe("collar-bead", [(0.232, 2.705), (0.258, 2.725), (0.268, 2.76), (0.258, 2.795), (0.232, 2.815)], 24, GILT)
-    lathe("collar-high", [(0.235, 2.805), (0.252, 2.83), (0.252, 2.885), (0.235, 2.92), (0.196, 2.94)], 24, BRONZE)
+    turn("base", base, Turn(24, BRONZE))
+    turn("base-ring", [(0.2, 1.26), (0.235, 1.28), (0.25, 1.32), (0.235, 1.36), (0.2, 1.38)], Turn(24, GILT))
+    turn("lower-shaft", [(0.206, 1.37), (0.204, 2.0), (0.2, 2.6)], Turn(24, BRONZE))
+    turn("collar-low", [(0.198, 2.58), (0.235, 2.6), (0.252, 2.635), (0.252, 2.69), (0.235, 2.715)], Turn(24, BRONZE))
+    turn("collar-bead", [(0.232, 2.705), (0.258, 2.725), (0.268, 2.76), (0.258, 2.795), (0.232, 2.815)], Turn(24, GILT))
+    turn("collar-high", [(0.235, 2.805), (0.252, 2.83), (0.252, 2.885), (0.235, 2.92), (0.196, 2.94)], Turn(24, BRONZE))
 
     def shaft_radius(z):
         return 0.197 - 0.019 * (z - SHAFT_BOTTOM) / (SHAFT_TOP - SHAFT_BOTTOM)
@@ -393,30 +345,30 @@ def column():
     def flutes(theta, z):
         position = (theta * FLUTES / (2 * math.pi)) % 1.0
         groove = math.sin(math.pi * position) ** 0.8
-        ends = smoothstep(SHAFT_BOTTOM + 0.03, SHAFT_BOTTOM + 0.15, z) * smoothstep(SHAFT_TOP - 0.03, SHAFT_TOP - 0.15, z)
+        ends = geometry.smoothstep(SHAFT_BOTTOM + 0.03, SHAFT_BOTTOM + 0.15, z) * geometry.smoothstep(SHAFT_TOP - 0.03, SHAFT_TOP - 0.15, z)
         return 1 - 0.02 * groove * ends / shaft_radius(z)
 
     heights = [SHAFT_BOTTOM, SHAFT_BOTTOM + 0.07, SHAFT_BOTTOM + 0.15, 4.1, SHAFT_TOP - 0.15, SHAFT_TOP - 0.07, SHAFT_TOP]
-    lathe("fluted-shaft", [(shaft_radius(z), z) for z in heights], FLUTES * 4, BRONZE, radial=flutes)
-    lathe("astragal", [(r, z - DROP) for r, z in [(0.17, 5.23), (0.195, 5.25), (0.206, 5.28), (0.195, 5.31), (0.17, 5.33)]], 24, GILT)
+    turn("fluted-shaft", [(shaft_radius(z), z) for z in heights], Turn(FLUTES * 4, BRONZE, radial=flutes))
+    turn("astragal", [(r, z - DROP) for r, z in [(0.17, 5.23), (0.195, 5.25), (0.206, 5.28), (0.195, 5.31), (0.17, 5.33)]], Turn(24, GILT))
     capital = [
         (0.172, 5.32), (0.182, 5.44), (0.2, 5.54), (0.235, 5.64), (0.285, 5.74), (0.345, 5.83), (0.395, 5.9),
         (0.415, 5.96), (0.4, 6.0), (0.36, 6.02), (0.3, 6.04), (0.24, 6.12),
     ]
-    lathe("capital", [(r, z - DROP) for r, z in capital], 24, BRONZE)
+    turn("capital", [(r, z - DROP) for r, z in capital], Turn(24, BRONZE))
 
 
 def drum():
     """Bronze drum, moulded bronze bezels 5 wide with gilt sight rings, a gilt girdle and enamel dials."""
-    lathe("drum", [(2.44, -0.43), (2.455, -0.32), (2.46, -0.12), (2.46, 0.12), (2.455, 0.32), (2.44, 0.43)], 64, BRONZE, axis="Y")
-    lathe("girdle", [(2.455, -0.05), (2.475, -0.04), (2.482, 0.0), (2.475, 0.04), (2.455, 0.05)], 64, GILT, axis="Y")
+    turn("drum", [(2.44, -0.43), (2.455, -0.32), (2.46, -0.12), (2.46, 0.12), (2.455, 0.32), (2.44, 0.43)], Turn(64, BRONZE, axis="Y"))
+    turn("girdle", [(2.455, -0.05), (2.475, -0.04), (2.482, 0.0), (2.475, 0.04), (2.455, 0.05)], Turn(64, GILT, axis="Y"))
     bezel = [(2.31, -0.455), (2.31, -0.525), (2.37, -0.562), (2.45, -0.55), (2.495, -0.5), (2.5, -0.44), (2.43, -0.4)]
     sight = [(2.26, -0.462), (2.272, -0.49), (2.3, -0.5), (2.325, -0.49)]
     dial = [(0.0, -DIAL_Y), (DIAL_R, -DIAL_Y)]
-    for side, flip in (("front", lambda rings: rings), ("back", mirror_y)):
-        lathe(f"bezel-{side}", flip(bezel), 64, BRONZE, axis="Y")
-        lathe(f"sight-{side}", flip(sight), 64, GILT, axis="Y")
-        lathe(f"dial-{side}", flip(dial), 64, DIAL, axis="Y")
+    for side, flip in (("front", lambda rings: rings), ("back", retrace)):
+        turn(f"bezel-{side}", flip(bezel), Turn(64, BRONZE, axis="Y"))
+        turn(f"sight-{side}", flip(sight), Turn(64, GILT, axis="Y"))
+        turn(f"dial-{side}", flip(dial), Turn(64, DIAL, axis="Y"))
 
 
 # Half outlines (along, across) from the centre: a spade hour hand and a slimmer minute hand with a small spade.
@@ -439,7 +391,7 @@ def prism_y(name, outline, y0, y1, paint):
     for index in range(len(outline)):
         following = (index + 1) % len(outline)
         bm.faces.new((near[index], near[following], far[following], far[index]))
-    return finish(name, bm, paint)
+    return add_part(name, bm, Part(paint))
 
 
 def hand(name, half, theta, front, y0, y1):
@@ -460,7 +412,7 @@ def hands():
         side = "front" if front else "back"
         hand(f"hour-{side}", HOUR_HAND, HOUR_ANGLE, front, 0.468, 0.49)
         hand(f"minute-{side}", MINUTE_HAND, MINUTE_ANGLE, front, 0.495, 0.517)
-        lathe(f"hand-boss-{side}", boss if front else mirror_y(boss), 16, GILT, axis="Y")
+        turn(f"hand-boss-{side}", boss if front else retrace(boss), Turn(16, GILT, axis="Y"))
 
 
 def join_clock():
@@ -476,7 +428,7 @@ def join_clock():
     return clock
 
 
-def unwrap(clock):
+def unwrap_clock(clock):
     """Smart project, then the dials' islands grown and the plinth's underside shrunk before one repack."""
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
@@ -505,7 +457,7 @@ def unwrap(clock):
 
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-set_up_cycles()
+run.set_up_cycles()
 PRINT = dial_print()
 MATERIAL = clock_material(PRINT)
 column()
@@ -515,7 +467,7 @@ clock = join_clock()
 corners = [Vector(corner) for corner in clock.bound_box]
 low = Vector([min(c[i] for c in corners) for i in range(3)])
 high = Vector([max(c[i] for c in corners) for i in range(3)])
-print("clock triangles", triangle_count(clock), "size", tuple(round(v, 4) for v in high - low), "min", tuple(round(v, 4) for v in low), "max", tuple(round(v, 4) for v in high), "modifiers", len(clock.modifiers))
-unwrap(clock)
-bake([clock], [MATERIAL], "clock")
-export_glb([clock], "clock")
+print("clock triangles", run.triangle_count(clock), "size", tuple(round(v, 4) for v in high - low), "min", tuple(round(v, 4) for v in low), "max", tuple(round(v, 4) for v in high), "modifiers", len(clock.modifiers))
+unwrap_clock(clock)
+run.bake([clock], [MATERIAL], "clock")
+run.export_glb([clock], "clock")

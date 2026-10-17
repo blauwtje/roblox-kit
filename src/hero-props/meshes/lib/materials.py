@@ -156,3 +156,30 @@ def paint_stack(paints, wear=0.02):
         "wear": worn_amount,
         "worn": worn,
     }
+
+
+def printed_face(tree, coords, image, center_z, half_width):
+    """The color of a flat print image mapped onto a vertical face by object x and z, for a dial or sign.
+
+    The image covers `2 * half_width` studs square, centred on x 0 and `center_z`. The front face (-Y) reads it
+    left to right; seen from the back (+Y) the viewer's right is -X, so x is mirrored there. Outside the image
+    the edge pixels extend.
+    """
+    nodes, links = tree.nodes, tree.links
+    separate = nodes.new("ShaderNodeSeparateXYZ")
+    links.new(coords, separate.inputs["Vector"])
+    back = math_node(tree, "GREATER_THAN", (separate.outputs["Y"], 0.0))
+    sign = math_node(tree, "SUBTRACT", (1.0, math_node(tree, "MULTIPLY", (back, 2.0))))
+    mirrored = math_node(tree, "MULTIPLY", (separate.outputs["X"], sign))
+    scale = 1 / (2 * half_width)
+    u = math_node(tree, "ADD", (math_node(tree, "MULTIPLY", (mirrored, scale)), 0.5))
+    shifted = math_node(tree, "SUBTRACT", (separate.outputs["Z"], center_z))
+    v = math_node(tree, "ADD", (math_node(tree, "MULTIPLY", (shifted, scale)), 0.5))
+    combine = nodes.new("ShaderNodeCombineXYZ")
+    links.new(u, combine.inputs["X"])
+    links.new(v, combine.inputs["Y"])
+    texture = nodes.new("ShaderNodeTexImage")
+    texture.image = image
+    texture.extension = "EXTEND"
+    links.new(combine.outputs["Vector"], texture.inputs["Vector"])
+    return texture.outputs["Color"]
