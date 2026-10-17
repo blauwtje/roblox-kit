@@ -159,10 +159,6 @@
     "kind": "departure-board",
     "assetId": "112440369639628"
   },
-  "44e17007df8a": {
-    "kind": "bench",
-    "assetId": "101880144843053"
-  },
   "1c065244ff5b": {
     "kind": "ticket-machine",
     "assetId": "94698669314713"
@@ -182,5 +178,9 @@
   "01984f92ebdf": {
     "kind": "arch-trim",
     "assetId": "101771726099445"
+  },
+  "9b35d4616a03": {
+    "kind": "bench",
+    "assetId": "101880144843053"
   }
 }
