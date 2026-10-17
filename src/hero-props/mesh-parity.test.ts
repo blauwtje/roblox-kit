@@ -25,7 +25,6 @@ async function fakeGit(args: string[]): Promise<string> {
   if (args[0] === "ls-tree") {
     return (
       [
-        "src/hero-props/meshes/shared.py",
         "src/hero-props/meshes/lib/__init__.py",
         "src/hero-props/meshes/lib/geometry.py",
         "src/hero-props/meshes/lib/materials.py",
@@ -49,8 +48,8 @@ await test("a base tree of identical sources hashes like the current mesh and sk
       await scriptedMeshHash("pillar", { script, targets: [{ replaces: "prop:pillar" }] }),
     );
     assert.equal(
-      await readFile(join(base.directory, "src/hero-props/meshes/shared.py"), "utf8"),
-      base.files["src/hero-props/meshes/shared.py"],
+      await readFile(join(base.directory, "src/hero-props/meshes/lib/uv.py"), "utf8"),
+      base.files["src/hero-props/meshes/lib/uv.py"],
     );
     assert.equal(sameMeshFiles(base.files, { ...current, [script]: "# edited\n" }), false);
   } finally {

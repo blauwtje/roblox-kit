@@ -7,12 +7,12 @@ and the bounds match the kit machine's 3 x 5.87 x 2, so the recorded-mesh stretc
 Cream painted cabinet (the wall role's color family) framed in dark bronze pilasters, plinth, sign band and
 cornice (the trim role's family), with brass fittings, gilt "TICKETS" letters and an arched screen window.
 Every part is one material switched by a "paint" attribute, joined into one mesh, unwrapped and baked to
-color (with occlusion grime), roughness, metalness and tangent normal maps by `shared.py`.
+color (with occlusion grime), roughness, metalness and tangent normal maps by `lib`.
 """
 
+import importlib
 import math
 import os
-import random
 import sys
 
 import bmesh
@@ -20,18 +20,10 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from shared import (  # noqa: E402
-    bake,
-    export_glb,
-    linear,
-    link_object,
-    mix_color,
-    mix_float,
-    noise,
-    ramp_node,
-    set_up_cycles,
-    triangle_count,
-)
+materials = importlib.import_module("lib.materials")
+geometry = importlib.import_module("lib.geometry")
+run = importlib.import_module("lib.run")
+uv = importlib.import_module("lib.uv")
 
 WIDTH, HEIGHT, BACK, FRONT = 3.0, 5.87, -1.0, 1.0
 FACE = 0.7  # the cabinet's front face
@@ -39,20 +31,8 @@ FONT = "/System/Library/Fonts/Supplemental/Georgia Bold.ttf"
 CREAM, BRONZE, BRASS, SCREEN, BLACK, GLASS = range(6)
 # The screen: a rectangle under a fanlight arch, its image mapped by object x and z.
 SCREEN_X, SCREEN_BOTTOM, SPRING = 0.8, 2.92, 3.9
-random.seed(13)
-
-
-def math_node(nodes, links, operation, a, b, c=None):
-    node = nodes.new("ShaderNodeMath")
-    node.operation = operation
-    for index, value in enumerate((a, b, c)):
-        if value is None:
-            continue
-        if isinstance(value, float):
-            node.inputs[index].default_value = value
-        else:
-            links.new(value, node.inputs[index])
-    return node.outputs["Value"]
+CREAM_PAINT = ([(0.3, "#cdc2a8"), (0.7, "#e3dbc6")], "#4f4a43")
+BRONZE_PAINT = ([(0.2, "#25221f"), (0.8, "#312c27")], "#6e5a3e")
 
 
 def screen_image():
@@ -95,54 +75,27 @@ def screen_image():
 
 
 def machine_material():
-    material = bpy.data.materials.new("paint")
+    material, paint = materials.paint_stack([CREAM_PAINT, BRONZE_PAINT], wear=0.015)
     tree = material.node_tree
     nodes, links = tree.nodes, tree.links
-    bsdf = nodes["Principled BSDF"]
-    coords = nodes.new("ShaderNodeTexCoord").outputs["Object"]
-    geometry = nodes.new("ShaderNodeNewGeometry")
+    bsdf, coords, patch, edge = paint["bsdf"], paint["coords"], paint["patch"], paint["edge"]
     separate = nodes.new("ShaderNodeSeparateXYZ")
     links.new(coords, separate.inputs["Vector"])
     height = separate.outputs["Z"]
     normal_z = nodes.new("ShaderNodeSeparateXYZ")
-    links.new(geometry.outputs["Normal"], normal_z.inputs["Vector"])
-    # Which finish a part has, from the attribute each part carries, since joining loses objects.
-    paint_attribute = nodes.new("ShaderNodeAttribute")
-    paint_attribute.attribute_name = "paint"
-    code = paint_attribute.outputs["Fac"]
-    mask = {kind: math_node(nodes, links, "COMPARE", code, float(kind), 0.5) for kind in range(6)}
-    painted_mask = math_node(nodes, links, "ADD", mask[CREAM], mask[BRONZE])
-    patch = noise(nodes, links, coords, 2.5, 6.0)
-    cream = ramp_node(nodes, [(0.3, "#cdc2a8"), (0.7, "#e3dbc6")])
-    links.new(patch, cream.inputs["Fac"])
-    dark = ramp_node(nodes, [(0.2, "#25221f"), (0.8, "#312c27")])
-    links.new(patch, dark.inputs["Fac"])
-    painted = mix_color(nodes, links, "MIX", mask[BRONZE], cream.outputs["Color"], dark.outputs["Color"])
-    # Edge wear where a bevelled normal leaves the true normal, broken up by noise; under cream it shows dark
-    # iron, under bronze a lighter bare metal, and on brass a rubbed bright edge.
-    bevel = nodes.new("ShaderNodeBevel")
-    bevel.inputs["Radius"].default_value = 0.015
-    facing = nodes.new("ShaderNodeVectorMath")
-    facing.operation = "DOT_PRODUCT"
-    links.new(bevel.outputs["Normal"], facing.inputs[0])
-    links.new(geometry.outputs["Normal"], facing.inputs[1])
-    edge_ramp = ramp_node(nodes, [(0.9, "#ffffff"), (0.97, "#000000")])
-    links.new(facing.outputs["Value"], edge_ramp.inputs["Fac"])
-    edge = edge_ramp.outputs["Color"]
-    chip_ramp = ramp_node(nodes, [(0.45, "#000000"), (0.58, "#ffffff")])
-    links.new(noise(nodes, links, coords, 14.0, 6.0), chip_ramp.inputs["Fac"])
-    wear = math_node(nodes, links, "MULTIPLY", edge, chip_ramp.outputs["Color"])
-    paint_wear = math_node(nodes, links, "MULTIPLY", wear, painted_mask)
-    bare = mix_color(nodes, links, "MIX", mask[BRONZE], linear("#4f4a43"), linear("#6e5a3e"))
-    worn = mix_color(nodes, links, "MIX", paint_wear, painted, bare)
+    links.new(paint["geometry"].outputs["Normal"], normal_z.inputs["Vector"])
+    mask = {kind: materials.math_node(tree, "COMPARE", (paint["dark_amount"], float(kind), 0.5)) for kind in range(6)}
+    painted_mask = materials.math_node(tree, "ADD", (mask[CREAM], mask[BRONZE]))
+    paint_wear = materials.math_node(tree, "MULTIPLY", (paint["wear"], painted_mask))
+    worn = paint["worn"]
     # Brass: patchy tarnish, rubbed bright on its edges.
-    brass = ramp_node(nodes, [(0.3, "#a07d3e"), (0.7, "#cba45c")])
-    links.new(noise(nodes, links, coords, 7.0, 6.0), brass.inputs["Fac"])
-    polished = mix_color(nodes, links, "MIX", edge, brass.outputs["Color"], linear("#e6cd92"))
-    metal = mix_color(nodes, links, "MIX", mask[BRASS], worn, polished)
+    brass = materials.ramp_node(nodes, [(0.3, "#a07d3e"), (0.7, "#cba45c")])
+    links.new(materials.noise(tree, coords, (7.0, 6.0)), brass.inputs["Fac"])
+    polished = materials.mix_color(tree, "MIX", (edge, brass.outputs["Color"], materials.linear("#e6cd92")))
+    metal = materials.mix_color(tree, "MIX", (mask[BRASS], worn, polished))
     # The screen image, mapped across the screen rectangle by object x and z.
-    u = math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "ADD", separate.outputs["X"], SCREEN_X), 1 / (2 * SCREEN_X))
-    v = math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "SUBTRACT", height, SCREEN_BOTTOM), 1 / (SPRING - SCREEN_BOTTOM))
+    u = materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "ADD", (separate.outputs["X"], SCREEN_X)), 1 / (2 * SCREEN_X)))
+    v = materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "SUBTRACT", (height, SCREEN_BOTTOM)), 1 / (SPRING - SCREEN_BOTTOM)))
     combine = nodes.new("ShaderNodeCombineXYZ")
     links.new(u, combine.inputs["X"])
     links.new(v, combine.inputs["Y"])
@@ -150,109 +103,105 @@ def machine_material():
     screen.image = screen_image()
     screen.extension = "EXTEND"
     links.new(combine.outputs["Vector"], screen.inputs["Vector"])
-    screened = mix_color(nodes, links, "MIX", mask[SCREEN], metal, screen.outputs["Color"])
-    black = ramp_node(nodes, [(0.3, "#0d0c0b"), (0.7, "#1b1916")])
+    screened = materials.mix_color(tree, "MIX", (mask[SCREEN], metal, screen.outputs["Color"]))
+    black = materials.ramp_node(nodes, [(0.3, "#0d0c0b"), (0.7, "#1b1916")])
     links.new(patch, black.inputs["Fac"])
-    blacked = mix_color(nodes, links, "MIX", mask[BLACK], screened, black.outputs["Color"])
-    glassed = mix_color(nodes, links, "MIX", mask[GLASS], blacked, linear("#1a2224"))
+    blacked = materials.mix_color(tree, "MIX", (mask[BLACK], screened, black.outputs["Color"]))
+    glassed = materials.mix_color(tree, "MIX", (mask[GLASS], blacked, materials.linear("#1a2224")))
     # Rust only on the plinth, where feet and mop buckets chip the paint.
-    rust_ramp = ramp_node(nodes, [(0.62, "#000000"), (0.72, "#ffffff")])
-    links.new(noise(nodes, links, coords, 4.0, 10.0), rust_ramp.inputs["Fac"])
+    rust_ramp = materials.ramp_node(nodes, [(0.62, "#000000"), (0.72, "#ffffff")])
+    links.new(materials.noise(tree, coords, (4.0, 10.0)), rust_ramp.inputs["Fac"])
     low = nodes.new("ShaderNodeMapRange")
     low.inputs["From Min"].default_value = 0.0
     low.inputs["From Max"].default_value = 0.45
     low.inputs["To Min"].default_value = 1.0
     low.inputs["To Max"].default_value = 0.0
     links.new(height, low.inputs["Value"])
-    rust = math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "MULTIPLY", rust_ramp.outputs["Color"], low.outputs["Result"]), painted_mask)
-    rusty = mix_color(nodes, links, "MIX", rust, glassed, linear("#5c3720"))
+    rust = materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "MULTIPLY", (rust_ramp.outputs["Color"], low.outputs["Result"])), painted_mask))
+    rusty = materials.mix_color(tree, "MIX", (rust, glassed, materials.linear("#5c3720")))
     # Dust settles on surfaces that face up, but not on the screen, which gets wiped.
-    dust_ramp = ramp_node(nodes, [(0.55, "#000000"), (0.9, "#595959")])
+    dust_ramp = materials.ramp_node(nodes, [(0.55, "#000000"), (0.9, "#595959")])
     links.new(normal_z.outputs["Z"], dust_ramp.inputs["Fac"])
-    dust = math_node(nodes, links, "MULTIPLY", dust_ramp.outputs["Color"], math_node(nodes, links, "SUBTRACT", 1.0, mask[SCREEN]))
-    dusty = mix_color(nodes, links, "MIX", dust, rusty, linear("#a39a88"))
+    dust = materials.math_node(tree, "MULTIPLY", (dust_ramp.outputs["Color"], materials.math_node(tree, "SUBTRACT", (1.0, mask[SCREEN]))))
+    dusty = materials.mix_color(tree, "MIX", (dust, rusty, materials.linear("#a39a88")))
     # Faint vertical streaks: noise stretched along the cabinet.
     streak_mapping = nodes.new("ShaderNodeMapping")
     streak_mapping.inputs["Scale"].default_value = (9.0, 9.0, 0.6)
     links.new(coords, streak_mapping.inputs["Vector"])
-    streak_ramp = ramp_node(nodes, [(0.55, "#ffffff"), (0.8, "#e2dbcf")])
-    links.new(noise(nodes, links, streak_mapping.outputs["Vector"], 2.0, 4.0), streak_ramp.inputs["Fac"])
-    streaked = mix_color(nodes, links, "MULTIPLY", 1.0, dusty, streak_ramp.outputs["Color"])
+    streak_ramp = materials.ramp_node(nodes, [(0.55, "#ffffff"), (0.8, "#e2dbcf")])
+    links.new(materials.noise(tree, streak_mapping.outputs["Vector"], (2.0, 4.0)), streak_ramp.inputs["Fac"])
+    streaked = materials.mix_color(tree, "MULTIPLY", (1.0, dusty, streak_ramp.outputs["Color"]))
     # Scuffs and floor grime fade out by about knee height.
-    floor_ramp = ramp_node(nodes, [(0.0, "#8f8472"), (1.0, "#ffffff")])
+    floor_ramp = materials.ramp_node(nodes, [(0.0, "#8f8472"), (1.0, "#ffffff")])
     floor_range = nodes.new("ShaderNodeMapRange")
     floor_range.inputs["From Max"].default_value = 1.2
     links.new(height, floor_range.inputs["Value"])
-    scuff_noise = math_node(nodes, links, "ADD", floor_range.outputs["Result"], noise(nodes, links, coords, 6.0, 4.0))
-    links.new(math_node(nodes, links, "MULTIPLY", scuff_noise, 0.75), floor_ramp.inputs["Fac"])
-    floored = mix_color(nodes, links, "MULTIPLY", 1.0, streaked, floor_ramp.outputs["Color"])
+    scuff_noise = materials.math_node(tree, "ADD", (floor_range.outputs["Result"], materials.noise(tree, coords, (6.0, 4.0))))
+    links.new(materials.math_node(tree, "MULTIPLY", (scuff_noise, 0.75)), floor_ramp.inputs["Fac"])
+    floored = materials.mix_color(tree, "MULTIPLY", (1.0, streaked, floor_ramp.outputs["Color"]))
     occlusion = nodes.new("ShaderNodeAmbientOcclusion")
     occlusion.inputs["Distance"].default_value = 0.2
-    grime_ramp = ramp_node(nodes, [(0.0, "#73695a"), (1.0, "#ffffff")])
+    grime_ramp = materials.ramp_node(nodes, [(0.0, "#73695a"), (1.0, "#ffffff")])
     links.new(occlusion.outputs["AO"], grime_ramp.inputs["Fac"])
-    grimy = mix_color(nodes, links, "MULTIPLY", 1.0, floored, grime_ramp.outputs["Color"])
+    grimy = materials.mix_color(tree, "MULTIPLY", (1.0, floored, grime_ramp.outputs["Color"]))
     links.new(grimy, bsdf.inputs["Base Color"])
     # Paint, screen and glass are dielectric; brass is metal, and so are bare worn edges, but rust is not.
-    unrusted = math_node(nodes, links, "SUBTRACT", 1.0, rust)
-    worn_metal = math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "MULTIPLY", paint_wear, 0.7), unrusted)
-    brass_metal = math_node(nodes, links, "MULTIPLY", mask[BRASS], 0.6)
-    links.new(math_node(nodes, links, "ADD", worn_metal, brass_metal), bsdf.inputs["Metallic"])
+    unrusted = materials.math_node(tree, "SUBTRACT", (1.0, rust))
+    worn_metal = materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "MULTIPLY", (paint_wear, 0.7)), unrusted))
+    brass_metal = materials.math_node(tree, "MULTIPLY", (mask[BRASS], 0.6))
+    links.new(materials.math_node(tree, "ADD", (worn_metal, brass_metal)), bsdf.inputs["Metallic"])
     paint_roughness = nodes.new("ShaderNodeMapRange")
     paint_roughness.inputs["To Min"].default_value = 0.42
     paint_roughness.inputs["To Max"].default_value = 0.62
     links.new(patch, paint_roughness.inputs["Value"])
-    rough = mix_float(nodes, links, paint_wear, paint_roughness.outputs["Result"], 0.35)
-    rough = mix_float(nodes, links, mask[BRASS], rough, mix_float(nodes, links, edge, 0.45, 0.28))
-    rough = mix_float(nodes, links, mask[SCREEN], rough, 0.14)
-    rough = mix_float(nodes, links, mask[BLACK], rough, 0.75)
-    rough = mix_float(nodes, links, mask[GLASS], rough, 0.08)
-    rough = mix_float(nodes, links, rust, rough, 0.9)
-    rough = mix_float(nodes, links, dust, rough, 0.85)
+    rough = materials.mix_float(tree, (paint_wear, paint_roughness.outputs["Result"], 0.35))
+    rough = materials.mix_float(tree, (mask[BRASS], rough, materials.mix_float(tree, (edge, 0.45, 0.28))))
+    for finish_mask, value in ((SCREEN, 0.14), (BLACK, 0.75), (GLASS, 0.08)):
+        rough = materials.mix_float(tree, (mask[finish_mask], rough, value))
+    rough = materials.mix_float(tree, (rust, rough, 0.9))
+    rough = materials.mix_float(tree, (dust, rough, 0.85))
     links.new(rough, bsdf.inputs["Roughness"])
     # Orange-peel paint: a fine, weak bump, left off the screen and glass.
     bump = nodes.new("ShaderNodeBump")
-    smooth = math_node(nodes, links, "ADD", mask[SCREEN], mask[GLASS])
-    links.new(math_node(nodes, links, "MULTIPLY", math_node(nodes, links, "SUBTRACT", 1.0, smooth), 0.12), bump.inputs["Strength"])
+    smooth = materials.math_node(tree, "ADD", (mask[SCREEN], mask[GLASS]))
+    links.new(materials.math_node(tree, "MULTIPLY", (materials.math_node(tree, "SUBTRACT", (1.0, smooth)), 0.12)), bump.inputs["Strength"])
     bump.inputs["Distance"].default_value = 0.004
-    links.new(noise(nodes, links, coords, 40.0, 4.0), bump.inputs["Height"])
+    links.new(materials.noise(tree, coords, (40.0, 4.0)), bump.inputs["Height"])
     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
     return material
 
 
-def mark_paint(obj, value):
-    paint = obj.data.attributes.new("paint", "FLOAT", "POINT")
-    paint.data.foreach_set("value", [float(value)] * len(obj.data.vertices))
-
-
-def finish(name, bm, paint, bevel=0.0, segments=2):
-    """Turns a bmesh into a linked object with the shared material, its paint code and an optional bevel."""
+def make_part(name, bm, look):
+    """Turns a bmesh into a linked object with the shared material, its (paint code, bevel width) look."""
+    paint, bevel = look
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
-    obj = link_object(name, mesh, MATERIAL)
-    mark_paint(obj, paint)
+    obj = materials.link_object(name, mesh, MATERIAL)
+    materials.mark_paint(obj, paint)
     if bevel:
         modifier = obj.modifiers.new("bevel", "BEVEL")
         modifier.width = bevel
-        modifier.segments = segments
+        modifier.segments = 2
     return obj
 
 
-def box(name, x0, x1, y0, y1, z0, z1, paint, bevel=0.02):
-    """An axis-aligned block between two corners, its edges bevelled."""
+def block(name, bounds, look):
+    """An axis-aligned block between (x0, x1, y0, y1, z0, z1), its edges bevelled; `look` is (paint, bevel)."""
+    x0, x1, y0, y1, z0, z1 = bounds
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
     center = Vector(((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2))
     size = Vector((x1 - x0, y1 - y0, z1 - z0))
     for vert in bm.verts:
         vert.co = center + vert.co * size
-    return finish(name, bm, paint, bevel)
+    return make_part(name, bm, look)
 
 
 def turned_box(name, size, location, rotation, paint, bevel=0.01):
     """A block of a given size, turned by an euler rotation and placed at its center."""
-    obj = box(name, -size[0] / 2, size[0] / 2, -size[1] / 2, size[1] / 2, -size[2] / 2, size[2] / 2, paint, bevel)
+    obj = block(name, (-size[0] / 2, size[0] / 2, -size[1] / 2, size[1] / 2, -size[2] / 2, size[2] / 2), (paint, bevel))
     obj.location = location
     obj.rotation_euler = rotation
     return obj
@@ -268,7 +217,7 @@ def prism_x(name, profile, x0, x1, paint, bevel=0.0):
     for index in range(len(profile)):
         following = (index + 1) % len(profile)
         bm.faces.new((left[index], left[following], right[following], right[index]))
-    return finish(name, bm, paint, bevel)
+    return make_part(name, bm, (paint, bevel))
 
 
 def prism_y(name, outline, y0, y1, paint, bevel=0.0):
@@ -281,7 +230,7 @@ def prism_y(name, outline, y0, y1, paint, bevel=0.0):
     for index in range(len(outline)):
         following = (index + 1) % len(outline)
         bm.faces.new((back[index], back[following], front[following], front[index]))
-    return finish(name, bm, paint, bevel)
+    return make_part(name, bm, (paint, bevel))
 
 
 def plane_y(name, outline, y, paint):
@@ -294,13 +243,15 @@ def plane_y(name, outline, y, paint):
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
-    obj = link_object(name, mesh, MATERIAL)
-    mark_paint(obj, paint)
+    obj = materials.link_object(name, mesh, MATERIAL)
+    materials.mark_paint(obj, paint)
     return obj
 
 
-def ring(name, outer, inner, y0, y1, paint):
-    """A frame between an outer and an inner (x, z) loop of the same length, from y0 back to y1 front."""
+def frame(name, loops, depth):
+    """A frame between an outer and an inner (x, z) loop of the same length, `depth` being (y0 back, y1 front, paint)."""
+    outer, inner = loops
+    y0, y1, paint = depth
     bm = bmesh.new()
     front_outer = [bm.verts.new((x, y1, z)) for x, z in outer]
     front_inner = [bm.verts.new((x, y1, z)) for x, z in inner]
@@ -313,7 +264,7 @@ def ring(name, outer, inner, y0, y1, paint):
         bm.faces.new((back_outer[i], back_inner[i], back_inner[j], back_outer[j]))
         bm.faces.new((front_outer[i], back_outer[i], back_outer[j], front_outer[j]))
         bm.faces.new((front_inner[i], front_inner[j], back_inner[j], back_inner[i]))
-    return finish(name, bm, paint)
+    return make_part(name, bm, (paint, 0.0))
 
 
 def rectangle(x0, x1, z0, z1):
@@ -321,7 +272,7 @@ def rectangle(x0, x1, z0, z1):
 
 
 def rect_ring(name, x0, x1, z0, z1, border, y0, y1, paint):
-    return ring(name, rectangle(x0, x1, z0, z1), rectangle(x0 + border, x1 - border, z0 + border, z1 - border), y0, y1, paint)
+    return frame(name, (rectangle(x0, x1, z0, z1), rectangle(x0 + border, x1 - border, z0 + border, z1 - border)), (y0, y1, paint))
 
 
 def arch(half_width, bottom, spring, steps=18):
@@ -357,7 +308,7 @@ def letters(text, size, z, y, paint):
     bpy.ops.object.convert(target="MESH")
     obj = bpy.context.active_object
     obj.data.materials.append(MATERIAL)
-    mark_paint(obj, paint)
+    materials.mark_paint(obj, paint)
     return obj
 
 
@@ -373,29 +324,29 @@ def plinth_and_cornice():
 
 
 def cabinet():
-    box("cabinet", -1.46, 1.46, BACK, FACE, 0.38, 5.45, CREAM, 0.02)
+    block("cabinet", (-1.46, 1.46, BACK, FACE, 0.38, 5.45), (CREAM, 0.02))
     for side in (-1, 1):
         inner, outer = sorted((side * 1.29, side * 1.5))
-        box(f"pilaster-{side}", inner + (0.02 if side > 0 else 0.0), outer - (0.02 if side < 0 else 0.0), 0.6, 0.8, 0.5, 4.8, BRONZE, 0.02)
-        box(f"pilaster-base-{side}", inner, outer, 0.58, 0.84, 0.38, 0.56, BRONZE, 0.02)
-        box(f"pilaster-cap-{side}", inner, outer, 0.58, 0.84, 4.78, 4.95, BRONZE, 0.02)
+        block(f"pilaster-{side}", (inner + (0.02 if side > 0 else 0.0), outer - (0.02 if side < 0 else 0.0), 0.6, 0.8, 0.5, 4.8), (BRONZE, 0.02))
+        block(f"pilaster-base-{side}", (inner, outer, 0.58, 0.84, 0.38, 0.56), (BRONZE, 0.02))
+        block(f"pilaster-cap-{side}", (inner, outer, 0.58, 0.84, 4.78, 4.95), (BRONZE, 0.02))
         # A sunk brass line down each pilaster's face.
         middle = side * 1.395
-        box(f"pilaster-line-{side}", middle - 0.02, middle + 0.02, 0.8, 0.81, 0.75, 4.6, BRASS, 0.005)
+        block(f"pilaster-line-{side}", (middle - 0.02, middle + 0.02, 0.8, 0.81, 0.75, 4.6), (BRASS, 0.005))
         cylinder_y(f"pilaster-boss-{side}", 0.045, middle, 4.865, 0.84, 0.87, BRASS, 12)
-    box("sign", -WIDTH / 2, WIDTH / 2, 0.58, 0.84, 4.95, 5.45, BRONZE, 0.015)
+    block("sign", (-WIDTH / 2, WIDTH / 2, 0.58, 0.84, 4.95, 5.45), (BRONZE, 0.015))
     rect_ring("sign-frame", -1.4, 1.4, 5.0, 5.4, 0.035, 0.84, 0.86, BRASS)
     letters("TICKETS", 0.36, 5.2, 0.84, BRASS)
 
 
 def window():
     """The arched screen window: bronze bezel, brass bead, screen, transom and a fanlight of radial bars."""
-    ring("bezel", arch(0.98, 2.74, SPRING), arch(0.84, 2.88, SPRING), FACE, 0.78, BRONZE)
-    ring("bead", arch(0.84, 2.88, SPRING), arch(SCREEN_X, SCREEN_BOTTOM, SPRING), FACE, 0.8, BRASS)
+    frame("bezel", (arch(0.98, 2.74, SPRING), arch(0.84, 2.88, SPRING)), (FACE, 0.78, BRONZE))
+    frame("bead", (arch(0.84, 2.88, SPRING), arch(SCREEN_X, SCREEN_BOTTOM, SPRING)), (FACE, 0.8, BRASS))
     plane_y("screen", rectangle(-SCREEN_X, SCREEN_X, SCREEN_BOTTOM, SPRING), 0.725, SCREEN)
     fan = [(0.81 * math.cos(math.pi * i / 18), SPRING + 0.81 * math.sin(math.pi * i / 18)) for i in range(19)]
     plane_y("fanlight", fan, 0.72, GLASS)
-    box("transom", -SCREEN_X, SCREEN_X, 0.71, 0.77, SPRING - 0.02, SPRING + 0.03, BRASS, 0.01)
+    block("transom", (-SCREEN_X, SCREEN_X, 0.71, 0.77, SPRING - 0.02, SPRING + 0.03), (BRASS, 0.01))
     hub = [(0.15 * math.cos(math.pi * i / 10), SPRING + 0.15 * math.sin(math.pi * i / 10)) for i in range(11)]
     prism_y("fan-hub", hub, 0.71, 0.765, BRASS)
     for index, degrees in enumerate((30, 60, 90, 120, 150)):
@@ -422,7 +373,7 @@ def desk():
     """A sloping bronze desk with a brass nosing, a keypad on the left and a card reader on the right."""
     profile = [(FACE - 0.02, 2.3), (0.9, 2.4), (DESK_FRONT, 2.45), (DESK_FRONT, DESK_TOP_FRONT), (FACE - 0.02, DESK_TOP_BACK)]
     prism_x("desk", profile, -1.15, 1.15, BRONZE)
-    box("desk-nosing", -1.17, 1.17, 0.96, FRONT, 2.44, 2.58, BRASS, 0.015)
+    block("desk-nosing", (-1.17, 1.17, 0.96, FRONT, 2.44, 2.58), (BRASS, 0.015))
     on_desk("keypad", -1.02, -0.44, 0.04, 0.29, 0.012, BLACK)
     for row in range(4):
         for column in range(3):
@@ -439,10 +390,10 @@ def desk():
 def payment():
     """Under the desk: a bronze-beaded panel with a coin slot, a note slot and a coin-return button."""
     rect_ring("payment-frame", -0.95, 0.95, 1.42, 2.2, 0.035, FACE, 0.73, BRONZE)
-    box("coin-plate", -0.66, -0.38, FACE, 0.735, 1.6, 2.02, BRASS, 0.012)
-    box("coin-slot", -0.53, -0.51, FACE, 0.74, 1.72, 1.92, BLACK, 0.0)
-    box("note-plate", -0.2, 0.74, FACE, 0.75, 1.86, 2.03, BRASS, 0.012)
-    box("note-slot", -0.12, 0.66, FACE, 0.755, 1.93, 1.96, BLACK, 0.0)
+    block("coin-plate", (-0.66, -0.38, FACE, 0.735, 1.6, 2.02), (BRASS, 0.012))
+    block("coin-slot", (-0.53, -0.51, FACE, 0.74, 1.72, 1.92), (BLACK, 0.0))
+    block("note-plate", (-0.2, 0.74, FACE, 0.75, 1.86, 2.03), (BRASS, 0.012))
+    block("note-slot", (-0.12, 0.66, FACE, 0.755, 1.93, 1.96), (BLACK, 0.0))
     cylinder_y("return-button-rim", 0.07, 0.5, 1.62, FACE, 0.73, BRASS)
     cylinder_y("return-button", 0.045, 0.5, 1.62, FACE, 0.76, BLACK, 12)
 
@@ -451,8 +402,8 @@ def hopper():
     """The ticket cup: a brass frame round a dark opening under a bronze hood, with a brass tray lip."""
     rect_ring("hopper-frame", -0.52, 0.52, 0.78, 1.28, 0.07, FACE, 0.8, BRASS)
     plane_y("hopper-opening", rectangle(-0.45, 0.45, 0.85, 1.21), FACE + 0.005, BLACK)
-    box("hopper-hood", -0.56, 0.56, FACE, 0.92, 1.27, 1.34, BRONZE, 0.015)
-    box("hopper-lip", -0.45, 0.45, FACE, 0.88, 0.8, 0.86, BRASS, 0.012)
+    block("hopper-hood", (-0.56, 0.56, FACE, 0.92, 1.27, 1.34), (BRONZE, 0.015))
+    block("hopper-lip", (-0.45, 0.45, FACE, 0.88, 0.8, 0.86), (BRASS, 0.012))
     rect_ring("kick-frame", -1.1, 1.1, 0.46, 0.7, 0.03, FACE, 0.725, BRONZE)
 
 
@@ -465,59 +416,27 @@ def build_machine():
     hopper()
 
 
-def join_machine():
-    """Converts every part to mesh in world space and joins them into one object, as one MeshPart."""
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.context.view_layer.objects.active = bpy.context.scene.objects[0]
-    bpy.ops.object.convert(target="MESH")
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    bpy.ops.object.join()
-    machine = bpy.context.active_object
-    machine.name = "ticket-machine"
-    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50))
-    return machine
 
-
-def unwrap(machine):
-    """Smart project, then the screen's island grown and hidden faces' islands shrunk before one repack."""
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.004)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bm = bmesh.new()
-    bm.from_mesh(machine.data)
-    uv = bm.loops.layers.uv.active
-    paint = bm.verts.layers.float.get("paint")
-    for face in bm.faces:
-        center = face.calc_center_median()
-        code = round(face.verts[0][paint])
-        if code == SCREEN:
-            factor = 2.0
-        elif face.normal.y < -0.9 and center.y < BACK + 0.01:
-            factor = 0.3
-        elif face.normal.z < -0.9 and center.z < 0.01:
-            factor = 0.1
-        else:
-            continue
-        for loop in face.loops:
-            loop[uv].uv *= factor
-    bm.to_mesh(machine.data)
-    bm.free()
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.pack_islands(rotate=True, margin=0.004)
-    bpy.ops.object.mode_set(mode="OBJECT")
+def density(paint, face):
+    """The screen's island grown, the back wall's and the underside's shrunk since nobody sees them."""
+    if paint == SCREEN:
+        return 2.0
+    if face.normal.y < -0.9 and face.calc_center_median().y < BACK + 0.01:
+        return 0.3
+    if face.normal.z < -0.9 and face.calc_center_median().z < 0.01:
+        return 0.1
+    return None
 
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-set_up_cycles()
+run.set_up_cycles()
 MATERIAL = machine_material()
 build_machine()
-machine = join_machine()
+machine = geometry.finish("ticket-machine", 50)
 corners = [Vector(corner) for corner in machine.bound_box]
 low = Vector([min(c[i] for c in corners) for i in range(3)])
 high = Vector([max(c[i] for c in corners) for i in range(3)])
-print("ticket-machine triangles", triangle_count(machine), "size", tuple(round(v, 4) for v in high - low), "min", tuple(round(v, 4) for v in low), "max", tuple(round(v, 4) for v in high), "modifiers", len(machine.modifiers))
-unwrap(machine)
-bake([machine], [MATERIAL], "ticket-machine")
-export_glb([machine], "ticket-machine")
+print("ticket-machine triangles", run.triangle_count(machine), "size", tuple(round(v, 4) for v in high - low), "min", tuple(round(v, 4) for v in low), "max", tuple(round(v, 4) for v in high), "modifiers", len(machine.modifiers))
+uv.unwrap([machine], face_scale=density)
+run.bake([machine], [MATERIAL], "ticket-machine")
+run.export_glb([machine], "ticket-machine")

@@ -143,44 +143,44 @@
     "kind": "sprite-glow",
     "assetId": "89207008552510"
   },
-  "92467bb483aa": {
+  "a9ba6c59ef37": {
     "kind": "pillar",
     "assetId": "119951924235625"
   },
-  "44ce4a855d66": {
+  "9e8f7e956ab7": {
     "kind": "bench",
     "assetId": "101880144843053"
   },
-  "c7610f87e3b6": {
+  "7f027dd48e29": {
     "kind": "ticket-machine",
     "assetId": "94698669314713"
   },
-  "0b2051b52110": {
+  "d741dc0b494f": {
     "kind": "clock",
     "assetId": "113868462637400"
   },
-  "c0ad17f7ee36": {
+  "9efaa390f271": {
     "kind": "departure-board",
     "assetId": "112440369639628"
   },
-  "2da8edd2a7d9": {
-    "kind": "pendant",
-    "assetId": "127045372575746"
-  },
-  "dd97afe68a02": {
-    "kind": "train-car",
-    "assetId": "137669787957055"
-  },
-  "44d610669fb8": {
-    "kind": "arch-trim",
-    "assetId": "101771726099445"
-  },
-  "6235fc2b8d24": {
+  "f4725083227b": {
     "kind": "sign",
     "assetId": "107871902578867"
   },
-  "61b04d45e060": {
+  "96d31121762e": {
+    "kind": "pendant",
+    "assetId": "127045372575746"
+  },
+  "16b943e77899": {
     "kind": "ticket-counter",
     "assetId": "125360312908808"
+  },
+  "dd7f272cbc48": {
+    "kind": "train-car",
+    "assetId": "137669787957055"
+  },
+  "2d7b771dd496": {
+    "kind": "arch-trim",
+    "assetId": "101771726099445"
   }
 }

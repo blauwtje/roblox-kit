@@ -116,7 +116,7 @@ def paint_stack(paints, wear=0.02):
 
     `paints` is [(ramp stops, bare hex), ...] for paint values 0 and 1 (body, trim); `wear` is the bevel radius,
     in studs, of the edge wear. Returns the material and its parts: `coords` (object position), `geometry`,
-    `bsdf`, `dark_amount` (the paint value), `patch` (the paint noise), `wear` (edge-wear amount) and `worn`
+    `bsdf`, `dark_amount` (the paint value), `patch` (the paint noise), `edge` (the bevel edge amount), `wear` (edge-wear amount) and `worn`
     (the color so far), for the script to layer its own dirt on.
     """
     (body_stops, body_bare), (trim_stops, trim_bare) = paints
@@ -142,9 +142,10 @@ def paint_stack(paints, wear=0.02):
     links.new(geometry.outputs["Normal"], facing.inputs[1])
     edge_ramp = ramp_node(nodes, [(0.9, "#ffffff"), (0.97, "#000000")])
     links.new(facing.outputs["Value"], edge_ramp.inputs["Fac"])
+    edge = edge_ramp.outputs["Color"]
     chip_ramp = ramp_node(nodes, [(0.45, "#000000"), (0.58, "#ffffff")])
     links.new(noise(tree, coords, (12.0, 6.0)), chip_ramp.inputs["Fac"])
-    worn_amount = math_node(tree, "MULTIPLY", (edge_ramp.outputs["Color"], chip_ramp.outputs["Color"]))
+    worn_amount = math_node(tree, "MULTIPLY", (edge, chip_ramp.outputs["Color"]))
     bare = mix_color(tree, "MIX", (dark_amount, linear(body_bare), linear(trim_bare)))
     worn = mix_color(tree, "MIX", (worn_amount, painted, bare))
     return material, {
@@ -153,6 +154,7 @@ def paint_stack(paints, wear=0.02):
         "bsdf": nodes["Principled BSDF"],
         "dark_amount": dark_amount,
         "patch": patch,
+        "edge": edge,
         "wear": worn_amount,
         "worn": worn,
     }

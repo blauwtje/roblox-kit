@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -48,3 +48,32 @@ await test("no mesh script that imports lib redefines a name lib exports", async
   const clashes = Object.entries(found).filter(([, names]) => names.length > 0);
   assert.deepEqual(clashes, []);
 });
+
+const maxMeshLines = 2600;
+
+async function meshScripts(): Promise<string[]> {
+  return (await readdir(meshes, { recursive: true }))
+    .filter((name) => name.endsWith(".py"))
+    .map((name) => `${meshes}${name}`);
+}
+
+await test("no mesh script imports shared", async () => {
+  const importers: string[] = [];
+  for (const path of await meshScripts()) {
+    if (/(from|import)\s+shared\b|import_module\(["']shared/.test(await readFile(path, "utf8")))
+      importers.push(path);
+  }
+  assert.deepEqual(importers, []);
+});
+
+await test(
+  `the mesh library and scripts hold at most ${String(maxMeshLines)} lines`,
+  { todo: true },
+  async () => {
+    let lines = 0;
+    for (const path of await meshScripts()) {
+      lines += (await readFile(path, "utf8")).split("\n").length - 1;
+    }
+    assert.ok(lines <= maxMeshLines, `${String(lines)} lines`);
+  },
+);
