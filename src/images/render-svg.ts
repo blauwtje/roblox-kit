@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import { z } from "zod";
+import { decodeImage } from "../vision/decode-image.ts";
+import { encodePng } from "../vision/encode-png.ts";
+import { alphaBleed } from "./alpha-bleed.ts";
 import { imagesConfig } from "./images-config.ts";
 
 const fontRowSchema = z.object({
@@ -52,7 +55,7 @@ function canonicalizeFamilies(svg: string): string {
     .replace(/font-family:\s*([^;}"]*)/g, (_, list: string) => `font-family:${fix(list)}`);
 }
 
-/** Renders SVG text to PNG with only the vendored fonts, so output matches on every machine. */
+/** Renders SVG text to PNG with only the vendored fonts, bleeding edge colors into transparent pixels, so output matches on every machine. */
 export function renderSvg(svg: string, options: { scale?: number } = {}): RenderedSvg {
   const scale = options.scale ?? imagesConfig.defaultScale;
   if (!(scale > 0 && scale <= imagesConfig.maxScale)) {
@@ -69,5 +72,6 @@ export function renderSvg(svg: string, options: { scale?: number } = {}): Render
     },
   });
   const image = resvg.render();
-  return { png: image.asPng(), width: image.width, height: image.height };
+  const bled = alphaBleed(decodeImage(image.asPng()));
+  return { png: encodePng(bled), width: image.width, height: image.height };
 }
