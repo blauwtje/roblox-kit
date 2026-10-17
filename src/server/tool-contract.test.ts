@@ -74,3 +74,12 @@ await test("the serialized tools/list result stays under its byte budget", async
   assert.ok(bytes < toolsListByteBudget, `tools/list is ${String(bytes)} bytes`);
   await client.close();
 });
+
+await test("measure_capture is served read-only after analyze_image", async () => {
+  const client = await connect([]);
+  const listed = (await client.listTools()).tools.map((tool) => tool.name);
+  assert.equal(listed.indexOf("measure_capture"), listed.indexOf("analyze_image") + 1);
+  const served = tools.find((tool) => tool.name === "measure_capture");
+  assert.equal(served?.annotations.readOnlyHint, true);
+  await client.close();
+});

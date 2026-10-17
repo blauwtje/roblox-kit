@@ -239,3 +239,8 @@ await test("the build_map description names each opt-in", () => {
     assert.ok(description.includes(name), `build_map description lacks ${name}`);
   }
 });
+
+await test("createTools registers measure_capture", () => {
+  const names = createTools({ projectDir: undefined }).tools.map((tool) => tool.name);
+  assert.ok(names.includes("measure_capture"));
+});

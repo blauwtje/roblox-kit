@@ -23,6 +23,7 @@ import {
 } from "./playtest.ts";
 import { probeBlockingModel, probeCheckMap } from "./check.ts";
 import { probeCaptureZones } from "./capture.ts";
+import { probeMeasureCapture } from "../smoke-vision.ts";
 
 /** Every smoke step name in run order; `--help` prints them and `--only` checks its terms against them. */
 export const stepName = {
@@ -43,6 +44,7 @@ export const stepName = {
   play: "run_playtest play with a server and a client check",
   multi: "run_playtest multiplayer with 2 players",
   remove: "remove_map keeps lighting until the last styled map goes",
+  vision: "measure_capture raycast grid",
 } as const;
 
 export const smokeStepNames: string[] = Object.values(stepName);
@@ -213,6 +215,7 @@ export async function probeMapTools(
       stepName.remove,
       () => probeRemoveMapLighting(connection, lightingBefore, stateBefore),
     ]);
+    steps.push([stepName.vision, () => probeMeasureCapture(connection)]);
     for (const [capability, attempt] of selectSteps(steps, options.onlyTerms)) {
       currentStep = capability;
       findings.push(await probeTool(capability, attempt));
