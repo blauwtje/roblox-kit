@@ -308,3 +308,31 @@ await test("a bank places all of its pieces or none, and warns when it places no
   );
   assert.equal(arrange(blocked).pieces.length, 4, "a spawn pad off the wall leaves the bank");
 });
+
+await test("every shape places pieces inside the room and clear of each other at every room size", () => {
+  const sizes = [
+    [60, 40],
+    [100, 40],
+    [40, 100],
+    [120, 80],
+  ];
+  for (const roomType of ["hall", "platform", "capped", "colonnaded", "banked"]) {
+    for (const [width = 0, depth = 0] of sizes) {
+      const { pieces } = arrange(specOf(room("r", roomType, width, depth)));
+      assert.ok(
+        pieces.length > 0,
+        `${roomType} places pieces in ${String(width)}x${String(depth)}`,
+      );
+      pieces.forEach((piece, index) => {
+        const [minX, maxX, minZ, maxZ] = footprint(piece);
+        assert.ok(
+          minX >= -width / 2 && maxX <= width / 2 && minZ >= -depth / 2 && maxZ <= depth / 2,
+          `${roomType} ${piece.kind} stays in the room`,
+        );
+        for (const other of pieces.slice(index + 1)) {
+          assert.equal(overlap(piece, other), false, `${roomType} pieces do not overlap`);
+        }
+      });
+    }
+  }
+});
