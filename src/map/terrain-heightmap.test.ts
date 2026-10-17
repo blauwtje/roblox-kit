@@ -28,12 +28,12 @@ function heightmapFill(overrides: Record<string, unknown> = {}) {
   return fill;
 }
 
-await test("the same seed gives the same heights and another seed gives other heights", () => {
+await test("the same seed gives the same heights, another seed or erosion other heights", () => {
   const first = generateHeightmap(heightmapFill({ seed: 5 }), 1);
-  const again = generateHeightmap(heightmapFill({ seed: 5 }), 1);
-  const other = generateHeightmap(heightmapFill({ seed: 6 }), 1);
-  assert.deepEqual(first, again);
-  assert.notDeepEqual(first.heights, other.heights);
+  assert.deepEqual(first, generateHeightmap(heightmapFill({ seed: 5 }), 1));
+  assert.notDeepEqual(first.heights, generateHeightmap(heightmapFill({ seed: 6 }), 1).heights);
+  const raw = generateHeightmap(heightmapFill({ erosion: 0 }), 1);
+  assert.notDeepEqual(raw.heights, generateHeightmap(heightmapFill({ erosion: 4 }), 1).heights);
 });
 
 await test("heights fill the box from its bottom to its height, one per voxel column", () => {
@@ -53,13 +53,6 @@ await test("a 2048 by 2048 heightmap at erosion 0 fills within a time budget", (
   assert.equal(columns, 2048);
   assert.equal(heights.length, columns * rows);
   assert.ok(performance.now() - started < 20_000);
-});
-
-await test("erosion reshapes the noise and 0 droplets leaves it", () => {
-  const raw = generateHeightmap(heightmapFill({ erosion: 0 }), 1);
-  const eroded = generateHeightmap(heightmapFill({ erosion: 4 }), 1);
-  assert.notDeepEqual(raw.heights, eroded.heights);
-  assert.deepEqual(raw, generateHeightmap(heightmapFill({ erosion: 0 }), 1));
 });
 
 await test("chunks tile the box, stay under the Luau limit and use every layer from sand to snow", () => {

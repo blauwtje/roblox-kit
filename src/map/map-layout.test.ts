@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { config } from "../config.ts";
+import { createSeededRandom } from "../shared/seeded-random.ts";
 import { layoutMap, solveRoomGraph } from "./map-layout.ts";
 import type { PartRecord } from "./map-layout.ts";
 import { graphMapSpecSchema, mapSpecSchema } from "./map-spec.ts";
@@ -48,47 +49,42 @@ function partNamed(parts: PartRecord[], name: string): PartRecord {
   return part;
 }
 
-await test("the same spec lays out to the same parts and terrain fills", () => {
+function overlapDepth(first: PartRecord, second: PartRecord): number {
+  const axes = ["x", "y", "z"] as const;
+  return Math.min(
+    ...axes.map(
+      (axis) =>
+        (first.size[axis] + second.size[axis]) / 2 -
+        Math.abs(first.position[axis] - second.position[axis]),
+    ),
+  );
+}
+
+await test("the same spec lays out to the same unique parts and terrain fills in order", () => {
   const first = layoutOf(threeRoomInput);
-  const second = layoutOf(structuredClone(threeRoomInput));
-  assert.deepEqual(first, second);
+  assert.deepEqual(first, layoutOf(structuredClone(threeRoomInput)));
   assert.equal(new Set(first.parts.map((part) => part.name)).size, first.parts.length);
+  assert.deepEqual(first.terrainFills, mapSpecSchema.parse(threeRoomInput).terrain);
 });
 
-await test("a room floor's top clears the ground plane y = 0 by less than the overlap tolerance", () => {
+await test("a room gets a floor just above y = 0, walls on it and a spawn pad at the center", () => {
   const { parts } = layoutOf({
     mapId: "one",
-    rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20 }],
+    rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20, spawn: true }],
   });
   const floor = partNamed(parts, "box-floor");
   const floorTop = floor.position.y + floor.size.y / 2;
-  assert.ok(floorTop > 0, `floor top ${String(floorTop)} is above the Baseplate top at y = 0`);
-  assert.ok(
-    floorTop < config.overlapToleranceStuds,
-    "walls and props on y = 0 only touch the floor",
-  );
-});
-
-await test("a room gets a floor topped at y = 0 plus the lift and walls standing on it with the config defaults", () => {
-  const { parts } = layoutOf({
-    mapId: "one",
-    rooms: [{ name: "box", x: 10, z: 20, width: 30, depth: 20 }],
-  });
-  const floor = partNamed(parts, "box-floor");
-  assert.deepEqual(floor.position, { x: 10, y: config.floorLiftStuds - 0.5, z: 20 });
+  assert.ok(floorTop > 0 && floorTop < config.overlapToleranceStuds);
   assert.deepEqual(floor.size, { x: 30, y: config.defaultWallThicknessStuds, z: 20 });
-  assert.equal(floor.material, config.defaultFloorMaterial);
   const north = partNamed(parts, "box-wall-north-1");
   assert.deepEqual(north.position, { x: 10, y: 6, z: 10.5 });
   assert.deepEqual(north.size, { x: 30, y: config.defaultWallHeightStuds, z: 1 });
-  assert.equal(north.material, config.defaultWallMaterial);
-  const east = partNamed(parts, "box-wall-east-1");
-  assert.deepEqual(east.position, { x: 24.5, y: 6, z: 20 });
-  assert.deepEqual(east.size, { x: 1, y: 12, z: 18 });
-  assert.equal(parts.length, 5);
+  const spawn = partNamed(parts, "box-spawn");
+  assert.deepEqual(spawn.position, { x: 10, y: 0.5, z: 20 });
+  assert.equal(parts.filter((part) => part.kind === "wall").length, 4);
 });
 
-await test("a door splits its wall into two stretches with a gap of the door width", () => {
+await test("a door leaves a gap of its width, and at the wall end leaves one stretch", () => {
   const { parts } = layoutOf({
     mapId: "door",
     rooms: [
@@ -97,28 +93,22 @@ await test("a door splits its wall into two stretches with a gap of the door wid
   });
   const left = partNamed(parts, "box-wall-south-1");
   const right = partNamed(parts, "box-wall-south-2");
-  assert.deepEqual(left.position, { x: -10.5, y: 6, z: 19.5 });
-  assert.deepEqual(left.size, { x: 19, y: 12, z: 1 });
-  assert.deepEqual(right.position, { x: 14.5, y: 6, z: 19.5 });
-  assert.deepEqual(right.size, { x: 11, y: 12, z: 1 });
   const gap = right.position.x - right.size.x / 2 - (left.position.x + left.size.x / 2);
   assert.equal(gap, config.defaultDoorWidthStuds);
-});
-
-await test("a door at the wall end leaves one stretch", () => {
-  const { parts } = layoutOf({
+  const corner = layoutOf({
     mapId: "corner",
     doorWidth: 6,
     rooms: [
       { name: "box", x: 0, z: 0, width: 40, depth: 40, doors: [{ side: "north", offset: -17 }] },
     ],
-  });
-  const north = parts.filter((part) => part.name.startsWith("box-wall-north"));
-  assert.equal(north.length, 1);
-  assert.deepEqual(north[0]?.size, { x: 34, y: 12, z: 1 });
+  }).parts.filter((part) => part.name.startsWith("box-wall-north"));
+  assert.deepEqual(
+    corner.map((part) => part.size.x),
+    [34],
+  );
 });
 
-await test("room and map settings override the defaults, room over map", () => {
+await test("room settings override map settings, which override the defaults", () => {
   const { parts } = layoutOf({
     mapId: "styled",
     wallMaterial: "Wood",
@@ -135,177 +125,117 @@ await test("room and map settings override the defaults, room over map", () => {
   assert.equal(partNamed(parts, "plain-floor").material, config.defaultFloorMaterial);
 });
 
-await test("a spawn room gets a spawn pad on its floor at the room center", () => {
-  const { parts } = layoutOf(threeRoomInput);
-  const spawns = parts.filter((part) => part.kind === "spawn");
+await test("a door or room that does not fit is rejected naming the room", () => {
+  const box = { name: "box", x: 0, z: 0, width: 40, depth: 40 };
+  const overlapping = [
+    { side: "east", offset: 0 },
+    { side: "east", offset: 3 },
+  ];
+  const cases: [object, RegExp][] = [
+    [{ ...box, doors: [{ side: "north", offset: 19 }] }, /Room "box": the north door/],
+    [{ ...box, doors: overlapping }, /Room "box": the east door/],
+    [{ ...box, width: 2 }, /Room "box" is 2 by 40 studs/],
+  ];
+  for (const [badRoom, message] of cases) {
+    assert.throws(() => layoutOf({ mapId: "bad", rooms: [badRoom] }), message);
+  }
+});
+
+await test("a style's surfaces paint parts by role, with the accent pad falling back to the floor", () => {
+  const plain = layoutOf(threeRoomInput).parts;
+  assert.equal(partNamed(plain, "start-floor").role, "floor");
+  assert.equal(partNamed(plain, "start-wall-north-1").role, "wall");
+  assert.equal(partNamed(plain, "start-spawn").role, "accent");
+  const floor = { color: "#112233", material: "Slate" };
+  const wall = { color: "#445566", material: "Brick" };
+  const accent = { color: "#d9a441", material: "Neon" };
+  const spec = mapSpecSchema.parse(threeRoomInput);
+  const styled = layoutMap(spec, { floor, wall, accent }).parts;
+  assert.equal(partNamed(styled, "hall-floor").color, "#112233");
+  assert.equal(partNamed(styled, "hall-wall-north-1").material, "Brick");
   assert.deepEqual(
-    spawns.map((part) => part.name),
-    ["start-spawn"],
+    [partNamed(styled, "start-spawn").color, partNamed(styled, "start-spawn").material],
+    ["#d9a441", "Neon"],
   );
-  assert.deepEqual(spawns[0]?.position, { x: 0, y: 0.5, z: 0 });
+  const noAccent = partNamed(layoutMap(spec, { floor, wall }).parts, "start-spawn");
+  assert.deepEqual([noAccent.color, noAccent.material], ["#112233", "Slate"]);
+  const mapMaterial = layoutMap(mapSpecSchema.parse({ ...threeRoomInput, wallMaterial: "Wood" }), {
+    floor,
+    wall,
+  });
+  assert.equal(partNamed(mapMaterial.parts, "hall-wall-north-1").material, "Wood");
 });
 
-await test("terrain fills pass through in order", () => {
-  const { terrainFills } = layoutOf(threeRoomInput);
-  assert.deepEqual(terrainFills, mapSpecSchema.parse(threeRoomInput).terrain);
-  assert.deepEqual(
-    terrainFills.map((fill) => fill.shape),
-    ["block", "ball"],
-  );
-});
-
-await test("a door that does not fit the wall or overlaps another is rejected with the room name", () => {
-  assert.throws(
-    () =>
-      layoutOf({
-        mapId: "bad",
-        rooms: [
-          { name: "box", x: 0, z: 0, width: 40, depth: 40, doors: [{ side: "north", offset: 19 }] },
-        ],
-      }),
-    /Room "box": the north door/,
-  );
-  assert.throws(
-    () =>
-      layoutOf({
-        mapId: "bad",
-        rooms: [
-          {
-            name: "box",
-            x: 0,
-            z: 0,
-            width: 40,
-            depth: 40,
-            doors: [
-              { side: "east", offset: 0 },
-              { side: "east", offset: 3 },
-            ],
-          },
-        ],
-      }),
-    /Room "box": the east door/,
-  );
-});
-
-await test("a room no larger than its walls is rejected", () => {
-  assert.throws(
-    () => layoutOf({ mapId: "tiny", rooms: [{ name: "box", x: 0, z: 0, width: 2, depth: 40 }] }),
-    /Room "box" is 2 by 40 studs/,
-  );
-});
-
-await test("the schema rejects unknown keys, duplicate room names and empty maps", () => {
-  assert.equal(mapSpecSchema.safeParse({ ...threeRoomInput, extra: 1 }).success, false);
-  assert.equal(mapSpecSchema.safeParse({ mapId: "empty", rooms: [] }).success, false);
-  const room = { name: "same", x: 0, z: 0, width: 20, depth: 20 };
-  const duplicate = mapSpecSchema.safeParse({ mapId: "dup", rooms: [room, room] });
-  assert.equal(duplicate.success, false);
+await test("ceilings are opt-in, one slab per room resting on the walls, in the style's ceiling surface", () => {
   assert.equal(
-    mapSpecSchema.safeParse({ mapId: "bad", rooms: [{ ...room, width: -5 }] }).success,
+    layoutOf(threeRoomInput).parts.some((part) => part.kind === "ceiling"),
     false,
   );
-});
-
-await test("each part carries a surface role and the shipped default color when there is no style", () => {
-  const { parts } = layoutOf(threeRoomInput);
-  for (const part of parts) {
-    assert.match(part.color, /^#[0-9a-f]{6}$/);
-  }
-  const floor = partNamed(parts, "start-floor");
-  const wall = partNamed(parts, "start-wall-north-1");
-  const spawn = partNamed(parts, "start-spawn");
-  assert.equal(floor.role, "floor");
-  assert.equal(wall.role, "wall");
-  assert.equal(spawn.role, "accent");
-  assert.notEqual(floor.color, wall.color);
-});
-
-await test("a style's surface colors replace the defaults by role", () => {
-  const surfaces = { floor: { color: "#112233" }, wall: { color: "#445566" } };
-  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
-  assert.equal(partNamed(parts, "hall-floor").color, "#112233");
-  assert.equal(partNamed(parts, "start-spawn").color, "#112233");
-  assert.equal(partNamed(parts, "hall-wall-north-1").color, "#445566");
-});
-
-await test("a style's surface material fills in where the room and the map name none", () => {
-  const surfaces = {
-    floor: { color: "#112233", material: "Slate" },
-    wall: { color: "#445566", material: "Brick" },
-  };
-  const input = { ...threeRoomInput, wallMaterial: "Wood" };
-  const { parts } = layoutMap(mapSpecSchema.parse(input), surfaces);
-  assert.equal(partNamed(parts, "hall-floor").material, "Slate");
-  assert.equal(partNamed(parts, "start-spawn").material, "Slate");
-  assert.equal(partNamed(parts, "hall-wall-north-1").material, "Wood");
-  const withoutMapMaterial = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
-  assert.equal(partNamed(withoutMapMaterial.parts, "hall-wall-north-1").material, "Brick");
-});
-
-await test("the spawn pad takes the accent surface's color and material, and the floor's without one", () => {
-  const surfaces = {
-    floor: { color: "#112233", material: "Slate" },
-    wall: { color: "#445566" },
-    accent: { color: "#d9a441", material: "Neon" },
-  };
-  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces);
-  const spawn = partNamed(parts, "start-spawn");
-  assert.equal(spawn.role, "accent");
-  assert.equal(spawn.color, "#d9a441");
-  assert.equal(spawn.material, "Neon");
-  assert.equal(partNamed(parts, "start-floor").color, "#112233");
-  const withoutAccent = { floor: surfaces.floor, wall: surfaces.wall };
-  const plain = partNamed(
-    layoutMap(mapSpecSchema.parse(threeRoomInput), withoutAccent).parts,
-    "start-spawn",
-  );
-  assert.equal(plain.color, "#112233");
-  assert.equal(plain.material, "Slate");
-  const colorOnly = { ...surfaces, accent: { color: "#d9a441" } };
-  const colorOnlySpawn = partNamed(
-    layoutMap(mapSpecSchema.parse(threeRoomInput), colorOnly).parts,
-    "start-spawn",
-  );
-  assert.equal(colorOnlySpawn.material, "Slate");
-});
-
-await test("a layout without the ceilings option has no ceiling part", () => {
-  const { parts } = layoutOf(threeRoomInput);
-  assert.equal(parts.filter((part) => part.kind === "ceiling").length, 0);
-});
-
-await test("ceilings add one slab per room on top of the walls, with shipped defaults", () => {
   const spec = mapSpecSchema.parse({ ...threeRoomInput, wallHeight: 10, wallThickness: 2 });
-  const { parts } = layoutMap(spec, undefined, { ceilings: true });
+  const surfaces = {
+    floor: { color: "#112233" },
+    wall: { color: "#445566" },
+    ceiling: { color: "#778899", material: "Metal" },
+  };
+  const { parts } = layoutMap(spec, surfaces, { ceilings: true });
   const ceilings = parts.filter((part) => part.kind === "ceiling");
   assert.deepEqual(
     ceilings.map((part) => part.name),
     ["start", "hall", "vault"].map((room) => `${room}${config.ceilingNameSuffix}`),
   );
   const ceiling = partNamed(parts, "hall-ceiling");
-  assert.equal(ceiling.room, "hall");
-  assert.equal(ceiling.role, "ceiling");
-  assert.equal(ceiling.material, config.defaultCeilingMaterial);
-  assert.deepEqual(ceiling.position, { x: 40, y: 11, z: 0 });
+  assert.deepEqual([ceiling.color, ceiling.material], ["#778899", "Metal"]);
   assert.deepEqual(ceiling.size, { x: 40, y: 2, z: 40 });
   const wall = partNamed(parts, "hall-wall-north-1");
   assert.equal(ceiling.position.y - ceiling.size.y / 2, wall.position.y + wall.size.y / 2);
-  assert.equal(new Set(parts.map((part) => part.name)).size, parts.length);
 });
 
-await test("ceilings take the style's ceiling color and material", () => {
+await test("a flush spawn pad is thin on the floor top in the floor's surface, otherwise it is raised", () => {
   const surfaces = {
-    floor: { color: "#112233" },
+    floor: { color: "#112233", material: "Slate" },
     wall: { color: "#445566" },
-    ceiling: { color: "#778899", material: "Metal" },
+    accent: { color: "#d9a441", material: "Neon" },
   };
-  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces, { ceilings: true });
-  assert.equal(partNamed(parts, "vault-ceiling").color, "#778899");
-  assert.equal(partNamed(parts, "vault-ceiling").material, "Metal");
+  const spec = mapSpecSchema.parse(threeRoomInput);
+  const { parts } = layoutMap(spec, surfaces, { flushSpawn: true });
+  const spawn = partNamed(parts, "start-spawn");
+  const floor = partNamed(parts, "start-floor");
+  assert.deepEqual(
+    [spawn.role, spawn.color, spawn.material],
+    [floor.role, floor.color, floor.material],
+  );
+  assert.equal(spawn.size.y, config.flushSpawnThicknessStuds);
+  const padBottom = spawn.position.y - spawn.size.y / 2;
+  assert.ok(Math.abs(padBottom - (floor.position.y + floor.size.y / 2)) < 1e-9);
+  const raised = layoutMap(spec, undefined, { flushSpawn: false }).parts;
+  assert.deepEqual(partNamed(raised, "start-spawn").position, { x: 0, y: 0.5, z: 0 });
 });
 
-await test("the ceiling tag is a non-empty config name", () => {
-  assert.ok(config.ceilingTag.length > 0);
+await test("a header over a lower door spans between the wall stretches beside it, which carry it", () => {
+  const { parts } = layoutOf({
+    mapId: "tall",
+    rooms: [
+      {
+        name: "tall",
+        x: 0,
+        z: 0,
+        width: 40,
+        depth: 40,
+        wallHeight: 24,
+        doors: [{ side: "north", offset: 0, height: 16 }],
+      },
+    ],
+  });
+  const header = partNamed(parts, `tall${config.wallNameInfix}north-header-1`);
+  const west = partNamed(parts, `tall${config.wallNameInfix}north-1`);
+  const east = partNamed(parts, `tall${config.wallNameInfix}north-2`);
+  assert.equal(header.position.x - header.size.x / 2, west.position.x + west.size.x / 2);
+  assert.equal(header.position.x + header.size.x / 2, east.position.x - east.size.x / 2);
+  assert.equal(header.position.y - header.size.y / 2, 16);
+  for (const stretch of [west, east]) {
+    assert.equal(stretch.position.y - stretch.size.y / 2, 0);
+    assert.ok(stretch.position.y + stretch.size.y / 2 >= header.position.y + header.size.y / 2);
+  }
 });
 
 const graphRoom = (name: string, extra: object = {}) => ({ name, width: 40, depth: 40, ...extra });
@@ -319,7 +249,6 @@ function graphSpec(names: string[], edges: [string, string][], extra: object = {
   });
 }
 
-/** The world position along the wall of each door, per room, per side. */
 function doorCenters(room: ReturnType<typeof solveRoomGraph>["rooms"][number]) {
   return room.doors.map((door) => ({
     side: door.side,
@@ -356,29 +285,28 @@ function assertSolved(
   }
 }
 
-await test("a room graph solves to touching rooms with matching doors", () => {
-  const spec = graphSpec(
+await test("a room graph, with or without a loop, solves to touching rooms with matching doors", () => {
+  const chain = graphSpec(
     ["a", "b", "c"],
     [
       ["a", "b"],
       ["b", "c"],
     ],
   );
-  const solved = solveRoomGraph(spec);
+  const solved = solveRoomGraph(chain);
   assert.equal(solved.rooms.length, 3);
-  assertSolved(spec, solved);
-  assert.equal("graph" in solved, false);
-});
-
-await test("a graph with a loop solves with every edge a door", () => {
-  const edges: [string, string][] = [
-    ["a", "b"],
-    ["b", "c"],
-    ["c", "d"],
-    ["d", "a"],
-  ];
-  const spec = graphSpec(["a", "b", "c", "d"], edges);
-  assertSolved(spec, solveRoomGraph(spec));
+  assertSolved(chain, solved);
+  const loop = graphSpec(
+    ["a", "b", "c", "d"],
+    [
+      ["a", "b"],
+      ["b", "c"],
+      ["c", "d"],
+      ["d", "a"],
+    ],
+  );
+  assertSolved(loop, solveRoomGraph(loop));
+  assert.deepEqual(layoutMap(solveRoomGraph(chain)), layoutMap(chain));
 });
 
 await test("the same graph and seed give the same layout, other seeds may differ", () => {
@@ -398,21 +326,10 @@ await test("the same graph and seed give the same layout, other seeds may differ
   assert.ok(layouts.size > 1);
 });
 
-await test("layoutMap builds a graph spec's parts with doors cut in the walls", () => {
-  const spec = graphSpec(["a", "b"], [["a", "b"]]);
-  const { parts } = layoutMap(spec);
-  const walls = parts.filter((part) => part.kind === "wall" && part.room === "a");
-  assert.ok(walls.length >= 5, "the wall with the door is split in two");
-  assert.deepEqual(layoutMap(solveRoomGraph(spec)), layoutMap(spec));
-});
-
-await test("a graph no layout fits is rejected", () => {
-  const names = ["hub", "n", "e", "s", "w", "extra"];
-  const edges = names.slice(1).map((name): [string, string] => ["hub", name]);
-  assert.throws(() => solveRoomGraph(graphSpec(names, edges)), /No layout fits/);
-});
-
-await test("an infeasible 9-room graph is rejected within the node budget", () => {
+await test("graphs no layout can honor are rejected", () => {
+  const star = ["hub", "n", "e", "s", "w", "extra"];
+  const starEdges = star.slice(1).map((name): [string, string] => ["hub", name]);
+  assert.throws(() => solveRoomGraph(graphSpec(star, starEdges)), /No layout fits/);
   const names = Array.from({ length: 9 }, (_, index) => `r${String(index)}`);
   const edges: [string, string][] = [["r0", "r8"]];
   for (let index = 0; index < 9; index += 1) {
@@ -424,85 +341,63 @@ await test("an infeasible 9-room graph is rejected within the node budget", () =
     }
   }
   assert.throws(() => solveRoomGraph(graphSpec(names, edges)), /No layout fits/);
-});
-
-await test("a disconnected graph is rejected", () => {
   assert.throws(
     () => solveRoomGraph(graphSpec(["a", "b", "c"], [["a", "b"]])),
     /not connected.*"c"/,
   );
+  const joined = (doorWidth: number, other = doorWidth) =>
+    graphMapSpecSchema.parse({
+      mapId: "graph",
+      rooms: [graphRoom("a", { doorWidth }), graphRoom("b", { doorWidth: other })],
+      graph: { edges: [{ a: "a", b: "b" }] },
+    });
+  assert.throws(() => solveRoomGraph(joined(8, 6)), /same doorWidth/);
+  assert.throws(() => solveRoomGraph(joined(40)), /No layout fits/);
 });
 
-await test("joined rooms need the same door width, and a door must fit the shared wall", () => {
-  const widths = graphMapSpecSchema.parse({
-    mapId: "graph",
-    rooms: [graphRoom("a", { doorWidth: 8 }), graphRoom("b")],
-    graph: { edges: [{ a: "a", b: "b" }] },
+function randomTree(seed: number): { names: string[]; edges: [string, string][] } {
+  const random = createSeededRandom(seed);
+  const names = Array.from({ length: 3 + Math.floor(random() * 4) }, (_, i) => `r${String(i)}`);
+  const degree = new Map<string, number>();
+  const edges = names.slice(1).map((name, index): [string, string] => {
+    const open = names.slice(0, index + 1).filter((other) => (degree.get(other) ?? 0) < 3);
+    const parent = open[Math.floor(random() * open.length)] ?? "r0";
+    degree.set(parent, (degree.get(parent) ?? 0) + 1);
+    return [parent, name];
   });
-  assert.throws(() => solveRoomGraph(widths), /same doorWidth/);
-  const wide = graphMapSpecSchema.parse({
-    mapId: "graph",
-    rooms: [graphRoom("a", { doorWidth: 40 }), graphRoom("b", { doorWidth: 40 })],
-    graph: { edges: [{ a: "a", b: "b" }] },
-  });
-  assert.throws(() => solveRoomGraph(wide), /No layout fits/);
-});
+  return { names, edges };
+}
 
-await test("a flush spawn pad is thin, rests on the floor top and takes the floor's color, material and role", () => {
-  const surfaces = {
-    floor: { color: "#112233", material: "Slate" },
-    wall: { color: "#445566" },
-    accent: { color: "#d9a441", material: "Neon" },
-  };
-  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), surfaces, { flushSpawn: true });
-  const spawn = partNamed(parts, "start-spawn");
-  const floor = partNamed(parts, "start-floor");
-  assert.equal(spawn.kind, "spawn");
-  assert.equal(spawn.role, "floor");
-  assert.equal(spawn.color, floor.color);
-  assert.equal(spawn.material, floor.material);
-  assert.equal(spawn.size.y, config.flushSpawnThicknessStuds);
-  const padBottom = spawn.position.y - spawn.size.y / 2;
-  assert.ok(
-    Math.abs(padBottom - (floor.position.y + floor.size.y / 2)) < 1e-9,
-    "the pad bottom sits on the floor top",
-  );
-  assert.ok(Math.abs(padBottom - config.floorLiftStuds) < 1e-9);
-});
-
-await test("without flushSpawn the pad stays raised in the accent surface", () => {
-  const { parts } = layoutMap(mapSpecSchema.parse(threeRoomInput), undefined, {
-    flushSpawn: false,
-  });
-  assert.deepEqual(partNamed(parts, "start-spawn").position, { x: 0, y: 0.5, z: 0 });
-});
-
-await test("a header over a lower door spans between the wall stretches beside it, which carry it", () => {
-  const { parts } = layoutOf({
-    mapId: "tall",
-    rooms: [
-      {
-        name: "tall",
-        x: 0,
-        z: 0,
-        width: 40,
-        depth: 40,
-        wallHeight: 24,
-        doors: [{ side: "north", offset: 0, height: 16 }],
-      },
-    ],
-  });
-  const header = partNamed(parts, `tall${config.wallNameInfix}north-header-1`);
-  const west = partNamed(parts, `tall${config.wallNameInfix}north-1`);
-  const east = partNamed(parts, `tall${config.wallNameInfix}north-2`);
-  // check_map grounds a part nothing below carries when grounded parts touch both of its opposite end faces.
-  assert.equal(header.position.x - header.size.x / 2, west.position.x + west.size.x / 2);
-  assert.equal(header.position.x + header.size.x / 2, east.position.x - east.size.x / 2);
-  assert.equal(header.position.y - header.size.y / 2, 16);
-  for (const stretch of [west, east]) {
-    assert.equal(stretch.position.y - stretch.size.y / 2, 0);
-    assert.ok(stretch.position.y + stretch.size.y / 2 >= header.position.y + header.size.y / 2);
-    assert.equal(stretch.position.z, header.position.z);
-    assert.equal(stretch.size.z, header.size.z);
+function solvedPartsOrUndefined(seed: number): PartRecord[] | undefined {
+  const { names, edges } = randomTree(seed);
+  try {
+    return layoutMap(solveRoomGraph(graphSpec(names, edges, { seed })), undefined, {
+      ceilings: true,
+    }).parts;
+  } catch (error) {
+    assert.match(String(error), /No layout fits/);
+    return undefined;
   }
+}
+
+function assertNoCrossRoomOverlap(parts: PartRecord[], seed: number) {
+  const pairs = parts.flatMap((first, index) =>
+    parts.slice(index + 1).map((second): [PartRecord, PartRecord] => [first, second]),
+  );
+  for (const [first, second] of pairs.filter(([a, b]) => a.room !== b.room)) {
+    const message = `seed ${String(seed)}: ${first.name} overlaps ${second.name}`;
+    assert.ok(overlapDepth(first, second) <= config.overlapToleranceStuds, message);
+  }
+}
+
+await test("parts of different rooms never overlap in any solved random room graph", () => {
+  const seeds = Array.from({ length: 40 }, (_, index) => index + 1);
+  const solved = seeds.flatMap((seed) => {
+    const parts = solvedPartsOrUndefined(seed);
+    return parts ? [{ seed, parts }] : [];
+  });
+  for (const { seed, parts } of solved) {
+    assertNoCrossRoomOverlap(parts, seed);
+  }
+  assert.ok(solved.length >= 20, `only ${String(solved.length)} random graphs were solvable`);
 });

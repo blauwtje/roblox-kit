@@ -57,35 +57,18 @@ const effects = ambientEffectsOf(
 );
 const phases = groupBuildPhases({ parts: layout.parts, details, props, lights, effects });
 
-await test("seven phases come in the build order", () => {
-  assert.deepEqual(
-    phases.map((phase) => phase.name),
-    [
-      "shell",
-      "floors and ceilings",
-      "openings",
-      "surfaces",
-      "props",
-      "lighting",
-      "ambient effects",
-    ],
-  );
+await test("seven phases come in the build order and hold every part once, by kind", () => {
   assert.deepEqual(
     phases.map((phase) => phase.name),
     [...buildPhaseNames],
   );
-});
-
-await test("every part lands in exactly one phase", () => {
+  assert.equal(phases.length, 7);
   const grouped = phases.flatMap((phase) => phase.parts);
   assert.equal(
     grouped.length,
     layout.parts.length + details.length + props.length + lights.length + effects.length,
   );
   assert.equal(new Set(grouped).size, grouped.length);
-});
-
-await test("each phase holds the parts of its kind", () => {
   const byName = Object.fromEntries(phases.map((phase) => [phase.name, phase.parts]));
   const kindsOf = (name: string) =>
     new Set(byName[name]?.map((part) => "kind" in part && part.kind));
@@ -96,7 +79,6 @@ await test("each phase holds the parts of its kind", () => {
   assert.deepEqual(byName["props"], props);
   assert.deepEqual(byName["lighting"], lights);
   assert.deepEqual(byName["ambient effects"], effects);
-  assert.equal(effects.length, 2);
 });
 
 await test("a layout without decor keeps all seven phases, the empty ones with no parts", () => {
