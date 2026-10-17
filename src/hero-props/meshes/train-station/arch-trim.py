@@ -14,9 +14,10 @@ studs, so their shading ignores X: noise reads Object coordinates with X zeroed 
 bump, and they are baked stretched 15x along X so occlusion does not fade near their ends.
 Palette as the pendant: dark green enamel, brass, cream, cast iron, switched by a "paint" attribute
 (0 green, 1 brass, 2 cream, 3 iron). Every part is joined per object, unwrapped together (smart project, then one
-pack) and baked to color (with occlusion grime), roughness, metalness and tangent normal maps by `shared.py`.
+pack) and baked to color (with occlusion grime), roughness, metalness and tangent normal maps by `lib`.
 """
 
+import importlib
 import math
 import os
 import sys
@@ -26,38 +27,16 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from shared import (  # noqa: E402
-    bake,
-    export_glb,
-    linear,
-    link_object,
-    mix_color,
-    mix_float,
-    noise,
-    ramp_node,
-    set_up_cycles,
-    triangle_count,
-    unwrap,
-)
+geometry = importlib.import_module("lib.geometry")
+materials = importlib.import_module("lib.materials")
+run = importlib.import_module("lib.run")
+uv = importlib.import_module("lib.uv")
 
 GREEN, BRASS, CREAM, IRON = 0.0, 1.0, 2.0, 3.0
 # Jamb: centred 5.3 off the axis; shaft 0.84 x 0.44, mouldings project up to 0.08 more (to the 1.0 x 0.6 envelope).
 JAMB_X, SHAFT_HX, SHAFT_HY, MAX_E = 5.3, 0.42, 0.22, 0.08
 OPENING_TOP, HEIGHT, HALF_WIDTH = 14.5, 16.0, 5.8
 SHAFT_BOTTOM, SHAFT_TOP = 0.94, 13.2
-
-
-def math_node(nodes, links, operation, a, b, c=None):
-    node = nodes.new("ShaderNodeMath")
-    node.operation = operation
-    for index, value in enumerate((a, b, c)):
-        if value is None:
-            continue
-        if isinstance(value, float):
-            node.inputs[index].default_value = value
-        else:
-            links.new(value, node.inputs[index])
-    return node.outputs["Value"]
 
 
 def paint_material():
@@ -71,7 +50,7 @@ def paint_material():
     # Trims are stretched along X in Studio: their noise must not vary along X, so X is zeroed for them.
     trim = nodes.new("ShaderNodeAttribute")
     trim.attribute_name = "trim"
-    keep_x = math_node(nodes, links, "SUBTRACT", 1.0, trim.outputs["Fac"])
+    keep_x = materials.math_node(tree, "SUBTRACT", (1.0, trim.outputs["Fac"]))
     x_scale = nodes.new("ShaderNodeCombineXYZ")
     links.new(keep_x, x_scale.inputs["X"])
     x_scale.inputs["Y"].default_value = 1.0
@@ -83,18 +62,18 @@ def paint_material():
     coords = scaled.outputs["Vector"]
     paint = nodes.new("ShaderNodeAttribute")
     paint.attribute_name = "paint"
-    masks = [math_node(nodes, links, "COMPARE", paint.outputs["Fac"], float(k), 0.5) for k in range(4)]
-    patch = noise(nodes, links, coords, 3.0, 6.0)
+    masks = [materials.math_node(tree, "COMPARE", (paint.outputs["Fac"], float(k), 0.5)) for k in range(4)]
+    patch = materials.noise(tree, coords, (3.0, 6.0))
 
     def tone(stops):
-        ramp = ramp_node(nodes, stops)
+        ramp = materials.ramp_node(nodes, stops)
         links.new(patch, ramp.inputs["Fac"])
         return ramp.outputs["Color"]
 
     color = tone([(0.3, "#264a37"), (0.7, "#2f5843")])
-    color = mix_color(nodes, links, "MIX", masks[1], color, tone([(0.3, "#9a7533"), (0.7, "#b48d45")]))
-    color = mix_color(nodes, links, "MIX", masks[2], color, tone([(0.3, "#b3a482"), (0.7, "#c0b18d")]))
-    color = mix_color(nodes, links, "MIX", masks[3], color, tone([(0.3, "#221f1c"), (0.7, "#2e2a25")]))
+    color = materials.mix_color(tree, "MIX", (masks[1], color, tone([(0.3, "#9a7533"), (0.7, "#b48d45")])))
+    color = materials.mix_color(tree, "MIX", (masks[2], color, tone([(0.3, "#b3a482"), (0.7, "#c0b18d")])))
+    color = materials.mix_color(tree, "MIX", (masks[3], color, tone([(0.3, "#221f1c"), (0.7, "#2e2a25")])))
     # Edge wear: enamel and iron chip to dark metal, brass polishes brighter.
     bevel = nodes.new("ShaderNodeBevel")
     bevel.inputs["Radius"].default_value = 0.012
@@ -102,47 +81,47 @@ def paint_material():
     facing.operation = "DOT_PRODUCT"
     links.new(bevel.outputs["Normal"], facing.inputs[0])
     links.new(geometry.outputs["Normal"], facing.inputs[1])
-    edge_ramp = ramp_node(nodes, [(0.9, "#ffffff"), (0.97, "#000000")])
+    edge_ramp = materials.ramp_node(nodes, [(0.9, "#ffffff"), (0.97, "#000000")])
     links.new(facing.outputs["Value"], edge_ramp.inputs["Fac"])
-    chip_ramp = ramp_node(nodes, [(0.45, "#000000"), (0.6, "#ffffff")])
-    links.new(noise(nodes, links, coords, 14.0, 6.0), chip_ramp.inputs["Fac"])
-    wear = math_node(nodes, links, "MULTIPLY", edge_ramp.outputs["Color"], chip_ramp.outputs["Color"])
-    bare = mix_color(nodes, links, "MIX", masks[1], linear("#3d3a36"), linear("#d8b56a"))
-    color = mix_color(nodes, links, "MIX", wear, color, bare)
-    dust_ramp = ramp_node(nodes, [(0.6, "#000000"), (0.95, "#4d4d4d")])
+    chip_ramp = materials.ramp_node(nodes, [(0.45, "#000000"), (0.6, "#ffffff")])
+    links.new(materials.noise(tree, coords, (14.0, 6.0)), chip_ramp.inputs["Fac"])
+    wear = materials.math_node(tree, "MULTIPLY", (edge_ramp.outputs["Color"], chip_ramp.outputs["Color"]))
+    bare = materials.mix_color(tree, "MIX", (masks[1], materials.linear("#3d3a36"), materials.linear("#d8b56a")))
+    color = materials.mix_color(tree, "MIX", (wear, color, bare))
+    dust_ramp = materials.ramp_node(nodes, [(0.6, "#000000"), (0.95, "#4d4d4d")])
     links.new(normal_z.outputs["Z"], dust_ramp.inputs["Fac"])
-    color = mix_color(nodes, links, "MIX", dust_ramp.outputs["Color"], color, linear("#8a8172"))
+    color = materials.mix_color(tree, "MIX", (dust_ramp.outputs["Color"], color, materials.linear("#8a8172")))
     occlusion = nodes.new("ShaderNodeAmbientOcclusion")
     occlusion.inputs["Distance"].default_value = 0.2
-    grime_ramp = ramp_node(nodes, [(0.0, "#6b6152"), (1.0, "#ffffff")])
+    grime_ramp = materials.ramp_node(nodes, [(0.0, "#6b6152"), (1.0, "#ffffff")])
     links.new(occlusion.outputs["AO"], grime_ramp.inputs["Fac"])
-    color = mix_color(nodes, links, "MULTIPLY", 1.0, color, grime_ramp.outputs["Color"])
+    color = materials.mix_color(tree, "MULTIPLY", (1.0, color, grime_ramp.outputs["Color"]))
     links.new(color, bsdf.inputs["Base Color"])
-    metal = math_node(nodes, links, "MULTIPLY", masks[1], 0.9)
-    metal = math_node(nodes, links, "MULTIPLY_ADD", masks[3], 0.25, metal)
-    metal = math_node(nodes, links, "MAXIMUM", metal, math_node(nodes, links, "MULTIPLY", wear, 0.8))
+    metal = materials.math_node(tree, "MULTIPLY", (masks[1], 0.9))
+    metal = materials.math_node(tree, "MULTIPLY_ADD", (masks[3], 0.25, metal))
+    metal = materials.math_node(tree, "MAXIMUM", (metal, materials.math_node(tree, "MULTIPLY", (wear, 0.8))))
     links.new(metal, bsdf.inputs["Metallic"])
     rough_noise = nodes.new("ShaderNodeMapRange")
     rough_noise.inputs["To Min"].default_value = -0.06
     rough_noise.inputs["To Max"].default_value = 0.06
     links.new(patch, rough_noise.inputs["Value"])
-    rough = math_node(nodes, links, "ADD", 0.34, rough_noise.outputs["Result"])
-    rough = mix_float(nodes, links, masks[1], rough, 0.38)
-    rough = mix_float(nodes, links, masks[2], rough, 0.5)
-    rough = mix_float(nodes, links, masks[3], rough, 0.62)
-    rough = mix_float(nodes, links, dust_ramp.outputs["Color"], rough, 0.8)
+    rough = materials.math_node(tree, "ADD", (0.34, rough_noise.outputs["Result"]))
+    rough = materials.mix_float(tree, (masks[1], rough, 0.38))
+    rough = materials.mix_float(tree, (masks[2], rough, 0.5))
+    rough = materials.mix_float(tree, (masks[3], rough, 0.62))
+    rough = materials.mix_float(tree, (dust_ramp.outputs["Color"], rough, 0.8))
     links.new(rough, bsdf.inputs["Roughness"])
     # Orange-peel enamel on the arch only; a bump on a trim would streak once stretched.
     bump = nodes.new("ShaderNodeBump")
-    links.new(math_node(nodes, links, "MULTIPLY", keep_x, 0.1), bump.inputs["Strength"])
+    links.new(materials.math_node(tree, "MULTIPLY", (keep_x, 0.1)), bump.inputs["Strength"])
     bump.inputs["Distance"].default_value = 0.004
-    links.new(noise(nodes, links, coords, 40.0, 4.0), bump.inputs["Height"])
+    links.new(materials.noise(tree, coords, (40.0, 4.0)), bump.inputs["Height"])
     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
     return material
 
 
-def mark(obj, name, value):
-    attribute = obj.data.attributes.new(name, "FLOAT", "POINT")
+def mark_trim(obj, value):
+    attribute = obj.data.attributes.new("trim", "FLOAT", "POINT")
     attribute.data.foreach_set("value", [value] * len(obj.data.vertices))
 
 
@@ -170,8 +149,8 @@ def loft(name, sections, to_world, material, paint, bevel=0.0):
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
-    obj = link_object(name, mesh, material)
-    mark(obj, "paint", paint)
+    obj = materials.link_object(name, mesh, material)
+    materials.mark_paint(obj, paint)
     if bevel:
         add_bevel(obj, bevel)
     return obj
@@ -190,11 +169,6 @@ def square_lathe(name, profile, cx, material, paint):
 def extrusion(name, polygon, x0, x1, material, paint, bevel=0.01):
     """A (y, z) profile run along X from x0 to x1."""
     return loft(name, [(polygon, x0), (polygon, x1)], lambda u, v, t: (t, u, v), material, paint, bevel)
-
-
-def smoothstep(edge0, edge1, value):
-    t = min(1.0, max(0.0, (value - edge0) / (edge1 - edge0)))
-    return t * t * (3 - 2 * t)
 
 
 def arc(cu, cv, ru, rv, a0, a1, steps):
@@ -237,7 +211,7 @@ def jamb(cx, material):
     heights += [SHAFT_TOP - 0.38, SHAFT_TOP - 0.3, SHAFT_TOP - 0.22, SHAFT_TOP - 0.12, SHAFT_TOP]
     sections = []
     for z in heights:
-        stop = smoothstep(SHAFT_BOTTOM + 0.1, SHAFT_BOTTOM + 0.38, z) * smoothstep(SHAFT_TOP - 0.1, SHAFT_TOP - 0.38, z)
+        stop = geometry.smoothstep(SHAFT_BOTTOM + 0.1, SHAFT_BOTTOM + 0.38, z) * geometry.smoothstep(SHAFT_TOP - 0.1, SHAFT_TOP - 0.38, z)
         sections.append((shaft_section(0.035 * stop), z))
     loft(f"shaft-{cx}", sections, lambda u, v, t: (cx + u, v, t), material, GREEN, 0.008)
     astragal = [(0.0, 13.18)] + [(0.01 + 0.025 * math.sin(math.pi * k / 4), 13.2 + 0.09 * k / 4) for k in range(5)] + [(0.0, 13.31)]
@@ -282,7 +256,7 @@ def entablature(material):
                 rivet = bpy.context.active_object
                 rivet.scale = (0.04, 0.025, 0.04)
                 rivet.data.materials.append(material)
-                mark(rivet, "paint", BRASS)
+                materials.mark_paint(rivet, BRASS)
 
 
 def build_arch(material):
@@ -336,7 +310,7 @@ def join_new(name, trim):
     obj = bpy.context.active_object
     obj.name = name
     obj.data.name = name
-    mark(obj, "trim", trim)
+    mark_trim(obj, trim)
     bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
     obj.location = (0.0, 0.0, 0.0)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(35))
@@ -347,7 +321,7 @@ def join_new(name, trim):
 
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-set_up_cycles()
+run.set_up_cycles()
 paint = paint_material()
 build_arch(paint)
 arch = join_new("arch", 0.0)
@@ -360,12 +334,12 @@ for obj in objects:
     corners = [Vector(corner) for corner in obj.bound_box]
     lo = [min(c[i] for c in corners) for i in range(3)]
     hi = [max(c[i] for c in corners) for i in range(3)]
-    print("object", obj.name, "triangles", triangle_count(obj), "size", [round(h - l, 4) for l, h in zip(lo, hi)], "centre", [round((h + l) / 2, 4) for l, h in zip(lo, hi)])
-unwrap(objects, 0.003)
+    print("object", obj.name, "triangles", run.triangle_count(obj), "size", [round(h - l, 4) for l, h in zip(lo, hi)], "centre", [round((h + l) / 2, 4) for l, h in zip(lo, hi)])
+uv.unwrap(objects)
 # Apart so nothing occludes another; trims stretched so occlusion does not fade at their ends.
 crown.location, crown.scale = (0.0, 4.0, 0.0), (15.0, 1.0, 1.0)
 baseboard.location, baseboard.scale = (0.0, 8.0, 0.0), (15.0, 1.0, 1.0)
-bake(objects, [paint], "arch-trim")
+run.bake(objects, [paint], "arch-trim")
 for obj in objects:
     obj.location, obj.scale = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
-export_glb(objects, "arch-trim")
+run.export_glb(objects, "arch-trim")
