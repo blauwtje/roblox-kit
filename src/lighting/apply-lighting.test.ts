@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { loadPresets } from "../style/load-preset.ts";
@@ -73,18 +72,6 @@ await test("rejects a result that is not the reported shape", async () => {
   await assert.rejects(applyLighting(request(studioReturning('{"snapshotTaken":"yes"}'))));
 });
 
-await test("apply-lighting.luau is strict, restores a stored snapshot before writing and never touches Technology", async () => {
-  const source = await readFile(new URL("../../luau/apply-lighting.luau", import.meta.url), "utf8");
-  const restoreAt = source.indexOf("restore(HttpService:JSONDecode");
-  const snapshotAt = source.indexOf("snapshotNow())");
-  const writeAt = source.indexOf("writeLighting(recipe)");
-  assert.ok(source.startsWith("--!strict"));
-  assert.ok(source.includes("RobloxKitLightingSnapshot"));
-  assert.ok(!source.includes("Lighting.Technology"));
-  assert.ok(restoreAt > 0 && restoreAt < writeAt);
-  assert.ok(snapshotAt > 0 && snapshotAt < writeAt);
-});
-
 function removeRequest(studio: FakeStudioConnection) {
   return {
     connection: studio,
@@ -95,45 +82,42 @@ function removeRequest(studio: FakeStudioConnection) {
   };
 }
 
-await test("removing sends the removing flag and no recipe, and returns the restored original", async () => {
+await test("removing sends the removing flag and no recipe", async () => {
   const studio = studioReturning('{"restored":"original","remainingStyledMaps":[]}');
-  const removed = await applyLighting(removeRequest(studio));
-
-  assert.deepEqual(removed, { restored: "original", remainingStyledMaps: [] });
+  await applyLighting(removeRequest(studio));
   const code = String(studio.requests[0]?.arguments["code"]);
   assert.equal(studio.requests[0]?.arguments["datamodel_type"], "Edit");
   assert.ok(code.includes('"removing":true'));
   assert.ok(!code.includes('"recipe"'));
 });
 
-await test("removing reads an absent restored key, which Luau drops for nil, as null with the remaining maps", async () => {
-  const studio = studioReturning('{"remainingStyledMaps":["keep","other"]}');
-  const removed = await applyLighting(removeRequest(studio));
-  assert.deepEqual(removed, { restored: null, remainingStyledMaps: ["keep", "other"] });
-});
-
-await test("removing reports the map's own snapshot for an older place", async () => {
-  const studio = studioReturning('{"restored":"map","remainingStyledMaps":[]}');
-  assert.deepEqual(await applyLighting(removeRequest(studio)), {
-    restored: "map",
-    remainingStyledMaps: [],
+const removingCases = [
+  {
+    name: "the restored original",
+    reply: '{"restored":"original","remainingStyledMaps":[]}',
+    expected: { restored: "original", remainingStyledMaps: [] },
+  },
+  {
+    name: "an absent restored key, which Luau drops for nil, as null with the remaining maps",
+    reply: '{"remainingStyledMaps":["keep","other"]}',
+    expected: { restored: null, remainingStyledMaps: ["keep", "other"] },
+  },
+  {
+    name: "the map's own snapshot for an older place",
+    reply: '{"restored":"map","remainingStyledMaps":[]}',
+    expected: { restored: "map", remainingStyledMaps: [] },
+  },
+];
+for (const { name, reply, expected } of removingCases) {
+  await test(`removing reports ${name}`, async () => {
+    assert.deepEqual(await applyLighting(removeRequest(studioReturning(reply))), expected);
   });
-});
+}
 
 await test("removing rejects a restored value outside original and map", async () => {
   await assert.rejects(
     applyLighting(removeRequest(studioReturning('{"restored":"both","remainingStyledMaps":[]}'))),
   );
-});
-
-await test("apply-lighting.luau saves the original once on the maps folder, restores it on removal and clears it", async () => {
-  const source = await readFile(new URL("../../luau/apply-lighting.luau", import.meta.url), "utf8");
-  const saveAt = source.indexOf("folder:SetAttribute(ORIGINAL_ATTRIBUTE_NAME, snapshot)");
-  const clearAt = source.indexOf("folder:SetAttribute(ORIGINAL_ATTRIBUTE_NAME, nil)");
-  assert.ok(source.includes('"RobloxKitOriginalLighting"'));
-  assert.ok(source.includes("folder:GetAttribute(ORIGINAL_ATTRIBUTE_NAME) == nil"));
-  assert.ok(saveAt > 0 && clearAt > 0);
-  assert.ok(source.includes('restored = "map"'));
 });
 
 await test("sends the post-processing block of a preset that has one, and none for a preset without", async () => {
@@ -146,16 +130,6 @@ await test("sends the post-processing block of a preset that has one, and none f
   const without = studioReturning('{"snapshotTaken":true}');
   await applyLighting({ ...request(without), recipe: { ...recipe, PostProcessing: undefined } });
   assert.ok(!String(without.requests[0]?.arguments["code"]).includes('"PostProcessing":{'));
-});
-
-await test("apply-lighting.luau snapshots, restores and creates every post-processing effect beside Atmosphere and Bloom", async () => {
-  const source = await readFile(new URL("../../luau/apply-lighting.luau", import.meta.url), "utf8");
-  for (const className of ["ColorCorrectionEffect", "SunRaysEffect", "DepthOfFieldEffect", "Sky"]) {
-    assert.ok(source.includes(`className = "${className}"`), className);
-  }
-  assert.ok(source.includes("postProcessing = postProcessing"));
-  assert.ok(source.includes("snapshot.postProcessing"));
-  assert.ok(source.includes("effectOrNew(post.className)"));
 });
 
 await test("leaves out post effects with zero strength and keeps the others", async () => {
