@@ -6,6 +6,7 @@ import { z } from "zod";
 import { FakeStudioConnection } from "./fake-studio-connection.ts";
 import { selectStudio } from "./studio-connection.ts";
 import { StudioMcpClient } from "./studio-mcp-client.ts";
+import { studioTools } from "./studio-tools.ts";
 
 const clientInfo = { name: "roblox-kit-test", version: "0.0.0" };
 const studioList = { studios: [{ id: "studio-a", name: "Place A" }] };
@@ -27,14 +28,14 @@ function fakeStudioMcpServers(listAnswers: (object | string)[] = [studioList]) {
       serveStdio(
         () => {
           const server = new McpServer({ name: "RobloxStudio", version: "1.0.0" });
-          server.registerTool("list_roblox_studios", {}, () => {
+          server.registerTool(studioTools.listStudios, {}, () => {
             const answer = listAnswers[Math.min(listCalls, listAnswers.length - 1)];
             listCalls += 1;
             const text = typeof answer === "string" ? answer : JSON.stringify(answer);
             return { content: [{ type: "text", text }] };
           });
           server.registerTool(
-            "execute_luau",
+            studioTools.executeLuau,
             { inputSchema: z.object({ code: z.string(), studio_id: z.string() }) },
             ({ code, studio_id }) => {
               receivedStudioIds.push(studio_id);
@@ -62,7 +63,7 @@ await test("connects lazily, lists Studios and adds studio_id to a tool call", a
 
   assert.deepEqual(await client.listStudios(), studioList.studios);
   const result = await client.callTool({
-    name: "execute_luau",
+    name: studioTools.executeLuau,
     studioId: "studio-a",
     arguments: { code: "return 1" },
   });

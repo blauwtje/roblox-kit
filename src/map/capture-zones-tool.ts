@@ -6,6 +6,7 @@ import { runLuauBatch, runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
+import { studioTools } from "../studio/studio-tools.ts";
 import { mapZonesBatchPart, mapZonesSchema } from "./read-map-zones.ts";
 import { wallBandNames } from "./room-details.ts";
 import { nearWallSideOfView, zoneShots, type Bounds, type ViewedZoneShot } from "./zone-cameras.ts";
@@ -297,7 +298,7 @@ async function captureShot(
   // Called through the module object so a test can mock the timer.
   await timers.setTimeout(settleMs);
   const result = await connection.callTool({
-    name: "screen_capture",
+    name: studioTools.screenCapture,
     studioId,
     arguments: {
       capture_id: `roblox-kit-${mapId}-${shot.zone}-${shot.view}`,

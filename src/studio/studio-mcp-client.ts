@@ -10,10 +10,7 @@ import { z } from "zod";
 import { config } from "../config.ts";
 import type { StudioConnection, StudioInfo, StudioToolRequest } from "./studio-connection.ts";
 import { studioMcpCommand } from "./studio-mcp-command.ts";
-
-/** MCP revision the StudioMCP connection is pinned to (research P3). */
-const pinnedProtocolVersion = "2026-07-28";
-const listStudiosToolName = "list_roblox_studios";
+import { pinnedProtocolVersion, studioTools } from "./studio-tools.ts";
 
 /**
  * `list_roblox_studios` answers with JSON text; entries carry an `id` and a `name`, which is null
@@ -87,7 +84,7 @@ export class StudioMcpClient implements StudioConnection {
   }
 
   async #askStudios(): Promise<StudioInfo[]> {
-    const result = await this.#callUpstream(listStudiosToolName, {});
+    const result = await this.#callUpstream(studioTools.listStudios, {});
     const text = result.content.find((block) => block.type === "text");
     if (result.isError || text === undefined) {
       throw new Error(`StudioMCP could not list Studios: ${text?.text ?? "empty result"}`);

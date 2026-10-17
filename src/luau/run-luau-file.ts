@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { config } from "../config.ts";
 import type { StudioConnection } from "../studio/studio-connection.ts";
+import { studioTools } from "../studio/studio-tools.ts";
 import { inlineRequires } from "./inline-requires.ts";
 
 const bundledLuauDirectory = new URL("../../luau/", import.meta.url);
@@ -128,7 +129,7 @@ async function executeLuau(
   code: string,
 ): Promise<string> {
   const toolResult = await request.connection.callTool({
-    name: "execute_luau",
+    name: studioTools.executeLuau,
     studioId: request.studioId,
     arguments: { code, datamodel_type: request.datamodelType },
     timeoutMs: request.timeoutMs,
