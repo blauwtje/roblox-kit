@@ -13,6 +13,7 @@ import { captureZonesTool } from "../map/capture-zones-tool.ts";
 import { checkReportResource, createCheckMapTool } from "../map/check-map-tool.ts";
 import { CheckReportStore } from "../map/check-report-store.ts";
 import { createJudgeRoundTool } from "../eval/judge-round-tool.ts";
+import { createAnalyzeImageTool } from "../vision/analyze-image-tool.ts";
 import { removeMapTool } from "../map/remove-map-tool.ts";
 import { createRunInPlaytestTool } from "../playtest/run-in-playtest-tool.ts";
 import { createRunPlaytestTool } from "../playtest/run-playtest-tool.ts";
@@ -47,6 +48,7 @@ export function createTools(deps: ToolDependencies): {
       removeMapTool,
       createRunInPlaytestTool(),
       createJudgeRoundTool(deps.projectDir),
+      createAnalyzeImageTool(deps.projectDir),
     ],
     resources: [checkReportResource(checkReports)],
   };

@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { FakeStudioConnection } from "../studio/fake-studio-connection.ts";
 import { createServer, resources, tools } from "./main.ts";
 
-const toolsListByteBudget = 140_000;
+const toolsListByteBudget = 150_000;
 
 async function connect(studios: { id: string; name: string }[]): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
