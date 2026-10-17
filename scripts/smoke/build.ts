@@ -12,6 +12,8 @@ import { heroPropsOf, trimMeshesOf } from "../../src/map/hero-prop-placement.ts"
 import { buildFacades } from "../../src/map/facade-grammar.ts";
 import { buildRoomDetails } from "../../src/map/room-details.ts";
 import { resolveRelations } from "../../src/map/relation-solver.ts";
+import { placeSetPieces } from "../../src/map/set-piece-placement.ts";
+import { mapSpecSchema } from "../../src/map/map-spec.ts";
 import { loadPresets } from "../../src/style/load-preset.ts";
 import { selectStudio, type StudioConnection } from "../../src/studio/studio-connection.ts";
 import { callRealTool, executeLuau, expectClose, expectEqual, presets } from "./shared.ts";
@@ -748,4 +750,36 @@ export async function probeAmbientEffects(connection: StudioConnection): Promise
   );
   expectEqual("ambient map after remove_map", cleared.exists, false);
   return `${String(counts.particles)} particle emitters and ${String(counts.beams)} beams as planned, ${String(counts.textured)} textured, ${String(spriteWarnings.length)} sprite warnings; none after remove_map`;
+}
+
+const twinRoomsSpec = mapSpecSchema.parse({
+  mapId: "roblox-kit-smoke-twins",
+  doorWidth: 6,
+  rooms: ["east", "west"].map((name, index) => ({
+    name,
+    roomType: "ticket-hall",
+    x: 2400 + index * 100,
+    z: 2400,
+    width: 30,
+    depth: 30,
+    doors: [{ side: "north", offset: -4 }],
+  })),
+});
+
+/** Proves two rooms of one type get set pieces with different seeds; it needs no Studio. */
+export function probeSetPieceSeeds(): string {
+  const preset = presets.get("train-station");
+  if (preset === undefined) {
+    throw new Error("The train-station preset is missing.");
+  }
+  const { pieces } = placeSetPieces(
+    twinRoomsSpec,
+    preset.roomTypes,
+    preset.palette.accent,
+    smokeMapSpec.seed ?? 1,
+  );
+  const seeds = pieces.filter((piece) => piece.kind === "counter").map((piece) => piece.seed);
+  expectEqual("counter set pieces in two same-type rooms", seeds.length, 2);
+  expectEqual("the two counters share a seed", seeds[0] === seeds[1], false);
+  return `two ticket-hall counters got seeds ${seeds.join(" and ")}`;
 }

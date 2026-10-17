@@ -11,6 +11,7 @@ import {
   probeHeroProps,
   probeMapDecor,
   probePaintedMap,
+  probeSetPieceSeeds,
   probeProfileTrim,
   probeTerrainHeightmap,
 } from "./build.ts";
@@ -29,6 +30,7 @@ export const stepName = {
   painted: "build_map palette colors and MaterialVariant",
   decor: "build_map ceilings, generators and generated props",
   hero: "build_map hero props",
+  seeds: "set pieces of same-type rooms get different seeds",
   trim: "build_map profile trim",
   facade: "build_map facade",
   lighting: "build_map lights and lighting recipe",
@@ -164,6 +166,7 @@ export async function probeMapTools(
       [stepName.painted, () => probePaintedMap(connection)],
       [stepName.decor, () => probeMapDecor(connection)],
       [stepName.hero, () => probeHeroProps(connection)],
+      [stepName.seeds, () => Promise.resolve(probeSetPieceSeeds())],
       [stepName.trim, () => probeProfileTrim(connection)],
       [stepName.facade, () => probeFacade(connection)],
       [stepName.lighting, () => probeLighting(connection)],

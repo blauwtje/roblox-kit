@@ -336,3 +336,26 @@ await test("every sign of the resolved train-station benchmark touches a wall pa
   });
   assert.deepEqual(floating, [], "signs that touch no wall part");
 });
+
+await test("two rooms of one type get set pieces with different seeds", () => {
+  const twin = (name: string, x: number) => ({
+    name,
+    roomType: "ticket-hall",
+    x,
+    z: 0,
+    width: 30,
+    depth: 30,
+    doors: [{ side: "north", offset: -4 }],
+  });
+  const spec = mapSpecSchema.parse({
+    mapId: "twins",
+    doorWidth: 6,
+    rooms: [twin("a", 0), twin("b", 100)],
+  });
+  const { pieces } = placeSetPieces(spec, roomTypes, accent, 1);
+  const counters = piecesOf("counter", pieces);
+  assert.equal(counters.length, 2);
+  assert.notEqual(counters[0]?.seed, counters[1]?.seed);
+  const again = placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  assert.deepEqual(again, pieces);
+});

@@ -15,6 +15,8 @@ import type { RoomFrame, Side } from "./room-frame.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { DoorwayClearanceBox } from "./size-rules.ts";
 
+import { createSeededRandom } from "../shared/seeded-random.ts";
+
 type Door = RoomSpec["doors"][number];
 
 /**
@@ -46,8 +48,10 @@ function isMisfit(result: object): result is Misfit {
 interface RoomContext {
   room: RoomSpec;
   frame: RoomFrame;
-  seed: number;
+  nextSeed: () => number;
 }
+
+const seedRange = 2 ** 31;
 
 /** Clear space kept below a sign's lintel. */
 const signLintelGapStuds = 0.25;
@@ -201,7 +205,7 @@ interface Placement {
 }
 
 function placed(
-  { frame, seed }: RoomContext,
+  { frame, nextSeed }: RoomContext,
   placement: Placement,
   attributes: Record<string, string> = {},
   height?: number,
@@ -211,7 +215,7 @@ function placed(
     kind: placement.kind,
     pivot: { x, y: height ?? placement.size.y / 2, z },
     size: placement.size,
-    seed,
+    seed: nextSeed(),
     yaw: yawFacing[placement.facing],
     attributes,
   };
@@ -315,7 +319,7 @@ function standingPiece(
   kind: PropKind,
   slot: number,
 ): SetPieceRecord | Misfit {
-  const { room, frame, seed } = context;
+  const { room, frame, nextSeed } = context;
   const slotOffsets = [-frame.halfWidth / 2, frame.halfWidth / 2];
   const along = slotOffsets[slot];
   if (along === undefined) {
@@ -335,7 +339,7 @@ function standingPiece(
     kind,
     pivot: { x: room.x + along, y: size.y / 2, z: room.z },
     size,
-    seed,
+    seed: nextSeed(),
     yaw: yawFacing.north,
     attributes: {},
   };
@@ -371,6 +375,7 @@ function boardBesideSouthDoor(
 function setPiecesOfRoom(
   spec: MapSpec,
   room: RoomSpec,
+  roomIndex: number,
   roomTypes: NonNullable<Preset["roomTypes"]>,
   accent: string,
   seed: number,
@@ -382,7 +387,12 @@ function setPiecesOfRoom(
   if (roomType === undefined) {
     return { pieces: [], warnings: [] };
   }
-  const context: RoomContext = { room, frame: roomFrame(spec, room), seed };
+  const random = createSeededRandom(seed + roomIndex * propDimensions.roomSeedStride);
+  const context: RoomContext = {
+    room,
+    frame: roomFrame(spec, room),
+    nextSeed: () => Math.floor(random() * seedRange),
+  };
   const pieces: SetPieceRecord[] = [];
   const warnings: string[] = [];
   let standingSlot = 0;
@@ -439,8 +449,18 @@ export function placeSetPieces(
   if (roomTypes === undefined) {
     return { pieces: [], warnings: [] };
   }
-  const placements = spec.rooms.map((room) =>
-    setPiecesOfRoom(spec, room, roomTypes, accent, seed, clearances, propRules, heroProps),
+  const placements = spec.rooms.map((room, roomIndex) =>
+    setPiecesOfRoom(
+      spec,
+      room,
+      roomIndex,
+      roomTypes,
+      accent,
+      seed,
+      clearances,
+      propRules,
+      heroProps,
+    ),
   );
   return {
     pieces: placements.flatMap((placement) => placement.pieces),
