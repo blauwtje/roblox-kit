@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -139,4 +139,11 @@ await test("reads tool_input.file_path from the stdin JSON", () => {
   assert.equal(filePathFromInput("not json"), undefined);
   assert.equal(filePathFromInput('{"tool_input":{}}'), undefined);
   assert.equal(filePathFromInput("null"), undefined);
+});
+
+await test("the PostToolUse command hook times out after 30 seconds", () => {
+  const config = JSON.parse(readFileSync(new URL("./hooks.json", import.meta.url), "utf8")) as {
+    hooks: { PostToolUse: { hooks: { timeout?: number }[] }[] };
+  };
+  assert.equal(config.hooks.PostToolUse[0]?.hooks[0]?.timeout, 30);
 });
