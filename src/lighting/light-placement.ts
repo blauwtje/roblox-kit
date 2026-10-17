@@ -176,6 +176,15 @@ export function placeLights(
       range: lightRoles[role].range * reach,
       shadows: false,
     });
+    if (room.spawn) {
+      placements.push({
+        zone: room.name,
+        role: "focal",
+        position: { x: room.x, y: config.focalLightHeightStuds, z: room.z },
+        range: lightRoles.focal.range * reach,
+        shadows: false,
+      });
+    }
     if (lightFixtures !== undefined) {
       for (const box of fixtureBoxes(spec, room, lightFixtures)) {
         const fixture = glow && lightFixtures.kind === "pendant" ? { ...box, glow } : box;
@@ -188,15 +197,6 @@ export function placeLights(
           fixture,
         });
       }
-    }
-    if (room.spawn) {
-      placements.push({
-        zone: room.name,
-        role: "focal",
-        position: { x: room.x, y: config.focalLightHeightStuds, z: room.z },
-        range: lightRoles.focal.range * reach,
-        shadows: false,
-      });
     }
     placements.length = Math.min(placements.length, roomStart + config.maxLocalLightsPerRoom);
   }

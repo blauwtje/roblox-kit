@@ -290,7 +290,7 @@ await test("the focal light over the spawn pad keeps its full range", () => {
   assert.equal(focal?.range, lightRoles.focal.range);
 });
 
-await test("caps the lights of a room at maxLocalLightsPerRoom, dropping the latest placed", () => {
+await test("caps the lights of a room at maxLocalLightsPerRoom, keeping the focal light and dropping fixtures first", () => {
   const rooms = [
     { name: "hall", x: 0, z: 0, width: 80, depth: 80, spawn: true },
     { name: "yard", x: 200, z: 0, width: 20, depth: 20 },
@@ -299,10 +299,10 @@ await test("caps the lights of a room at maxLocalLightsPerRoom, dropping the lat
   const hallLights = lights.filter((light) => light.zone === "hall");
   assert.equal(hallLights.length, config.maxLocalLightsPerRoom);
   assert.equal(hallLights[0]?.role, "hero");
-  assert.ok(hallLights.every((light) => light.role !== "focal"));
+  assert.equal(hallLights.filter((light) => light.role === "focal").length, 1);
   assert.ok(lights.filter((light) => light.zone === "yard").length <= config.maxLocalLightsPerRoom);
   assert.deepEqual(
     hallLights.slice(1).map((light) => light.role),
-    Array(config.maxLocalLightsPerRoom - 1).fill("zoneMarker"),
+    ["focal", ...Array<string>(config.maxLocalLightsPerRoom - 2).fill("zoneMarker")],
   );
 });
