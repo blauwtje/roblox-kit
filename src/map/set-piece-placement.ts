@@ -7,14 +7,14 @@ import {
   propDimensions,
   propKinds,
   propSize,
-  roomBounds,
   yawFacing,
 } from "./prop-placement.ts";
-import type { PropKind, PropRecord, RoomBounds } from "./prop-placement.ts";
+import type { PropKind, PropRecord } from "./prop-placement.ts";
+import { pointOnWall, roomFrame, runsAlongX, sideOrder } from "./room-frame.ts";
+import type { RoomFrame, Side } from "./room-frame.ts";
 import type { Preset } from "../style/preset-schema.ts";
 import type { DoorwayClearanceBox } from "./size-rules.ts";
 
-type Side = RoomSpec["doors"][number]["side"];
 type Door = RoomSpec["doors"][number];
 
 /**
@@ -35,42 +35,28 @@ export interface SetPiecePlacement {
 }
 
 /** A set piece that does not fit its room: the room keeps its other pieces and this one is skipped. */
-class SetPieceMisfit extends Error {}
+interface Misfit {
+  warning: string;
+}
 
-const sideOrder: Side[] = ["north", "south", "east", "west"];
+function isMisfit(result: object): result is Misfit {
+  return "warning" in result;
+}
+
+interface RoomContext {
+  room: RoomSpec;
+  frame: RoomFrame;
+  seed: number;
+}
 
 /** Clear space kept below a sign's lintel. */
 const signLintelGapStuds = 0.25;
 
-function runsAlongX(side: Side): boolean {
-  return side === "north" || side === "south";
-}
-
 /** Length of a wall's inner face and how deep the room is across it. */
-function wallSpan(interior: RoomBounds, side: Side): { length: number; across: number } {
-  const width = 2 * interior.halfWidth;
-  const depth = 2 * interior.halfDepth;
+function wallSpan(frame: RoomFrame, side: Side): { length: number; across: number } {
+  const width = 2 * frame.halfWidth;
+  const depth = 2 * frame.halfDepth;
   return runsAlongX(side) ? { length: width, across: depth } : { length: depth, across: width };
-}
-
-/** World center of a point `along` a wall from the room center and `inset` studs in from its inner face. */
-function pointOnWall(
-  room: RoomSpec,
-  interior: RoomBounds,
-  side: Side,
-  along: number,
-  inset: number,
-): { x: number; z: number } {
-  switch (side) {
-    case "north":
-      return { x: room.x + along, z: room.z - interior.halfDepth + inset };
-    case "south":
-      return { x: room.x + along, z: room.z + interior.halfDepth - inset };
-    case "west":
-      return { x: room.x - interior.halfWidth + inset, z: room.z + along };
-    case "east":
-      return { x: room.x + interior.halfWidth - inset, z: room.z + along };
-  }
 }
 
 function setPieceKind(room: RoomSpec, name: string): PropKind {
@@ -84,29 +70,26 @@ function setPieceKind(room: RoomSpec, name: string): PropKind {
 }
 
 /** The longest wall with no door in it; the first in north, south, east, west order on a tie. */
-function longestDoorlessWall(room: RoomSpec, interior: RoomBounds, kind: PropKind): Side {
+function longestDoorlessWall({ room, frame }: RoomContext, kind: PropKind): Side | Misfit {
   const doorless = sideOrder.filter((side) => !room.doors.some((door) => door.side === side));
   const longest = doorless.reduce<Side | undefined>(
     (best, side) =>
-      best === undefined || wallSpan(interior, side).length > wallSpan(interior, best).length
+      best === undefined || wallSpan(frame, side).length > wallSpan(frame, best).length
         ? side
         : best,
     undefined,
   );
-  if (longest === undefined) {
-    throw new SetPieceMisfit(
-      `Room "${room.name}" has a door in every wall, so ${kind} has no wall to run along.`,
-    );
-  }
-  return longest;
+  return (
+    longest ?? {
+      warning: `Room "${room.name}" has a door in every wall, so ${kind} has no wall to run along.`,
+    }
+  );
 }
 
-function assertFits(room: RoomSpec, kind: PropKind, free: number): void {
-  if (free < 0) {
-    throw new SetPieceMisfit(
-      `Room "${room.name}" is too small for its set piece ${kind}; enlarge the room.`,
-    );
-  }
+function tooSmall({ room }: RoomContext, kind: PropKind, free: number): Misfit | undefined {
+  return free < 0
+    ? { warning: `Room "${room.name}" is too small for its set piece ${kind}; enlarge the room.` }
+    : undefined;
 }
 
 interface AlongSpan {
@@ -115,22 +98,16 @@ interface AlongSpan {
   length: number;
 }
 
-/**
- * The longest stretch of a wall within +-`reach` of its middle where a piece `depth` studs deep stays out of
- * every doorway clearance box; throws a SetPieceMisfit when the boxes leave no stretch. The boxes' heights are
- * ignored: they start at the floor, where the track pieces stand.
- */
 function alongClearOfClearances(
-  room: RoomSpec,
-  interior: RoomBounds,
+  { room, frame }: RoomContext,
   side: Side,
   depth: number,
   reach: number,
   clearances: DoorwayClearanceBox[],
-): AlongSpan {
+): AlongSpan | Misfit {
   const alongX = runsAlongX(side);
-  const wallMiddle = pointOnWall(room, interior, side, 0, 0);
-  const pieceEnd = pointOnWall(room, interior, side, 0, depth);
+  const wallMiddle = pointOnWall(frame, side, { along: 0, inset: 0 });
+  const pieceEnd = pointOnWall(frame, side, { along: 0, inset: depth });
   const centerAlong = alongX ? wallMiddle.x : wallMiddle.z;
   const acrossRange = alongX
     ? [Math.min(wallMiddle.z, pieceEnd.z), Math.max(wallMiddle.z, pieceEnd.z)]
@@ -157,9 +134,9 @@ function alongClearOfClearances(
     .filter((stretch) => stretch.end > stretch.start)
     .sort((first, second) => second.end - second.start - (first.end - first.start));
   if (longest === undefined) {
-    throw new SetPieceMisfit(
-      `Room "${room.name}" has no stretch of its ${side} wall clear of the doorway clearance boxes.`,
-    );
+    return {
+      warning: `Room "${room.name}" has no stretch of its ${side} wall clear of the doorway clearance boxes.`,
+    };
   }
   return { along: (longest.start + longest.end) / 2, length: longest.end - longest.start };
 }
@@ -174,28 +151,35 @@ function trackDepthOf(kind: "track-bed" | "platform-edge", propRules: Preset["pr
  * span the same stretch of the wall, which stops short of any doorway clearance box reaching into their depth.
  */
 function trackPiece(
-  room: RoomSpec,
-  interior: RoomBounds,
+  context: RoomContext,
   kind: "track-bed" | "platform-edge",
-  seed: number,
   clearances: DoorwayClearanceBox[],
   propRules: Preset["propRules"],
-): SetPieceRecord {
-  const side = longestDoorlessWall(room, interior, kind);
-  const { length, across } = wallSpan(interior, side);
+): SetPieceRecord | Misfit {
+  const side = longestDoorlessWall(context, kind);
+  if (typeof side !== "string") {
+    return side;
+  }
+  const { length, across } = wallSpan(context.frame, side);
   const trackDepth = trackDepthOf("track-bed", propRules);
   const edgeDepth = trackDepthOf("platform-edge", propRules);
   const pieceDepth = trackDepth + edgeDepth;
-  assertFits(room, kind, length - 2 * cornerReachStuds);
-  assertFits(room, kind, across - pieceDepth);
+  const small =
+    tooSmall(context, kind, length - 2 * cornerReachStuds) ??
+    tooSmall(context, kind, across - pieceDepth);
+  if (small !== undefined) {
+    return small;
+  }
   const span = alongClearOfClearances(
-    room,
-    interior,
+    context,
     side,
     pieceDepth,
     length / 2 - cornerReachStuds,
     clearances,
   );
+  if (isMisfit(span)) {
+    return span;
+  }
   const size = {
     ...propDimensions[kind],
     x: span.length,
@@ -203,7 +187,7 @@ function trackPiece(
   };
   const inset = kind === "track-bed" ? trackDepth / 2 : trackDepth + edgeDepth / 2;
   const facing = kind === "track-bed" ? oppositeSide[side] : side;
-  return placed(room, interior, { kind, side, along: span.along, inset, size, facing, seed });
+  return placed(context, { kind, side, along: span.along, inset, size, facing });
 }
 
 interface Placement {
@@ -214,42 +198,34 @@ interface Placement {
   size: Vector;
   /** The side of the room the piece's -Z face looks toward. */
   facing: Side;
-  seed: number;
 }
 
 function placed(
-  room: RoomSpec,
-  interior: RoomBounds,
+  { frame, seed }: RoomContext,
   placement: Placement,
   attributes: Record<string, string> = {},
   height?: number,
 ): SetPieceRecord {
-  const { x, z } = pointOnWall(room, interior, placement.side, placement.along, placement.inset);
+  const { x, z } = pointOnWall(frame, placement.side, placement);
   return {
     kind: placement.kind,
     pivot: { x, y: height ?? placement.size.y / 2, z },
     size: placement.size,
-    seed: placement.seed,
+    seed,
     yaw: yawFacing[placement.facing],
     attributes,
   };
 }
 
-/**
- * The position along a wall nearest `preferred` where a piece of `length` stays out of every doorway on
- * that wall, widened by `doorMargin` on each side, and inside +-`reach`; throws a SetPieceMisfit when the
- * doorways leave no room.
- */
 function alongClearOfDoors(
-  room: RoomSpec,
-  bounds: RoomBounds,
+  { room, frame }: RoomContext,
   side: Side,
   length: number,
   reach: number,
   preferred: number,
   doorMargin = 0,
-): number {
-  const keepOut = bounds.doorWidth / 2 + doorMargin + propDimensions.clearanceStuds + length / 2;
+): number | Misfit {
+  const keepOut = frame.doorWidth / 2 + doorMargin + propDimensions.clearanceStuds + length / 2;
   const doorOffsets = room.doors.filter((door) => door.side === side).map((door) => door.offset);
   const candidates = [
     preferred,
@@ -259,33 +235,34 @@ function alongClearOfDoors(
     .filter((along) => doorOffsets.every((offset) => Math.abs(along - offset) >= keepOut))
     .sort((first, second) => Math.abs(first - preferred) - Math.abs(second - preferred));
   const [nearest] = candidates;
-  if (nearest === undefined) {
-    throw new SetPieceMisfit(
-      `Room "${room.name}" has no space on its ${side} wall clear of the doorways.`,
-    );
-  }
-  return nearest;
+  return (
+    nearest ?? {
+      warning: `Room "${room.name}" has no space on its ${side} wall clear of the doorways.`,
+    }
+  );
 }
 
 /** A piece against the wall opposite the room's entry door (its first door), looking at that door. */
-function pieceFacingEntry(
-  room: RoomSpec,
-  interior: RoomBounds,
-  kind: PropKind,
-  seed: number,
-): SetPieceRecord {
+function pieceFacingEntry(context: RoomContext, kind: PropKind): SetPieceRecord | Misfit {
+  const { room, frame } = context;
   const entry: Door | undefined = room.doors[0];
   const entrySide = entry?.side ?? "south";
   const side = oppositeSide[entrySide];
-  const size = propSize(kind, interior.wallHeight);
-  const reach = wallSpan(interior, side).length / 2 - cornerReachStuds - size.x / 2;
-  assertFits(room, kind, reach);
+  const size = propSize(kind, frame.wallHeight);
+  const reach = wallSpan(frame, side).length / 2 - cornerReachStuds - size.x / 2;
+  const small = tooSmall(context, kind, reach);
+  if (small !== undefined) {
+    return small;
+  }
   // An east or west door has a blade sign beside it (signAtDoor), which a tall piece would cut through.
   const bladeMargin = runsAlongX(side) ? 0 : propDimensions.sign.z + propDimensions.clearanceStuds;
   const preferred = entry?.offset ?? 0;
-  const along = alongClearOfDoors(room, interior, side, size.x, reach, preferred, bladeMargin);
+  const along = alongClearOfDoors(context, side, size.x, reach, preferred, bladeMargin);
+  if (typeof along !== "number") {
+    return along;
+  }
   const inset = propDimensions.clearanceStuds + size.z / 2;
-  return placed(room, interior, { kind, side, along, inset, size, facing: entrySide, seed });
+  return placed(context, { kind, side, along, inset, size, facing: entrySide });
 }
 
 /**
@@ -296,15 +273,14 @@ function pieceFacingEntry(
  * under the arch lintel instead.
  */
 function signAtDoor(
-  room: RoomSpec,
-  interior: RoomBounds,
+  context: RoomContext,
   door: Door,
   attributes: Record<string, string>,
-  seed: number,
 ): SetPieceRecord {
+  const { frame } = context;
   const size = propDimensions.sign;
   const height =
-    interior.wallHeight - detailDimensions.archLintelHeightStuds - signLintelGapStuds - size.y / 2;
+    frame.wallHeight - detailDimensions.archLintelHeightStuds - signLintelGapStuds - size.y / 2;
   const inDoorway = {
     kind: "sign" as const,
     side: door.side,
@@ -312,23 +288,18 @@ function signAtDoor(
     inset: size.z / 2,
     size,
     facing: oppositeSide[door.side],
-    seed,
   };
   const flat = runsAlongX(door.side);
   const lengthAlongWall = flat ? size.x : size.z;
-  const reach = wallSpan(interior, door.side).length / 2 - cornerReachStuds - lengthAlongWall / 2;
-  try {
-    const along = alongClearOfDoors(room, interior, door.side, lengthAlongWall, reach, door.offset);
-    const beside = flat
-      ? { ...inDoorway, along }
-      : { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
-    return placed(room, interior, beside, attributes, height);
-  } catch (error) {
-    if (!(error instanceof SetPieceMisfit)) {
-      throw error;
-    }
-    return placed(room, interior, inDoorway, attributes, height);
+  const reach = wallSpan(frame, door.side).length / 2 - cornerReachStuds - lengthAlongWall / 2;
+  const along = alongClearOfDoors(context, door.side, lengthAlongWall, reach, door.offset);
+  if (typeof along !== "number") {
+    return placed(context, inDoorway, attributes, height);
   }
+  const beside = flat
+    ? { ...inDoorway, along }
+    : { ...inDoorway, along, inset: size.x / 2, facing: "north" as const };
+  return placed(context, beside, attributes, height);
 }
 
 /** The pieces that stand free in the room, with a face toward north and one toward south. */
@@ -340,23 +311,26 @@ const standingKinds: ReadonlySet<PropKind> = new Set(["departure-board", "clock"
  * zone views look from, and it stays out of the doorway strip along every wall.
  */
 function standingPiece(
-  room: RoomSpec,
-  interior: RoomBounds,
+  context: RoomContext,
   kind: PropKind,
   slot: number,
-  seed: number,
-): SetPieceRecord {
-  const slotOffsets = [-interior.halfWidth / 2, interior.halfWidth / 2];
+): SetPieceRecord | Misfit {
+  const { room, frame, seed } = context;
+  const slotOffsets = [-frame.halfWidth / 2, frame.halfWidth / 2];
   const along = slotOffsets[slot];
   if (along === undefined) {
-    throw new SetPieceMisfit(
-      `Room "${room.name}" already holds ${String(slotOffsets.length)} standing pieces, so ${kind} has no spot left.`,
-    );
+    return {
+      warning: `Room "${room.name}" already holds ${String(slotOffsets.length)} standing pieces, so ${kind} has no spot left.`,
+    };
   }
-  const size = propSize(kind, interior.wallHeight);
+  const size = propSize(kind, frame.wallHeight);
   const doorway = propDimensions.doorwayDepthStuds;
-  assertFits(room, kind, interior.halfWidth - doorway - Math.abs(along) - size.x / 2);
-  assertFits(room, kind, interior.halfDepth - doorway - size.z / 2);
+  const small =
+    tooSmall(context, kind, frame.halfWidth - doorway - Math.abs(along) - size.x / 2) ??
+    tooSmall(context, kind, frame.halfDepth - doorway - size.z / 2);
+  if (small !== undefined) {
+    return small;
+  }
   return {
     kind,
     pivot: { x: room.x + along, y: size.y / 2, z: room.z },
@@ -375,27 +349,23 @@ function heroDepthOf(kind: PropKind, heroProps: Preset["heroProps"]): number {
   return Math.max(0, ...depths);
 }
 
-/**
- * A departure board on the floor against the south wall, west of the room's first south door past its arch
- * jamb and the clearance gap, looking north into the room. It stands off the wall by half the larger of its
- * own depth and its hero recipe's, so either fits inside the room. Throws a SetPieceMisfit when the wall
- * has no space west of the door.
- */
 function boardBesideSouthDoor(
-  room: RoomSpec,
-  interior: RoomBounds,
+  context: RoomContext,
   door: Door,
   heroDepth: number,
-  seed: number,
-): SetPieceRecord {
+): SetPieceRecord | Misfit {
+  const { frame } = context;
   const kind = "departure-board";
-  const size = propSize(kind, interior.wallHeight);
-  const along = door.offset - archReach(interior) - propDimensions.clearanceStuds - size.x / 2;
-  const reach = wallSpan(interior, "south").length / 2 - cornerReachStuds - size.x / 2;
-  assertFits(room, kind, reach + along);
+  const size = propSize(kind, frame.wallHeight);
+  const along = door.offset - archReach(frame) - propDimensions.clearanceStuds - size.x / 2;
+  const reach = wallSpan(frame, "south").length / 2 - cornerReachStuds - size.x / 2;
+  const small = tooSmall(context, kind, reach + along);
+  if (small !== undefined) {
+    return small;
+  }
   // The extra micrometer keeps the hero board's back face from rounding past the wall in heroFits' exact test.
   const inset = Math.max(size.z, heroDepth) / 2 + 1e-6;
-  return placed(room, interior, { kind, side: "south", along, inset, size, facing: "north", seed });
+  return placed(context, { kind, side: "south", along, inset, size, facing: "north" });
 }
 
 function setPiecesOfRoom(
@@ -412,39 +382,36 @@ function setPiecesOfRoom(
   if (roomType === undefined) {
     return { pieces: [], warnings: [] };
   }
-  const interior = roomBounds(spec, room);
+  const context: RoomContext = { room, frame: roomFrame(spec, room), seed };
   const pieces: SetPieceRecord[] = [];
   const warnings: string[] = [];
   let standingSlot = 0;
   const southDoor = room.doors.find((door) => door.side === "south");
   for (const name of roomType.setPieces.filter((setPiece) => setPiece !== "sign")) {
     const kind = setPieceKind(room, name);
-    try {
-      if (kind === "track-bed" || kind === "platform-edge") {
-        pieces.push(trackPiece(room, interior, kind, seed, clearances, propRules));
-      } else if (
-        kind === "departure-board" &&
-        southDoor !== undefined &&
-        !pieces.some((piece) => piece.kind === kind)
-      ) {
-        pieces.push(
-          boardBesideSouthDoor(room, interior, southDoor, heroDepthOf(kind, heroProps), seed),
-        );
-      } else if (standingKinds.has(kind)) {
-        pieces.push(standingPiece(room, interior, kind, standingSlot, seed));
-        standingSlot += 1;
-      } else {
-        pieces.push(pieceFacingEntry(room, interior, kind, seed));
-      }
-    } catch (error) {
-      if (!(error instanceof SetPieceMisfit)) {
-        throw error;
-      }
-      warnings.push(`${error.message} The ${kind} is skipped.`);
+    let result: SetPieceRecord | Misfit;
+    if (kind === "track-bed" || kind === "platform-edge") {
+      result = trackPiece(context, kind, clearances, propRules);
+    } else if (
+      kind === "departure-board" &&
+      southDoor !== undefined &&
+      !pieces.some((piece) => piece.kind === kind)
+    ) {
+      result = boardBesideSouthDoor(context, southDoor, heroDepthOf(kind, heroProps));
+    } else if (standingKinds.has(kind)) {
+      result = standingPiece(context, kind, standingSlot);
+      standingSlot += isMisfit(result) ? 0 : 1;
+    } else {
+      result = pieceFacingEntry(context, kind);
+    }
+    if (isMisfit(result)) {
+      warnings.push(`${result.warning} The ${kind} is skipped.`);
+    } else {
+      pieces.push(result);
     }
   }
   const signAttributes = { Label: roomType.signLabel, AccentColor: accent };
-  const signs = room.doors.map((door) => signAtDoor(room, interior, door, signAttributes, seed));
+  const signs = room.doors.map((door) => signAtDoor(context, door, signAttributes));
   return { pieces: [...pieces, ...signs], warnings };
 }
 

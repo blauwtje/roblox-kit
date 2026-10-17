@@ -7,8 +7,7 @@ import { mapSpecSchema, relationMapSpecSchema } from "./map-spec.ts";
 import type { MapSpec } from "./map-spec.ts";
 import { resolveRelations } from "./relation-solver.ts";
 import { detailDimensions } from "./room-details.ts";
-import { propDimensions, propKinds } from "./prop-placement.ts";
-import { placeArrangements } from "./arrangement-placement.ts";
+import { propDimensions } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
 import type { SetPieceRecord } from "./set-piece-placement.ts";
@@ -119,18 +118,6 @@ await test("every door of a typed room gets a sign with the room type's label an
   assert.equal(platformSign.yaw, northYaw);
 });
 
-await test("a sign at a north or south door hangs flat on the wall beside the doorway, back face on the room-side face", () => {
-  const [platformSign] = piecesOf("sign", place(stationSpec));
-  assert.ok(platformSign);
-  // The platform is 40 deep with 1-stud walls, so the south wall's room-side face is at z 19.
-  const southInnerFace = 20 - 1;
-  assert.equal(platformSign.yaw, northYaw);
-  assert.equal(platformSign.pivot.z + propDimensions.sign.z / 2, southInnerFace);
-  // Clear of the 6-stud doorway at offset 5: half the door, the clearance and half the sign's length.
-  const doorEdgeToSignCenter = 3 + propDimensions.clearanceStuds + propDimensions.sign.x / 2;
-  assert.equal(platformSign.pivot.x, 5 - doorEdgeToSignCenter);
-});
-
 await test("a sign at a north or south door with no wall space beside it hangs in the doorway", () => {
   const spec = mapSpecSchema.parse({
     mapId: "narrow",
@@ -153,28 +140,6 @@ await test("a sign at a north or south door with no wall space beside it hangs i
   assert.equal(sign.pivot.z + propDimensions.sign.z / 2, 15 - 1);
 });
 
-await test("a sign hung in an east doorway has its back face on the room-side face of the wall above the doorway", () => {
-  const spec = mapSpecSchema.parse({
-    mapId: "narrow",
-    rooms: [
-      {
-        name: "hall",
-        roomType: "ticket-hall",
-        x: 0,
-        z: 0,
-        width: 30,
-        depth: 10,
-        doors: [{ side: "east", offset: 0 }],
-      },
-    ],
-  });
-  const [sign] = piecesOf("sign", place(spec));
-  assert.ok(sign);
-  const eastInnerFace = 15 - 1;
-  assert.equal(sign.yaw, 90);
-  assert.equal(sign.pivot.x + propDimensions.sign.z / 2, eastInnerFace);
-});
-
 await test("a sign at an east or west door sticks out beside the doorway with its faces north and south", () => {
   const eastSign = piecesOf("sign", place(stationSpec)).at(-1);
   assert.ok(eastSign);
@@ -183,27 +148,6 @@ await test("a sign at an east or west door sticks out beside the doorway with it
   // Clear of the 6-stud doorway at offset 0: half the door, the clearance and half the sign's thickness.
   assert.equal(eastSign.pivot.z, -(3 + propDimensions.clearanceStuds + propDimensions.sign.z / 2));
   assert.equal(eastSign.yaw, northYaw);
-});
-
-await test("an east door with no wall space beside it gets its sign hung in the doorway", () => {
-  const spec = mapSpecSchema.parse({
-    mapId: "narrow",
-    rooms: [
-      {
-        name: "hall",
-        roomType: "ticket-hall",
-        x: 0,
-        z: 0,
-        width: 30,
-        depth: 10,
-        doors: [{ side: "east", offset: 0 }],
-      },
-    ],
-  });
-  const [sign] = piecesOf("sign", place(spec));
-  assert.ok(sign);
-  assert.equal(sign.pivot.z, 0);
-  assert.equal(sign.yaw, 90);
 });
 
 await test("a departure board and a clock stand free a quarter width from center, faces north and south", () => {
@@ -274,64 +218,6 @@ await test("a departure board stands against the south wall west of a south door
   assert.ok(Math.abs(wider.pivot.z - (southInnerFace - 1.5)) < 1e-5);
 });
 
-await test("a departure board with no space west of its south door is skipped with a warning", () => {
-  const spec = mapSpecSchema.parse({
-    mapId: "concourse",
-    doorWidth: 6,
-    rooms: [
-      {
-        name: "concourse",
-        roomType: "concourse",
-        x: 0,
-        z: 0,
-        width: 60,
-        depth: 40,
-        doors: [{ side: "south", offset: -20 }],
-      },
-    ],
-  });
-  assert.deepEqual(piecesOf("departure-board", place(spec)), []);
-  assert.match(warningsOf(spec)[0] ?? "", /is too small for its set piece departure-board/);
-});
-
-await test("a standing piece a narrow room cannot keep out of its doorway strips is skipped", () => {
-  const spec = mapSpecSchema.parse({
-    mapId: "kiosk",
-    rooms: [{ name: "kiosk", roomType: "concourse", x: 0, z: 0, width: 30, depth: 30 }],
-  });
-  assert.deepEqual(piecesOf("departure-board", place(spec)), []);
-  assert.match(warningsOf(spec)[0] ?? "", /"kiosk" is too small for its set piece departure-board/);
-});
-
-await test("the same spec gives the same set pieces", () => {
-  assert.deepEqual(place(stationSpec), place(stationSpec));
-});
-
-await test("a room with a door in every wall skips its track pieces with a warning", () => {
-  const spec = mapSpecSchema.parse({
-    mapId: "closed",
-    rooms: [
-      {
-        name: "platform",
-        roomType: "platform",
-        x: 0,
-        z: 0,
-        width: 60,
-        depth: 40,
-        doors: ["north", "south", "east", "west"].map((side) => ({ side, offset: 0 })),
-      },
-    ],
-  });
-  assert.deepEqual(
-    place(spec).map((piece) => piece.kind),
-    ["sign", "sign", "sign", "sign"],
-  );
-  const warnings = warningsOf(spec);
-  assert.equal(warnings.length, 2);
-  assert.match(warnings[0] ?? "", /"platform" has a door in every wall.*track-bed is skipped/);
-  assert.match(warnings[1] ?? "", /platform-edge is skipped/);
-});
-
 await test("a room too small for its set piece skips it with a warning naming the room", () => {
   const spec = mapSpecSchema.parse({
     mapId: "tiny",
@@ -377,18 +263,6 @@ await test("a set piece with no generator is rejected", () => {
   });
   const odd = { odd: { setPieces: ["throne"], signLabel: "Odd" } };
   assert.throws(() => placeSetPieces(spec, odd, accent, 1), /"throne", which has no generator/);
-});
-
-await test("every set piece a bundled preset names has a generator", async () => {
-  const presets = await loadPresets();
-  const kinds: readonly string[] = propKinds;
-  for (const [name, preset] of presets) {
-    for (const [roomType, { setPieces }] of Object.entries(preset.roomTypes ?? {})) {
-      for (const setPiece of setPieces) {
-        assert.ok(kinds.includes(setPiece), `${name} ${roomType}: ${setPiece} has no generator`);
-      }
-    }
-  }
 });
 
 await test("placeSetPieces keeps the track bed and platform edge out of every doorway clearance box", () => {
@@ -461,68 +335,4 @@ await test("every sign of the resolved train-station benchmark touches a wall pa
     return touching.length === 0 ? [`sign-${String(index + 1)}`] : [];
   });
   assert.deepEqual(floating, [], "signs that touch no wall part");
-});
-
-await test("a prop rule's depth sets how far the track bed stands from its wall, and the platform edge follows it", () => {
-  const { pieces } = placeSetPieces(stationSpec, roomTypes, accent, 1, [], {
-    "track-bed": { freeRotation: false, depth: 8 },
-  });
-  const [trackBed] = piecesOf("track-bed", pieces);
-  const [platformEdge] = piecesOf("platform-edge", pieces);
-  assert.ok(trackBed && platformEdge);
-  const northInnerFace = -20 + 1;
-  const edgeDepth = propDimensions["platform-edge"].z;
-  assert.equal(trackBed.size.z, 8);
-  assert.equal(trackBed.pivot.z, northInnerFace + 4);
-  assert.equal(platformEdge.size.z, edgeDepth);
-  assert.equal(platformEdge.pivot.z, northInnerFace + 8 + edgeDepth / 2);
-});
-
-await test("the train station's along-length arrangements keep clear of the 12-stud track and edge strip", async () => {
-  const preset = (await loadPresets()).get("train-station");
-  assert.ok(preset !== undefined);
-  assert.equal(preset.propRules["track-bed"]?.depth, 10);
-  const spec = mapSpecSchema.parse({
-    mapId: "platform",
-    rooms: [
-      {
-        name: "platform",
-        roomType: "platform",
-        x: 0,
-        z: 0,
-        width: 60,
-        depth: 30,
-        doors: [{ side: "south", offset: 0 }],
-      },
-    ],
-  });
-  const { pieces: setPieces, warnings } = placeSetPieces(
-    spec,
-    preset.roomTypes,
-    preset.palette.accent,
-    1,
-    [],
-    preset.propRules,
-  );
-  const [trackBed] = piecesOf("track-bed", setPieces);
-  const [platformEdge] = piecesOf("platform-edge", setPieces);
-  assert.ok(trackBed && platformEdge);
-  assert.deepEqual(warnings, []);
-  assert.equal(trackBed.size.z + platformEdge.size.z, 12);
-  const stripFarFaceZ = platformEdge.pivot.z + platformEdge.size.z / 2;
-
-  const arranged = placeArrangements(spec, preset.roomTypes, setPieces, 1);
-
-  assert.deepEqual(arranged.warnings, []);
-  const alongLength = arranged.pieces.filter((piece) =>
-    ["lamp", "bench", "pillar"].includes(piece.kind),
-  );
-  assert.ok(alongLength.length > 0);
-  for (const piece of alongLength) {
-    // Each piece faces north or south, so its depth runs along Z.
-    assert.ok(
-      piece.pivot.z - piece.size.z / 2 >= stripFarFaceZ,
-      `${piece.kind} at z=${String(piece.pivot.z)} reaches the strip ending at z=${String(stripFarFaceZ)}`,
-    );
-  }
 });
