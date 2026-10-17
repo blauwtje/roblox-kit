@@ -249,3 +249,18 @@ await test("every bundled preset keeps floor, wall, ceiling and trim apart in OK
     assert.deepEqual(lintPalette(preset), [], name);
   }
 });
+
+await test("the train-station preset declares a placement on each set-piece propRule equal to its legacy fallback", async () => {
+  const preset = (await loadPresets()).get("train-station");
+  assert.ok(preset !== undefined);
+  const expected = {
+    "track-bed": "track",
+    "platform-edge": "track",
+    "departure-board": "beside-door",
+    clock: "standing",
+    "ticket-counter": "facing-entry",
+  };
+  for (const [kind, placement] of Object.entries(expected)) {
+    assert.equal(preset.propRules[kind]?.placement, placement, kind);
+  }
+});

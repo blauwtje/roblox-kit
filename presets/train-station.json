@@ -208,7 +208,8 @@
         "max": 0.25
       },
       "freeRotation": false,
-      "surface": "exempt"
+      "surface": "exempt",
+      "placement": "beside-door"
     },
     "clock": {
       "heightRatio": {
@@ -224,7 +225,8 @@
         "max": 0.3
       },
       "freeRotation": false,
-      "surface": "exempt"
+      "surface": "exempt",
+      "placement": "standing"
     },
     "ticket-machine": {
       "heightRatio": {
@@ -248,7 +250,8 @@
       },
       "freeRotation": false,
       "depth": 10,
-      "surface": "exempt"
+      "surface": "exempt",
+      "placement": "track"
     },
     "platform-edge": {
       "heightRatio": {
@@ -264,7 +267,8 @@
         "max": 0.5
       },
       "freeRotation": false,
-      "surface": "exempt"
+      "surface": "exempt",
+      "placement": "track"
     },
     "ticket-counter": {
       "heightRatio": {
@@ -280,7 +284,8 @@
         "max": 0.75
       },
       "freeRotation": false,
-      "surface": "exempt"
+      "surface": "exempt",
+      "placement": "facing-entry"
     }
   },
   "propSlots": {
