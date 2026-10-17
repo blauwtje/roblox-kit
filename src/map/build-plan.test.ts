@@ -115,6 +115,10 @@ await test("propsOf furnishes a typed room with its arrangements after its set p
   assert.ok(preset !== undefined);
   const style = {
     ...preset,
+    propRules: {
+      ...preset.propRules,
+      "track-bed": { freeRotation: false, placement: "track" as const },
+    },
     roomTypes: {
       platform: {
         setPieces: ["track-bed"],

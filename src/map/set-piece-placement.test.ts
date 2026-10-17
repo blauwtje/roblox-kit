@@ -10,6 +10,7 @@ import { detailDimensions } from "./room-details.ts";
 import { propDimensions } from "./prop-placement.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
+import type { Preset } from "../style/preset-schema.ts";
 import type { SetPieceRecord } from "./set-piece-placement.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import { resolveStyle } from "../style/resolve-style.ts";
@@ -19,6 +20,14 @@ const roomTypes = {
   platform: { setPieces: ["track-bed", "platform-edge"], signLabel: "Platform 1" },
   "ticket-hall": { setPieces: ["counter"], signLabel: "Tickets" },
   concourse: { setPieces: ["departure-board", "clock", "departure-board"], signLabel: "Concourse" },
+};
+
+const stationRules: Preset["propRules"] = {
+  "track-bed": { freeRotation: false, placement: "track" },
+  "platform-edge": { freeRotation: false, placement: "track" },
+  "departure-board": { freeRotation: false, placement: "beside-door" },
+  clock: { freeRotation: false, placement: "standing" },
+  counter: { freeRotation: false, placement: "facing-entry" },
 };
 
 const northYaw = 0;
@@ -59,11 +68,11 @@ function piecesOf(kind: string, pieces: SetPieceRecord[]): SetPieceRecord[] {
 }
 
 function place(spec: MapSpec): SetPieceRecord[] {
-  return placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  return placeSetPieces(spec, roomTypes, accent, 1, [], stationRules).pieces;
 }
 
 function warningsOf(spec: MapSpec): string[] {
-  return placeSetPieces(spec, roomTypes, accent, 1).warnings;
+  return placeSetPieces(spec, roomTypes, accent, 1, [], stationRules).warnings;
 }
 
 await test("a room without a type gets no set pieces, and neither does a style without room types", () => {
@@ -201,7 +210,7 @@ await test("a departure board stands against the south wall west of a south door
   const eastEdge = 10 - archReach - propDimensions.clearanceStuds;
   const southInnerFace = 400 + 20 - 1;
   const ownDepth = propDimensions["departure-board"].z;
-  const own = placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  const own = placeSetPieces(spec, roomTypes, accent, 1, [], stationRules).pieces;
   const [board] = piecesOf("departure-board", own);
   assert.ok(board);
   assert.equal(board.pivot.x, eastEdge - length / 2);
@@ -212,7 +221,9 @@ await test("a departure board stands against the south wall west of a south door
   const recipe = station?.heroProps?.["departure-board"];
   assert.ok(recipe !== undefined);
   const deeperRecipe = { ...recipe, size: { ...recipe.size, depth: 3 } };
-  const deeper = placeSetPieces(spec, roomTypes, accent, 1, [], {}, { board: deeperRecipe });
+  const deeper = placeSetPieces(spec, roomTypes, accent, 1, [], stationRules, {
+    board: deeperRecipe,
+  });
   const [wider] = piecesOf("departure-board", deeper.pieces);
   assert.ok(wider);
   assert.ok(Math.abs(wider.pivot.z - (southInnerFace - 1.5)) < 1e-5);
@@ -262,7 +273,10 @@ await test("a set piece with no generator is rejected", () => {
     rooms: [{ name: "hall", roomType: "odd", x: 0, z: 0, width: 40, depth: 40 }],
   });
   const odd = { odd: { setPieces: ["throne"], signLabel: "Odd" } };
-  assert.throws(() => placeSetPieces(spec, odd, accent, 1), /"throne", which has no generator/);
+  assert.throws(
+    () => placeSetPieces(spec, odd, accent, 1, [], stationRules),
+    /"throne", which has no generator/,
+  );
 });
 
 await test("placeSetPieces keeps the track bed and platform edge out of every doorway clearance box", () => {
@@ -277,11 +291,11 @@ await test("placeSetPieces keeps the track bed and platform edge out of every do
   });
   const agent = { radius: 2, height: 5 };
   const clearances = doorwayClearanceBoxes(spec, agent);
-  const unclamped = placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  const unclamped = placeSetPieces(spec, roomTypes, accent, 1, [], stationRules).pieces;
   const [unclampedBed] = piecesOf("track-bed", unclamped);
   assert.ok(unclampedBed !== undefined);
 
-  const { pieces, warnings } = placeSetPieces(spec, roomTypes, accent, 1, clearances);
+  const { pieces, warnings } = placeSetPieces(spec, roomTypes, accent, 1, clearances, stationRules);
 
   assert.deepEqual(warnings, []);
   const tracks = [...piecesOf("track-bed", pieces), ...piecesOf("platform-edge", pieces)];
@@ -352,10 +366,30 @@ await test("two rooms of one type get set pieces with different seeds", () => {
     doorWidth: 6,
     rooms: [twin("a", 0), twin("b", 100)],
   });
-  const { pieces } = placeSetPieces(spec, roomTypes, accent, 1);
+  const { pieces } = placeSetPieces(spec, roomTypes, accent, 1, [], stationRules);
   const counters = piecesOf("counter", pieces);
   assert.equal(counters.length, 2);
   assert.notEqual(counters[0]?.seed, counters[1]?.seed);
-  const again = placeSetPieces(spec, roomTypes, accent, 1).pieces;
+  const again = placeSetPieces(spec, roomTypes, accent, 1, [], stationRules).pieces;
   assert.deepEqual(again, pieces);
+});
+
+await test("a set piece with no placement stands free", () => {
+  const spec = mapSpecSchema.parse({
+    mapId: "hall",
+    rooms: [
+      {
+        name: "hall",
+        roomType: "ticket-hall",
+        x: 0,
+        z: 0,
+        width: 60,
+        depth: 40,
+        doors: [{ side: "west", offset: 0 }],
+      },
+    ],
+  });
+  const [counter] = piecesOf("counter", placeSetPieces(spec, roomTypes, accent, 1).pieces);
+  assert.ok(counter);
+  assert.deepEqual([counter.pivot.x, counter.pivot.z, counter.yaw], [-14.5, 0, northYaw]);
 });

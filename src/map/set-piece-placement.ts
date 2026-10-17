@@ -406,13 +406,6 @@ const placers: Record<(typeof setPiecePlacements)[number], Placer> = {
     trackPiece(context, kind as "track-bed" | "platform-edge", state.clearances, state.propRules),
 };
 
-const legacyPlacements: Partial<Record<PropKind, (typeof setPiecePlacements)[number]>> = {
-  "track-bed": "track",
-  "platform-edge": "track",
-  "departure-board": "beside-door",
-  clock: "standing",
-};
-
 function setPiecesOfRoom(
   spec: MapSpec,
   room: RoomSpec,
@@ -445,7 +438,7 @@ function setPiecesOfRoom(
   const warnings: string[] = [];
   for (const name of roomType.setPieces.filter((setPiece) => setPiece !== "sign")) {
     const kind = setPieceKind(room, name);
-    const strategy = propRules[kind]?.placement ?? legacyPlacements[kind] ?? "facing-entry";
+    const strategy = propRules[kind]?.placement ?? "standing";
     const result = placers[strategy](context, kind, state);
     if (isMisfit(result)) {
       warnings.push(`${result.warning} The ${kind} is skipped.`);

@@ -7,6 +7,7 @@ import { placeSetPieces } from "./set-piece-placement.ts";
 import type { SetPieceRecord } from "./set-piece-placement.ts";
 
 const accent = "#f5cd30";
+const trackRules = { "track-bed": { freeRotation: false, placement: "track" as const } };
 const seed = 1;
 const roomTypes = {
   hall: {
@@ -93,7 +94,7 @@ function specOf(...rooms: unknown[]): MapSpec {
 }
 
 function arrange(spec: MapSpec): { pieces: SetPieceRecord[]; warnings: string[] } {
-  const setPieces = placeSetPieces(spec, roomTypes, accent, seed).pieces;
+  const setPieces = placeSetPieces(spec, roomTypes, accent, seed, [], trackRules).pieces;
   return placeArrangements(spec, roomTypes, setPieces, seed);
 }
 
@@ -143,7 +144,7 @@ await test("a room of twice the floor area gets more pieces of each arrangement"
 
 await test("no piece overlaps a doorway lane, a spawn pad, a set piece or another piece", () => {
   const spec = specOf(room("hall", "hall", 80, 50, { spawn: true }));
-  const setPieces = placeSetPieces(spec, roomTypes, accent, seed).pieces;
+  const setPieces = placeSetPieces(spec, roomTypes, accent, seed, [], trackRules).pieces;
   const { pieces } = placeArrangements(spec, roomTypes, setPieces, seed);
   assert.ok(pieces.length > 10);
   pieces.forEach((piece, index) => {
@@ -167,7 +168,7 @@ await test("no piece overlaps a doorway lane, a spawn pad, a set piece or anothe
 
 await test("the platform's lamps stand on the long wall the track bed is not on", () => {
   const spec = specOf(room("platform", "platform", 100, 40));
-  const setPieces = placeSetPieces(spec, roomTypes, accent, seed).pieces;
+  const setPieces = placeSetPieces(spec, roomTypes, accent, seed, [], trackRules).pieces;
   const trackBed = setPieces.find((piece) => piece.kind === "track-bed");
   assert.ok(trackBed && trackBed.pivot.z < 0, "the track bed hugs the north wall");
   const lamps = arrange(spec).pieces.filter((piece) => piece.kind === "lamp");
