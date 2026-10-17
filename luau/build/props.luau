@@ -4,7 +4,7 @@
 -- Model named "<kind>-hero-<n>", scaled to its size, centered on its pivot and turned by its yaw, its MeshParts
 -- colored from the surface each is named after, anchored and decorative; an asset that fails to load builds the set
 -- piece it replaced and is reported in `heroLoadFailures`. A prop kind listed in `idleAnimations` gets the sway
--- attributes on each of its ProceduralModels, and the phase then adds one server Script holding `idleScript` under
+-- attributes on each of its ProceduralModels, and the phase then adds one client Script holding `idleScript` under
 -- the Model, which sways them during play. Reports the number of parts in the Model after the phase (the BaseParts
 -- that are children of the Model).
 type Vector = { x: number, y: number, z: number }
@@ -88,7 +88,7 @@ type Arguments = {
 	variants: { [string]: Variant }?,
 	-- A prop whose largest side is under this casts no shadow.
 	noShadowSizeStuds: number?,
-	-- The idle sway of each animated prop kind, and the server Script source that runs it.
+	-- The idle sway of each animated prop kind, and the client Script source that runs it.
 	idleAnimations: { [string]: IdleAnimation }?,
 	idleScript: string?,
 }
@@ -97,7 +97,7 @@ type Arguments = {
 local HERO_KIND_ATTRIBUTE_NAME = "RobloxKitHeroKind"
 -- Attribute on a hero MeshPart holding its bevel in studs; read-props.luau reports it.
 local BEVEL_ATTRIBUTE_NAME = "RobloxKitBevel"
--- Name of the server Script that runs the idle sway; idle-animation.luau reads the three attributes below.
+-- Name of the client Script that runs the idle sway; idle-animation.luau reads the three attributes below.
 local IDLE_SCRIPT_NAME = "RobloxKitIdleAnimation"
 
 local arguments: Arguments = ...
@@ -357,7 +357,7 @@ local function addPropModels(model: Model): { HeroLoadFailure }
 	if arguments.idleScript then
 		local idleScript = Instance.new("Script")
 		idleScript.Name = IDLE_SCRIPT_NAME
-		idleScript.RunContext = Enum.RunContext.Server
+		idleScript.RunContext = Enum.RunContext.Client
 		idleScript.Source = arguments.idleScript
 		idleScript.Parent = model
 	end

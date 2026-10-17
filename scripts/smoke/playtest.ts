@@ -31,7 +31,7 @@ export async function probePlaytest(
   return `passed, ${String(output.checks.total)} checks over ${String(output.peers.length)} peers in ${String(output.durationMs)} ms`;
 }
 
-/** Server checks for the idle smoke map: the Script is there, and each animated sign and lamp moved within a second. */
+/** Server checks for the idle smoke map: the Script is there, and a sign and a lamp are animated. */
 export const idleServerChecks = `
 local maps = workspace:WaitForChild("${config.mapsFolderName}", 10)
 local map = maps and maps:FindFirstChild("${idleSmokeSpec.mapId}")
@@ -51,24 +51,50 @@ for _, model in animated do
 end
 check("an animated sign", kinds["sign"] == true, "sign")
 check("an animated lamp", kinds["lamp"] == true, "lamp")
+check("animated props exist", #animated > 0, tostring(#animated))`;
+
+/** Client checks for the idle smoke map: with the camera at an animated prop, every prop in range moves within a second. */
+export const idleClientChecks = `
+local map = workspace:WaitForChild("${config.mapsFolderName}", 10):WaitForChild("${idleSmokeSpec.mapId}", 10)
+local animated = {}
+for _, descendant in map:GetDescendants() do
+  if descendant:IsA("Model") and descendant:GetAttribute("IdleSwayDegrees") ~= nil then
+    table.insert(animated, descendant)
+  end
+end
+check("client sees animated props", #animated > 0, tostring(#animated))
+if #animated == 0 then return end
+local camera = workspace.CurrentCamera
+camera.CameraType = Enum.CameraType.Scriptable
+camera.CFrame = CFrame.new(animated[1]:GetPivot().Position + Vector3.new(0, 5, 10))
+local near = {}
+for _, model in animated do
+  if (model:GetPivot().Position - camera.CFrame.Position).Magnitude < 100 then table.insert(near, model) end
+end
+task.wait(0.5)
 local before = {}
-for index, model in animated do before[index] = model:GetPivot() end
+for index, model in near do before[index] = model:GetPivot() end
 task.wait(1)
 local moved = 0
-for index, model in animated do
+for index, model in near do
   local delta = before[index]:ToObjectSpace(model:GetPivot())
   local _, angle = delta:ToAxisAngle()
   if delta.Position.Magnitude > 1e-4 or math.abs(angle) > 1e-5 then moved += 1 end
 end
-check("every animated prop moved within a second", #animated > 0 and moved == #animated, tostring(moved) .. " of " .. tostring(#animated))`;
+check("every animated prop in range swayed on the client", #near > 0 and moved == #near, tostring(moved) .. " of " .. tostring(#near))`;
 
-/** Builds the idle smoke map, checks in a run playtest that its signs and lamps sway, then removes it. */
+/** Builds the idle smoke map, checks in a play playtest that its props sway on the client, then removes it. */
 export async function probeIdleAnimation(connection: StudioConnection): Promise<string> {
   await callRealTool(buildMapTool, idleSmokeSpec, connection);
   try {
     return await probePlaytest(
       connection,
-      { mode: "run", serverChecks: idleServerChecks, timeoutSeconds: 30 },
+      {
+        mode: "play",
+        serverChecks: idleServerChecks,
+        clientChecks: idleClientChecks,
+        timeoutSeconds: 30,
+      },
       1,
     );
   } finally {
