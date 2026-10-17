@@ -5,7 +5,6 @@ import { test } from "node:test";
 const luauSourceAllowlist: Readonly<Record<string, string>> = {
   "src/map/prop-generators.test.ts": "lints every prop generator's source for hardcoded looks",
   "src/map/prop-placement.test.ts": "checks that each prop kind has a generator file",
-  "src/map/check-map-tool.test.ts": "pins check-map.luau rules that only run inside Studio",
 };
 
 const root = new URL("../../", import.meta.url);

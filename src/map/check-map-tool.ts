@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { config } from "../config.ts";
 import { trimRecipePrefix } from "../hero-props/prop-recipes.ts";
-import { runLuauFile } from "../luau/run-luau-file.ts";
+import { runLuauBatch, runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolDefinition } from "../server/tool-definition.ts";
 import { toolResult } from "../server/tool-result.ts";
 import { selectStudio, type StudioConnection } from "../studio/studio-connection.ts";
@@ -25,7 +25,7 @@ import {
   findSurfaceIssues,
   mapRecordsSchema,
 } from "./prop-rules.ts";
-import { mapZonesBatchPart } from "./read-map-zones.ts";
+import { mapZonesBatchPart, mapZonesSchema } from "./read-map-zones.ts";
 import { resolveRelations } from "./relation-solver.ts";
 import { doorwayClearanceBoxes, findSizeRuleIssues } from "./size-rules.ts";
 import { zoneShot } from "./zone-cameras.ts";
@@ -111,32 +111,13 @@ const checkedMapSchema = z.strictObject({
   warnings: z.array(z.string()),
 });
 
-/** The props, flat parts, lights and hero MeshParts of the map with what the quality and prop rules need, read in Studio. */
-async function readMapRecords(connection: StudioConnection, studioId: string, mapId: string) {
-  const read = await runLuauFile({
-    connection,
-    studioId,
-    fileName: "read-props.luau",
-    datamodelType: "Edit",
-    arguments: { mapId, mapsFolderName: config.mapsFolderName },
-    resultSchema: mapRecordsSchema,
-  });
-  return read;
-}
-
 /** Draw calls and triangles per zone camera: the cameras are framed here, the counts read in Studio. */
 async function sampleSceneStats(
   connection: StudioConnection,
   studioId: string,
-  mapId: string,
+  zones: z.infer<typeof mapZonesSchema>["zones"],
 ): Promise<SceneStatSample[]> {
-  const mapZones = await runLuauFile({
-    connection,
-    studioId,
-    datamodelType: "Edit",
-    ...mapZonesBatchPart(mapId),
-  });
-  const shots = mapZones.zones.map((zone) =>
+  const shots = zones.map((zone) =>
     zoneShot({ name: zone.name, bounds: { min: zone.min, max: zone.max } }),
   );
   const sampled = await runLuauFile({
@@ -226,47 +207,50 @@ export function createCheckMapTool(
           ? []
           : findSizeRuleIssues(input.spec, preset.sizeRules, input.mapId);
       const studioId = await selectStudio(context.studio, input.studioId);
-      const checked = await runLuauFile({
+      const [checked, records, mapZones] = await runLuauBatch({
         connection: context.studio,
         studioId,
-        fileName: "check-map.luau",
         datamodelType: "Edit",
-        arguments: {
-          mapId: input.mapId,
-          mapsFolderName: config.mapsFolderName,
-          overlapToleranceStuds: config.overlapToleranceStuds,
-          maxIssuesPerKind: config.maxIssuesPerKind,
-          floorNameSuffix: config.floorNameSuffix,
-          wallNameInfix: config.wallNameInfix,
-          trimKindPrefix: trimRecipePrefix,
-          agentRadiusStuds: agent.radius,
-          agentHeightStuds: agent.height,
-          maxPathStuds: config.maxPathStuds,
-          objectives: input.objectives ?? input.spec?.objectives ?? [],
-          // Doorway clearance needs the spec's layout; without a spec no doorway is known.
-          doorways: input.spec === undefined ? [] : doorwayClearanceBoxes(input.spec, agent),
-        },
-        resultSchema: checkedMapSchema,
+        entries: [
+          {
+            fileName: "check-map.luau",
+            arguments: {
+              mapId: input.mapId,
+              mapsFolderName: config.mapsFolderName,
+              overlapToleranceStuds: config.overlapToleranceStuds,
+              maxIssuesPerKind: config.maxIssuesPerKind,
+              floorNameSuffix: config.floorNameSuffix,
+              wallNameInfix: config.wallNameInfix,
+              trimKindPrefix: trimRecipePrefix,
+              agentRadiusStuds: agent.radius,
+              agentHeightStuds: agent.height,
+              maxPathStuds: config.maxPathStuds,
+              objectives: input.objectives ?? input.spec?.objectives ?? [],
+              doorways: input.spec === undefined ? [] : doorwayClearanceBoxes(input.spec, agent),
+            },
+            resultSchema: checkedMapSchema,
+          },
+          {
+            fileName: "read-props.luau",
+            arguments: { mapId: input.mapId, mapsFolderName: config.mapsFolderName },
+            resultSchema: mapRecordsSchema,
+          },
+          mapZonesBatchPart(input.mapId),
+        ],
       });
-      // Prop and quality rules apply to a styled map; without a preset nothing is read. The light rule also needs the spec's rooms.
-      const records =
-        preset === undefined
-          ? undefined
-          : await readMapRecords(context.studio, studioId, input.mapId);
-      const propIssues =
-        preset === undefined || records === undefined ? [] : findPropIssues(records.props, preset);
+      const propIssues = preset === undefined ? [] : findPropIssues(records.props, preset);
       const untexturedIssues =
-        records === undefined || preset?.flatSurfaces === true
+        preset === undefined || preset.flatSurfaces === true
           ? []
           : findSurfaceIssues(records.surfaces);
       const unlitIssues =
-        records === undefined || input.spec === undefined
+        preset === undefined || input.spec === undefined
           ? []
           : findLightIssues(resolveRelations(input.spec).rooms, records.lights);
-      const unbevelledIssues = records === undefined ? [] : findBevelIssues(records.heroParts);
+      const unbevelledIssues = preset === undefined ? [] : findBevelIssues(records.heroParts);
       const scaleIssues = propIssues.filter((issue) => issue.kind === "scale");
       const rotationIssues = propIssues.filter((issue) => issue.kind === "rotation");
-      const sceneStats = await sampleSceneStats(context.studio, studioId, input.mapId);
+      const sceneStats = await sampleSceneStats(context.studio, studioId, mapZones.zones);
       const budget = input.spec?.performanceBudget ?? defaultPerformanceBudget;
       const budgetWarnings = overBudgetWarnings(sceneStats, budget);
       const issues: CheckIssue[] = [
