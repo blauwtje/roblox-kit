@@ -1,12 +1,8 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { config } from "../src/config.ts";
-import { blenderPath } from "../src/hero-props/blender-path.ts";
-import { blenderOutputBytes } from "../src/hero-props/generate-hero-prop.ts";
+import { runBlender } from "../src/hero-props/blender-path.ts";
 import { generateScriptedMesh } from "../src/hero-props/generate-scripted-mesh.ts";
 import { readGlbStructure, type GlbStructure } from "../src/hero-props/glb-structure.ts";
 
@@ -16,7 +12,6 @@ import { readGlbStructure, type GlbStructure } from "../src/hero-props/glb-struc
  * stud) and writes `parity.json` with the result into the kind's generated folder, where
  * `record-mesh-asset.ts` reads it. It prints each kind and exits 1 when any kind differs.
  */
-const execFileAsync = promisify(execFile);
 /** How far apart two bounds may be, in studs, and still count as the same size. */
 const boundsTolerance = 0.01;
 
@@ -26,21 +21,7 @@ async function originalStructure(script: string): Promise<GlbStructure> {
   try {
     const maps = join(folder, "maps");
     await mkdir(maps);
-    await execFileAsync(
-      blenderPath(process.env),
-      [
-        "-b",
-        "--factory-startup",
-        "--python-exit-code",
-        "1",
-        "-P",
-        script,
-        "--",
-        join(folder, "out"),
-        maps,
-      ],
-      { timeout: config.blenderTimeoutMs, maxBuffer: blenderOutputBytes },
-    );
+    await runBlender(script, [join(folder, "out"), maps]);
     const glbs = (await readdir(maps)).filter((name) => name.endsWith(".glb"));
     const [glb, ...others] = glbs;
     if (others.length > 0) {

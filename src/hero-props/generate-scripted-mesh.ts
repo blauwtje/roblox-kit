@@ -1,16 +1,12 @@
-import { execFile } from "node:child_process";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { config } from "../config.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import type { MeshDeclaration } from "../style/preset-schema.ts";
-import { blenderPath } from "./blender-path.ts";
+import { runBlender } from "./blender-path.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
-import { blenderOutputBytes, requiredMaps, type GeneratedHeroProp } from "./generate-hero-prop.ts";
+import { requiredMaps, type GeneratedHeroProp } from "./generate-hero-prop.ts";
 import { recipeHash } from "./recipe-hash.ts";
-
-const execFileAsync = promisify(execFile);
 
 const repositoryRoot = new URL("../../", import.meta.url);
 const sharedScript = new URL("./meshes/shared.py", import.meta.url);
@@ -63,21 +59,10 @@ export async function generateScriptedMesh(
   );
   const maps = new URL("maps/", directory);
   await mkdir(maps, { recursive: true });
-  await execFileAsync(
-    blenderPath(process.env),
-    [
-      "-b",
-      "--factory-startup",
-      "--python-exit-code",
-      "1",
-      "-P",
-      fileURLToPath(new URL(declaration.script, repositoryRoot)),
-      "--",
-      fileURLToPath(new URL(kind, directory)),
-      fileURLToPath(maps),
-    ],
-    { timeout: config.blenderTimeoutMs, maxBuffer: blenderOutputBytes },
-  );
+  await runBlender(fileURLToPath(new URL(declaration.script, repositoryRoot)), [
+    fileURLToPath(new URL(kind, directory)),
+    fileURLToPath(maps),
+  ]);
   const glb = new URL("model.glb", directory);
   await copyFile(new URL(`${kind}.glb`, maps), glb);
   const structure = readGlbStructure(await readFile(glb));

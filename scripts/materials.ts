@@ -2,8 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { config } from "../src/config.ts";
-import { blenderPath } from "../src/hero-props/blender-path.ts";
+import { runBlender } from "../src/hero-props/blender-path.ts";
 import {
   materialRecipeScript,
   recordedMaterialMaps,
@@ -25,8 +24,6 @@ import { materialMapNames, type MaterialRecipe } from "../src/style/preset-schem
 const execFileAsync = promisify(execFile);
 const repositoryRoot = new URL("../", import.meta.url);
 const materialsFolder = new URL(".roblox-kit/materials/", repositoryRoot);
-/** Blender prints its whole log on stdout; the buffer only has to hold it. */
-const blenderOutputBytes = 10 * 1024 * 1024;
 
 const [presetName, ...flags] = process.argv.slice(2);
 const bakeOnly = flags.includes("--bake-only");
@@ -40,21 +37,10 @@ async function bake(recipe: MaterialRecipe, directory: URL): Promise<void> {
   await mkdir(directory, { recursive: true });
   const recipeFile = new URL("recipe.json", directory);
   await writeFile(recipeFile, JSON.stringify(recipe, null, 2));
-  await execFileAsync(
-    blenderPath(process.env),
-    [
-      "-b",
-      "--factory-startup",
-      "--python-exit-code",
-      "1",
-      "-P",
-      fileURLToPath(materialRecipeScript),
-      "--",
-      fileURLToPath(recipeFile),
-      fileURLToPath(directory),
-    ],
-    { timeout: config.blenderTimeoutMs, maxBuffer: blenderOutputBytes },
-  );
+  await runBlender(fileURLToPath(materialRecipeScript), [
+    fileURLToPath(recipeFile),
+    fileURLToPath(directory),
+  ]);
 }
 
 /**

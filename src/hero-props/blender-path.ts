@@ -1,6 +1,18 @@
+import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
+import { promisify } from "node:util";
 import { config } from "../config.ts";
+
+const execFileAsync = promisify(execFile);
+const blenderBufferBytes = 10 * 1024 * 1024;
+const errorLogLines = 20;
+
+export type BlenderExec = (
+  file: string,
+  args: string[],
+  options: { timeout: number; maxBuffer: number },
+) => Promise<unknown>;
 
 function isExecutable(file: string): boolean {
   try {
@@ -32,4 +44,27 @@ export function blenderPath(
   throw new Error(
     `Blender not found: set ${config.blenderPathEnv}, or install it at one of ${config.blenderFallbackPaths.join(", ")}.`,
   );
+}
+
+/** Runs `script` with headless Blender, passing `args` after `--`; a failure throws an error naming the script with the last 20 stderr lines. */
+export async function runBlender(
+  script: string,
+  args: string[],
+  exec: BlenderExec = execFileAsync,
+): Promise<void> {
+  try {
+    await exec(
+      blenderPath(process.env),
+      ["-b", "--factory-startup", "--python-exit-code", "1", "-P", script, "--", ...args],
+      { timeout: config.blenderTimeoutMs, maxBuffer: blenderBufferBytes },
+    );
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const tail =
+      typeof stderr === "string" ? stderr.trimEnd().split("\n").slice(-errorLogLines) : [];
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Blender failed running ${script}: ${reason}\n${tail.join("\n")}`.trimEnd(), {
+      cause: error,
+    });
+  }
 }

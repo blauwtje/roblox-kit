@@ -1,23 +1,17 @@
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { config } from "../config.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import { heroParts, type Preset } from "../style/preset-schema.ts";
 import { readGlbStructure, type GlbStructure } from "./glb-structure.ts";
-import { blenderPath } from "./blender-path.ts";
+import { runBlender } from "./blender-path.ts";
 import { heroRecipeOf } from "./prop-recipes.ts";
 import { recipeHash } from "./recipe-hash.ts";
-
-const execFileAsync = promisify(execFile);
 
 const repositoryRoot = new URL("../../", import.meta.url);
 const generatorScript = new URL("./generate-hero-prop.py", import.meta.url);
 const recipeFileName = "recipe.json";
 const glbFileName = "model.glb";
-/** Blender prints its whole log on stdout; the buffer only has to hold it. */
-export const blenderOutputBytes = 10 * 1024 * 1024;
 
 type HeroPropRecipe = NonNullable<Preset["heroProps"]>[string];
 
@@ -96,21 +90,7 @@ export async function generateHeroProp(
     JSON.stringify({ operations: recipe.operations, roles: roleColors }, null, 2),
   );
 
-  await execFileAsync(
-    blenderPath(process.env),
-    [
-      "-b",
-      "--factory-startup",
-      "--python-exit-code",
-      "1",
-      "-P",
-      fileURLToPath(generatorScript),
-      "--",
-      fileURLToPath(recipeFile),
-      fileURLToPath(glb),
-    ],
-    { timeout: config.blenderTimeoutMs, maxBuffer: blenderOutputBytes },
-  );
+  await runBlender(fileURLToPath(generatorScript), [fileURLToPath(recipeFile), fileURLToPath(glb)]);
 
   const structure = readGlbStructure(await readFile(glb));
   const problems = structureProblems(recipe, structure);
