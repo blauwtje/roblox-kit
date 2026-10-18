@@ -151,29 +151,9 @@
     "kind": "bench",
     "assetId": "101880144843053"
   },
-  "7f027dd48e29": {
-    "kind": "ticket-machine",
-    "assetId": "94698669314713"
-  },
-  "d741dc0b494f": {
-    "kind": "clock",
-    "assetId": "113868462637400"
-  },
-  "9efaa390f271": {
-    "kind": "departure-board",
-    "assetId": "112440369639628"
-  },
-  "f4725083227b": {
-    "kind": "sign",
-    "assetId": "107871902578867"
-  },
   "96d31121762e": {
     "kind": "pendant",
     "assetId": "127045372575746"
-  },
-  "16b943e77899": {
-    "kind": "ticket-counter",
-    "assetId": "125360312908808"
   },
   "dd7f272cbc48": {
     "kind": "train-car",

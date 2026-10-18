@@ -89,27 +89,15 @@ await test("every committed preset's variant maps are the recorded uploads of it
 await test("every declared hero prop and mesh hash is recorded and no record is unreachable", async () => {
   const presets = await loadPresets();
   const assets = await readHeroAssets(heroAssetsFile);
-  const meshesAwaitingReupload = new Set([
-    "clock",
-    "departure-board",
-    "sign",
-    "ticket-counter",
-    "ticket-machine",
-  ]);
   for (const [name, preset] of presets) {
     const kinds = [...Object.keys(preset.heroProps ?? {}), ...Object.keys(preset.meshes ?? {})];
-    const strictKinds = kinds.filter(
-      (kind) => !(meshesAwaitingReupload.has(kind) && preset.meshes?.[kind] !== undefined),
-    );
-    for (const kind of strictKinds) {
+    for (const kind of kinds) {
       const hash = await heroRecipeHash(preset, kind);
       assert.equal(assets[hash]?.kind, kind, `${name} ${kind} ${hash} has no record`);
     }
   }
   const reachable = await reachableHeroHashes(presets);
-  const unreachable = Object.keys(assets).filter(
-    (hash) => !reachable.has(hash) && !meshesAwaitingReupload.has(assets[hash]?.kind ?? ""),
-  );
+  const unreachable = Object.keys(assets).filter((hash) => !reachable.has(hash));
   assert.deepEqual(unreachable, [], "run: node scripts/hero-props.ts prune");
 });
 
