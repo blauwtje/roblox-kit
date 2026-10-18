@@ -55,7 +55,7 @@ const judgeRoundInput = z.strictObject({
   round: z.int().min(1).describe("The round of this loop, starting at 1."),
   spec: relationMapSpecSchema.describe("The spec build_map built, with its mapId."),
   zones: z.array(z.string().min(1)).describe("The zones judged this round."),
-  findings: z.array(judgeFindingSchema).describe("The findings the visual-judge agent returned."),
+  findings: z.array(judgeFindingSchema).describe("The findings the zone-judge agent returned."),
   placeChecks: z
     .array(z.strictObject({ zone: z.string().min(1), answer: placeAnswerSchema }))
     .describe("The place-check answer for each typed room."),

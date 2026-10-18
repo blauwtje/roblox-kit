@@ -15,7 +15,7 @@ const manifest = pluginManifestSchema.parse(JSON.parse(readFileSync(pluginManife
 /** The name a session running the plugin gives `capture_zones` (`claude --plugin-dir . --debug` or `/mcp`). */
 const recordedCaptureZonesName = "mcp__plugin_roblox-kit_roblox-kit__capture_zones";
 
-const expectedAgents = ["place-check", "quality-reviewer", "visual-judge"];
+const expectedAgents = ["place-check", "quality-reviewer", "zone-judge"];
 
 /** The `tools` list of an agent file's frontmatter. */
 function agentTools(source: string): string[] {
@@ -24,7 +24,7 @@ function agentTools(source: string): string[] {
   return line.split(",").map((tool) => tool.trim());
 }
 
-await test("the plugin ships the three visual-judge agents", () => {
+await test("the plugin ships the three judge agents", () => {
   const files = readdirSync(agentsUrl).filter((file) => file.endsWith(".md"));
   assert.deepEqual(files.sort(), expectedAgents.map((name) => `${name}.md`).sort());
 });

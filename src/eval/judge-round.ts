@@ -29,7 +29,7 @@ const findingTypes = [
 ] as const;
 
 /**
- * A finding as the `visual-judge` agent returns it (`finding.schema.json`), except that `evidence.visible`
+ * A finding as the `zone-judge` agent returns it (`finding.schema.json`), except that `evidence.visible`
  * may be missing or blank: `judgeRound` rejects such a finding instead of the call failing.
  */
 export const judgeFindingSchema = z.strictObject({
