@@ -74,7 +74,10 @@ await test(`the mesh library and scripts hold at most ${String(maxMeshLines)} li
   assert.ok(lines <= maxMeshLines, `${String(lines)} lines`);
 });
 
-const printedKinds: Record<string, string> = { clock: "train-station/clock.py" };
+const printedKinds: Record<string, string> = {
+  clock: "train-station/clock.py",
+  "departure-board": "train-station/departure-board.py",
+};
 
 for (const [kind, script] of Object.entries(printedKinds)) {
   await test(`printed ${kind}`, async () => {

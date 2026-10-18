@@ -5,10 +5,10 @@ and y, so the bounds match the kit board's 12 x 9.87 x 1.0 and the recorded-mesh
 The front face looks toward Blender -Y, which Roblox's import puts on the MeshPart's local -Z, like the clock.
 Posts at x = +-5.4 up to z 4.93 (the kit posts' top), a bronze frame round a navy enamel panel from there, and a
 moulded cornice whose gilt beads set the 1.0 depth and whose ends set the 12 width, topping out at 9.87.
-The panel print (gilt "DEPARTURES" header and rules, cream timetable rows) is rendered flat in Workbench first and
-sampled by both panel faces, mirrored on the back so it reads correctly from each side. Every part is one material
-switched by a "paint" attribute, joined into one mesh, unwrapped (panels enlarged) and baked to color (with
-occlusion grime), roughness, metalness and tangent normal maps by `lib`.
+The panel print (gilt "DEPARTURES" header and rules, cream timetable rows) is drawn in `departure-board.print.svg`
+(Liberation Serif Bold), rendered to a png by the generator and sampled by both panel faces,
+mirrored on the back so it reads correctly from each side. Every part is one material switched by a "paint"
+attribute, joined into one mesh, unwrapped (panels enlarged) and baked to color (with occlusion grime), roughness, metalness and tangent normal maps by `lib`.
 """
 
 import importlib
@@ -36,115 +36,7 @@ PANEL_Y = 0.22  # panel faces, recessed behind the frame's 0.3
 PANEL_Z = (OPENING_Z0 + OPENING_Z1) / 2
 PRINT_W, PRINT_H = 11.26, 4.07  # the panel area the print image covers
 PANEL_UV = 2.6  # panel islands' texel density relative to the rest
-PRINT_SIZE = 2048
-FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
-CAP_RATIO = 0.662  # Times New Roman cap height per unit font size
-NAVY, CREAM, GOLD, FAINT = "#27436f", "#f1e6c8", "#d9b463", "#3a5788"
-ROWS = [("09:03", "CENTRAL", "3"), ("09:40", "HARBOUR", "1"), ("10:03", "NORTH PARK", "4"), ("10:15", "AIRPORT", "1")]
 BRONZE, GILT, PANEL = range(3)
-
-
-def panel_print():
-    """Renders the panel print flat in Workbench, seen from +Z with the header toward +Y, and loads it."""
-    scene = bpy.context.scene
-    made = []
-    cache = {}
-
-    def flat(hex_color):
-        if hex_color not in cache:
-            material = bpy.data.materials.new(hex_color)
-            material.diffuse_color = materials.linear(hex_color)
-            cache[hex_color] = material
-        return cache[hex_color]
-
-    def rect(x0, x1, y0, y1, hex_color, z=0.0):
-        mesh = bpy.data.meshes.new("rect")
-        mesh.from_pydata([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)], [], [(0, 1, 2, 3)])
-        obj = bpy.data.objects.new("rect", mesh)
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    def text(body, cap, x, y, align, hex_color, spacing=1.0, condense=1.0):
-        """Text with its cap height centred on y; align is LEFT, CENTER or RIGHT about x. Returns its width."""
-        curve = bpy.data.curves.new("text", "FONT")
-        curve.body = body
-        curve.font = bpy.data.fonts.load(FONT, check_existing=True)
-        curve.size = cap / CAP_RATIO
-        curve.space_character = spacing
-        curve.align_x = align
-        curve.align_y = "BOTTOM_BASELINE"
-        curve.resolution_u = 5
-        obj = bpy.data.objects.new("text", curve)
-        obj.location = (x, y - cap / 2, 0.0)
-        obj.scale.x = condense
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-        bpy.context.view_layer.update()
-        xs = [(obj.matrix_world @ Vector(corner)).x for corner in obj.bound_box]
-        return max(xs) - min(xs)
-
-    rect(-PRINT_W, PRINT_W, -PRINT_H, PRINT_H, NAVY, -0.01)
-    # A fine gilt lining just inside the slip.
-    half_x, half_y, line = OPENING_X - SLIP - 0.12, (OPENING_Z1 - OPENING_Z0) / 2 - SLIP - 0.12, 0.028
-    rect(-half_x, half_x, half_y - line, half_y, GOLD)
-    rect(-half_x, half_x, -half_y, -half_y + line, GOLD)
-    rect(-half_x, -half_x + line, -half_y, half_y, GOLD)
-    rect(half_x - line, half_x, -half_y, half_y, GOLD)
-    header_y, header_cap = 1.43, 0.52
-    header_width = text("DEPARTURES", header_cap, 0.0, header_y, "CENTER", GOLD, spacing=1.18)
-    # Double rules flanking the header, ending in small lozenges, and a rule under it.
-    inner, outer = header_width / 2 + 0.3, 5.05
-    for sign in (-1.0, 1.0):
-        x0, x1 = sorted((sign * inner, sign * outer))
-        rect(x0, x1, header_y + 0.05, header_y + 0.075, GOLD)
-        rect(x0, x1, header_y - 0.075, header_y - 0.05, GOLD)
-        bm = bmesh.new()
-        tip = sign * (inner - 0.12)
-        bmesh.ops.create_circle(bm, cap_ends=True, segments=4, radius=0.09)
-        mesh = bpy.data.meshes.new("lozenge")
-        bm.to_mesh(mesh)
-        bm.free()
-        obj = bpy.data.objects.new("lozenge", mesh)
-        obj.location = (tip, header_y, 0.0)
-        obj.data.materials.append(flat(GOLD))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-    rect(-5.2, 5.2, 1.0, 1.035, GOLD)
-    row_cap, row_ys = 0.5, [0.52, -0.16, -0.84, -1.52]
-    for (time, place, platform), y in zip(ROWS, row_ys):
-        text(time, row_cap, -5.0, y, "LEFT", CREAM, spacing=1.05)
-        text(place, row_cap, -2.3, y, "LEFT", CREAM, spacing=1.06)
-        text(platform, row_cap, 4.55, y, "CENTER", CREAM)
-    for above, below in zip(row_ys, row_ys[1:]):
-        middle = (above + below) / 2
-        rect(-5.2, 5.2, middle - 0.008, middle + 0.008, FAINT)
-
-    camera_data = bpy.data.cameras.new("print-camera")
-    camera_data.type = "ORTHO"
-    camera_data.ortho_scale = PRINT_W
-    camera = bpy.data.objects.new("print-camera", camera_data)
-    camera.location = (0.0, 0.0, 5.0)
-    scene.collection.objects.link(camera)
-    scene.camera = camera
-    scene.render.engine = "BLENDER_WORKBENCH"
-    scene.display.shading.light = "FLAT"
-    scene.display.shading.color_type = "MATERIAL"
-    scene.display.shading.show_object_outline = False
-    scene.display.render_aa = "16"
-    scene.view_settings.view_transform = "Standard"
-    scene.render.resolution_x = PRINT_SIZE
-    scene.render.resolution_y = round(PRINT_SIZE * PRINT_H / PRINT_W)
-    scene.render.resolution_percentage = 100
-    path = f"{run.OUTPUT}-panel-print.png"
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    for obj in made + [camera]:
-        bpy.data.objects.remove(obj, do_unlink=True)
-    scene.camera = None
-    scene.render.engine = "CYCLES"
-    return bpy.data.images.load(path)
 
 
 def board_material(print_image):
@@ -414,7 +306,7 @@ def density(paint, face):
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 run.set_up_cycles()
-PRINT = panel_print()
+PRINT = materials.print_image(run.arguments[2])
 MATERIAL = board_material(PRINT)
 post(-POST_X)
 post(POST_X)

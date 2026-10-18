@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="740" viewBox="-5.63 -2.035 11.26 4.07">
+  <rect x="-5.63" y="-2.035" width="11.26" height="4.07" fill="#27436f"/>
+  <rect x="-5.436" y="-1.841" width="10.872" height="3.682" fill="none" stroke="#d9b463" stroke-width="0.028"/>
+  <g fill="#d9b463">
+    <rect x="-5.05" y="-1.505" width="2.09" height="0.025"/>
+    <rect x="-5.05" y="-1.38" width="2.09" height="0.025"/>
+    <rect x="2.96" y="-1.505" width="2.09" height="0.025"/>
+    <rect x="2.96" y="-1.38" width="2.09" height="0.025"/>
+    <polygon points="-2.93,-1.43 -2.84,-1.52 -2.75,-1.43 -2.84,-1.34"/>
+    <polygon points="2.75,-1.43 2.84,-1.52 2.93,-1.43 2.84,-1.34"/>
+    <rect x="-5.2" y="-1.035" width="10.4" height="0.035"/>
+    <text font-family="Liberation Serif" font-weight="bold" font-size="0.7855" text-anchor="middle" y="-1.17">DEPARTURES</text>
+  </g>
+  <g fill="#3a5788">
+    <rect x="-5.2" y="-0.188" width="10.4" height="0.016"/>
+    <rect x="-5.2" y="0.492" width="10.4" height="0.016"/>
+    <rect x="-5.2" y="1.172" width="10.4" height="0.016"/>
+  </g>
+  <g fill="#f1e6c8" font-family="Liberation Serif" font-weight="bold" font-size="0.7553">
+    <text x="-5.0" y="-0.27">09:03</text>
+    <text x="-2.3" y="-0.27">CENTRAL</text>
+    <text x="4.55" y="-0.27" text-anchor="middle">3</text>
+    <text x="-5.0" y="0.41">09:40</text>
+    <text x="-2.3" y="0.41">HARBOUR</text>
+    <text x="4.55" y="0.41" text-anchor="middle">1</text>
+    <text x="-5.0" y="1.09">10:03</text>
+    <text x="-2.3" y="1.09">NORTH PARK</text>
+    <text x="4.55" y="1.09" text-anchor="middle">4</text>
+    <text x="-5.0" y="1.77">10:15</text>
+    <text x="-2.3" y="1.77">AIRPORT</text>
+    <text x="4.55" y="1.77" text-anchor="middle">1</text>
+  </g>
+</svg>
