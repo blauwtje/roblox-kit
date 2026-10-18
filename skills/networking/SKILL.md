@@ -1,6 +1,6 @@
 ---
 name: networking
-description: Use when writing or reviewing client-server communication (RemoteEvents, RemoteFunctions, UnreliableRemoteEvents, or Blink) in a Rojo + Rokit Roblox game, including validation, rate limiting and server authority. Not for DataStore saving, receipts or game passes, this plugin's own code, maps or playtests.
+description: Safe client-server communication (RemoteEvents, RemoteFunctions, UnreliableRemoteEvents, Blink) with validation, rate limiting and server authority in a Rojo + Rokit game. Use for "remote event", "send to server", "stop exploiters", "anti cheat", "client server". Not for DataStore saving, receipts or game passes, this plugin's own code, maps or playtests.
 ---
 
 # Networking

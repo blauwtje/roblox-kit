@@ -1,6 +1,6 @@
 ---
 name: animation
-description: Use when making a Roblox character animation from keyframes with Blender, exporting an FBX for R15, or asked to import or publish an animation. Not for Luau that plays an animation (luau skill) or maps and playtests.
+description: Turns Blender keyframes into an R15 Roblox animation (FBX export, import and publish steps). Use for "make an animation", "animate my character", "walk cycle", "emote", "export fbx". Not for Luau that plays an animation (luau skill) or maps and playtests.
 ---
 
 # Animation

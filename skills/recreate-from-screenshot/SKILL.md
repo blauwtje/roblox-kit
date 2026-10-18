@@ -1,6 +1,6 @@
 ---
 name: recreate-from-screenshot
-description: Use when the user gives a screenshot or image of a place and wants a Roblox map that looks like it, or wants a built map compared with a reference image. Not for judging a map with no reference (visual-judge skill), building from a written spec (map-building skill) or Luau.
+description: Recreates a place from a reference image as a Roblox map and compares the build with the reference. Use for "make it look like this picture", "copy this screenshot", "recreate this image", "match this reference". Not for judging a map with no reference (visual-judge skill), building from a written spec (map-building skill) or Luau.
 ---
 
 # Recreate from screenshot

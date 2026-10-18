@@ -1,6 +1,6 @@
 ---
 name: playtest
-description: Use when a Roblox game needs a playtest in Studio: proving server or client behavior, spawns, doors or multiplayer with checks, or when a run_playtest result fails or times out. Not for building maps (map-building skill), writing Luau (luau skill) or animation.
+description: Runs a Roblox game in a Studio playtest with checks that prove server or client behavior, spawns, doors or multiplayer. Use for "test my game", "playtest", "does it work", "try it with two players", or when a run_playtest result fails or times out. Not for building maps (map-building skill), writing Luau (luau skill) or animation.
 ---
 
 # Playtest

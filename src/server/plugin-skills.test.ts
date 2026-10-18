@@ -45,3 +45,29 @@ await test("the recreate-from-screenshot skill names its pipeline tools", () => 
     assert.ok(toolNames.has(name), `${name} is a tool`);
   }
 });
+
+const roughPhrases: Record<string, string[]> = {
+  animation: ["make an animation", "walk cycle"],
+  data: ["save player data", "gamepass"],
+  luau: ["write a script", "fix my code"],
+  "map-building": ["make a map", "build a level", "train station"],
+  networking: ["remote event", "stop exploiters"],
+  playtest: ["test my game", "playtest"],
+  "visual-judge": ["does it look right", "rate this map"],
+  "recreate-from-screenshot": ["copy this screenshot", "make it look like this picture"],
+};
+
+for (const skill of skills) {
+  await test(`skill ${skill.name} description leads with what it provides and has user words`, () => {
+    const source = readFileSync(new URL(`${skill.name}/SKILL.md`, skillsUrl), "utf8");
+    const frontmatter = /^---\n([\s\S]*?)\n---/.exec(source)?.[1] ?? "";
+    const description = /^description:\s*(.+)$/m.exec(frontmatter)?.[1]?.trim() ?? "";
+    assert.ok(description.length > 0 && description.length <= 1024, "description is 1-1024 chars");
+    assert.ok(!/^Use when/i.test(description), "description does not open with Use when");
+    const phrases = roughPhrases[skill.name];
+    assert.ok(phrases, `${skill.name} has rough phrases in the table`);
+    for (const phrase of phrases) {
+      assert.ok(description.toLowerCase().includes(phrase), `missing "${phrase}"`);
+    }
+  });
+}

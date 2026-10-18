@@ -1,6 +1,6 @@
 ---
 name: map-building
-description: Use when building or changing a styled Roblox map (genre preset, rooms, walls, doors, floors, spawns, terrain) in Studio, or when asked to check or screenshot one. Not for Luau scripts (luau skill), playtests or animation.
+description: Builds and edits styled Roblox maps (genre preset, rooms, walls, doors, floors, spawns, terrain) in Studio, then checks and screenshots them. Use for "make a map", "build a level", "train station", "cozy town", "horror facility", "sci-fi station", "add a room". Not for Luau scripts (luau skill), playtests or animation.
 ---
 
 # Map building

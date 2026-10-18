@@ -1,6 +1,6 @@
 ---
 name: data
-description: Use when writing or reviewing player data saving (ProfileStore), schema migrations, developer product receipts (ProcessReceipt) or game pass checks in a Rojo + Wally Roblox game. Not for leaderboards, trading or subscriptions, this plugin's own code, maps or playtests.
+description: Player data saving with ProfileStore, schema migrations, developer product receipts (ProcessReceipt) and game pass checks in a Rojo + Wally game. Use for "save player data", "datastore", "don't lose progress", "sell a product", "gamepass", "robux purchase". Not for leaderboards, trading or subscriptions, this plugin's own code, maps or playtests.
 ---
 
 # Data

@@ -1,6 +1,6 @@
 ---
 name: visual-judge
-description: Use when a built Roblox map must be judged by how it looks, or the user asks whether it looks right, or before calling a map's appearance done. Not for overlap or reachability (check_map), building (map-building skill) or Luau.
+description: Judges how a built Roblox map looks from captured screenshots, using fresh reviewers. Use for "does it look right", "rate this map", "is it good enough", "review the look", or before calling a map's appearance done. Not for overlap or reachability (check_map), building (map-building skill) or Luau.
 ---
 
 # Visual judge

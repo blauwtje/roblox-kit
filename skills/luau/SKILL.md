@@ -1,6 +1,6 @@
 ---
 name: luau
-description: Use when writing, editing or reviewing Luau for Roblox, including code sent to Studio through execute_luau, or when about to type wait(), spawn(), Remove() or a Body mover. Not for building maps, playtests or screenshots.
+description: Modern, non-deprecated Luau for Roblox, including code sent to Studio through execute_luau. Use for "write a script", "fix my code", "lua error", "make this faster", or when about to type wait(), spawn(), Remove() or a Body mover. Not for building maps, playtests or screenshots.
 ---
 
 # Luau
