@@ -53,6 +53,7 @@ const roughPhrases: Record<string, string[]> = {
   "map-building": ["make a map", "build a level", "train station"],
   networking: ["remote event", "stop exploiters"],
   playtest: ["test my game", "playtest"],
+  "ui-images": ["button image", "9-slice"],
   "visual-judge": ["does it look right", "rate this map"],
   "recreate-from-screenshot": ["copy this screenshot", "make it look like this picture"],
 };
@@ -115,3 +116,27 @@ for (const skill of skills) {
     assert.ok(Buffer.byteLength(section.trim()) <= maxRoughBytes, "section is over budget");
   });
 }
+
+const uiImageTerms = [
+  "Use when",
+  "Not for",
+  "insert_images",
+  "ImageColor3",
+  "CoreUISafeInsets",
+  "TextLabel",
+  "FontFace",
+  "1024",
+  "2x",
+  "48",
+];
+
+await test("the ui-images skill exists and states its drawing rules", () => {
+  assert.ok(
+    skills.some((skill) => skill.name === "ui-images"),
+    "skills/ui-images is missing",
+  );
+  const source = readFileSync(new URL("ui-images/SKILL.md", skillsUrl), "utf8");
+  for (const term of uiImageTerms) {
+    assert.ok(source.includes(term), `ui-images names ${term}`);
+  }
+});
