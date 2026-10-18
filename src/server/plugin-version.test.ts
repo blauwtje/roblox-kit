@@ -7,8 +7,11 @@ import { pluginVersion } from "./main.ts";
 const pluginManifestUrl = new URL("../../.claude-plugin/plugin.json", import.meta.url);
 const devManifestUrl = new URL("../../.mcp.json", import.meta.url);
 const pluginManifestSchema = z.object({ version: z.string() });
-const serverEnvSchema = z.object({
-  mcpServers: z.object({ "roblox-kit": z.object({ env: z.object({ PROJECT_DIR: z.string() }) }) }),
+const serversSchema = z.object({
+  mcpServers: z.record(
+    z.string(),
+    z.object({ env: z.record(z.string(), z.string()).optional() }).loose(),
+  ),
 });
 
 await test("the server reports the plugin.json version", () => {
@@ -24,9 +27,14 @@ await test("plugin.json and .mcp.json carry no Open Cloud user settings", () => 
   );
 });
 
-await test("plugin.json and .mcp.json pass the project folder to the roblox-kit server as PROJECT_DIR", () => {
-  for (const url of [pluginManifestUrl, devManifestUrl]) {
-    const manifest = serverEnvSchema.parse(JSON.parse(readFileSync(url, "utf8")));
-    assert.equal(manifest.mcpServers["roblox-kit"].env.PROJECT_DIR, "${CLAUDE_PROJECT_DIR}");
-  }
+await test("plugin.json and .mcp.json declare the same mcpServers", () => {
+  const [plugin, dev] = [pluginManifestUrl, devManifestUrl].map((url) => {
+    const text = readFileSync(url, "utf8").replaceAll(
+      "${CLAUDE_PLUGIN_ROOT:-.}",
+      "${CLAUDE_PLUGIN_ROOT}",
+    );
+    return serversSchema.parse(JSON.parse(text));
+  });
+  assert.deepEqual(dev, plugin);
+  assert.equal(plugin?.mcpServers["roblox-kit"]?.env?.["PROJECT_DIR"], "${CLAUDE_PROJECT_DIR}");
 });
