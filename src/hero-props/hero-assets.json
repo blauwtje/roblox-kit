@@ -182,5 +182,25 @@
   "2d7b771dd496": {
     "kind": "arch-trim",
     "assetId": "101771726099445"
+  },
+  "faab0347a2a0": {
+    "kind": "clock",
+    "assetId": "131361014070493"
+  },
+  "8673536a9fb9": {
+    "kind": "departure-board",
+    "assetId": "83779139812707"
+  },
+  "8f9fc52dc464": {
+    "kind": "sign",
+    "assetId": "88303691595386"
+  },
+  "bd372cbacbb0": {
+    "kind": "ticket-counter",
+    "assetId": "137778935592513"
+  },
+  "5a08bfa0eac2": {
+    "kind": "ticket-machine",
+    "assetId": "76403620465130"
   }
 }
