@@ -6,8 +6,8 @@ The front face looks toward Blender -Y, which Roblox's import puts on the MeshPa
 departure board. A dark bronze frame with rounded rails runs round a recessed navy enamel panel, with a gilt slip
 inside the opening, gilt rosettes at the corners on both faces (their tips set the 0.4 depth) and two cast lifting
 eyes on the top rail whose rings top out at the bounds. The panel print (gilt double lining with notched corners,
-"CONCOURSE" in Times bold, flanking lozenges) is rendered flat in Workbench first and sampled by both panel faces,
-mirrored on the back so it reads correctly from each side. Every part is one material switched by a "paint"
+"CONCOURSE" in Liberation Serif Bold, flanking lozenges) is drawn in `sign.print.svg`, rendered to a png by the
+generator and sampled by both panel faces, mirrored on the back so it reads correctly from each side. Every part is one material switched by a "paint"
 attribute, joined into one mesh, unwrapped (panels enlarged) and baked to color (with occlusion grime), roughness,
 metalness and tangent normal maps by `lib`.
 """
@@ -39,141 +39,7 @@ PANEL_Y = 0.08  # panel faces, recessed behind the frame
 PANEL_Z = (OPENING_Z0 + OPENING_Z1) / 2
 PRINT_W, PRINT_H = 2 * OPENING_X + 0.04, OPENING_Z1 - OPENING_Z0 + 0.04  # the panel area the print image covers
 PANEL_UV = 2.6  # panel islands' texel density relative to the rest
-PRINT_SIZE = 2048
-FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
-CAP_RATIO = 0.662  # Times New Roman cap height per unit font size
-NAVY, CREAM, GOLD, FAINT = "#1b345c", "#f1e6c8", "#e2b04a", "#3a5788"
-LABEL = "CONCOURSE"
 BRONZE, GILT, PANEL = range(3)
-
-
-def panel_print():
-    """Renders the panel print flat in Workbench, seen from +Z with the header toward +Y, and loads it."""
-    scene = bpy.context.scene
-    made = []
-    cache = {}
-
-    def flat(hex_color):
-        if hex_color not in cache:
-            material = bpy.data.materials.new(hex_color)
-            material.diffuse_color = materials.linear(hex_color)
-            cache[hex_color] = material
-        return cache[hex_color]
-
-    def rect(x0, x1, y0, y1, hex_color, z=0.0):
-        mesh = bpy.data.meshes.new("rect")
-        mesh.from_pydata([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)], [], [(0, 1, 2, 3)])
-        obj = bpy.data.objects.new("rect", mesh)
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    def text(body, cap, x, y, align, hex_color, spacing=1.0, condense=1.0):
-        """Text with its cap height centred on y; align is LEFT, CENTER or RIGHT about x. Returns its width."""
-        curve = bpy.data.curves.new("text", "FONT")
-        curve.body = body
-        curve.font = bpy.data.fonts.load(FONT, check_existing=True)
-        curve.size = cap / CAP_RATIO
-        curve.space_character = spacing
-        curve.align_x = align
-        curve.align_y = "BOTTOM_BASELINE"
-        curve.resolution_u = 5
-        obj = bpy.data.objects.new("text", curve)
-        obj.location = (x, y - cap / 2, 0.0)
-        obj.scale.x = condense
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-        bpy.context.view_layer.update()
-        xs = [(obj.matrix_world @ Vector(corner)).x for corner in obj.bound_box]
-        return max(xs) - min(xs)
-
-    def arc(cx, cy, radius, thickness, a0, a1, hex_color):
-        bm = bmesh.new()
-        steps = 10
-        inner, outer = [], []
-        for i in range(steps + 1):
-            angle = a0 + (a1 - a0) * i / steps
-            for ring, r in ((inner, radius - thickness / 2), (outer, radius + thickness / 2)):
-                ring.append(bm.verts.new((cx + r * math.cos(angle), cy + r * math.sin(angle), 0.0)))
-        for i in range(steps):
-            bm.faces.new((inner[i], inner[i + 1], outer[i + 1], outer[i]))
-        mesh = bpy.data.meshes.new("arc")
-        bm.to_mesh(mesh)
-        bm.free()
-        obj = bpy.data.objects.new("arc", mesh)
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    def lozenge(x, y, radius, hex_color):
-        bm = bmesh.new()
-        bmesh.ops.create_circle(bm, cap_ends=True, segments=4, radius=radius)
-        mesh = bpy.data.meshes.new("lozenge")
-        bm.to_mesh(mesh)
-        bm.free()
-        obj = bpy.data.objects.new("lozenge", mesh)
-        obj.location = (x, y, 0.0)
-        obj.scale.x = 1.35
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    rect(-PRINT_W, PRINT_W, -PRINT_H, PRINT_H, NAVY, -0.01)
-    # A gilt double lining just inside the slip: the outer line with notched (re-entrant quarter-circle) corners,
-    # a fine plain line inside it.
-    half_x, half_y = OPENING_X - SLIP - 0.1, (OPENING_Z1 - OPENING_Z0) / 2 - SLIP - 0.1
-    line, notch = 0.032, 0.17
-    rect(-half_x + notch, half_x - notch, half_y - line, half_y, GOLD)
-    rect(-half_x + notch, half_x - notch, -half_y, -half_y + line, GOLD)
-    rect(-half_x, -half_x + line, -half_y + notch, half_y - notch, GOLD)
-    rect(half_x - line, half_x, -half_y + notch, half_y - notch, GOLD)
-    for sx in (-1.0, 1.0):
-        for sy in (-1.0, 1.0):
-            # The arc round the corner point, from the horizontal line's end to the vertical line's end.
-            base = {(1, 1): math.pi, (-1, 1): 1.5 * math.pi, (-1, -1): 0.0, (1, -1): 0.5 * math.pi}[(int(sx), int(sy))]
-            arc(sx * (half_x - line / 2), sy * (half_y - line / 2), notch - line / 2, line, base, base + math.pi / 2, GOLD)
-    inset, fine = 0.09, 0.013
-    ix, iy = half_x - inset, half_y - inset
-    rect(-ix, ix, iy - fine, iy, GOLD)
-    rect(-ix, ix, -iy, -iy + fine, GOLD)
-    rect(-ix, -ix + fine, -iy, iy, GOLD)
-    rect(ix - fine, ix, -iy, iy, GOLD)
-    cap, room = 0.88, 5.75
-    width = text(LABEL, cap, 0.0, 0.0, "CENTER", GOLD, spacing=1.12)
-    if width > room:
-        for obj in made:
-            if obj.type == "FONT":
-                obj.scale.x = room / width
-        width = room
-    for sign in (-1.0, 1.0):
-        lozenge(sign * (width / 2 + 0.36), 0.0, 0.13, GOLD)
-        lozenge(sign * (width / 2 + 0.62), 0.0, 0.06, GOLD)
-
-    camera_data = bpy.data.cameras.new("print-camera")
-    camera_data.type = "ORTHO"
-    camera_data.ortho_scale = PRINT_W
-    camera = bpy.data.objects.new("print-camera", camera_data)
-    camera.location = (0.0, 0.0, 5.0)
-    scene.collection.objects.link(camera)
-    scene.camera = camera
-    scene.render.engine = "BLENDER_WORKBENCH"
-    scene.display.shading.light = "FLAT"
-    scene.display.shading.color_type = "MATERIAL"
-    scene.display.shading.show_object_outline = False
-    scene.display.render_aa = "16"
-    scene.view_settings.view_transform = "Standard"
-    scene.render.resolution_x = PRINT_SIZE
-    scene.render.resolution_y = round(PRINT_SIZE * PRINT_H / PRINT_W)
-    scene.render.resolution_percentage = 100
-    path = f"{run.OUTPUT}-panel-print.png"
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    for obj in made + [camera]:
-        bpy.data.objects.remove(obj, do_unlink=True)
-    scene.camera = None
-    scene.render.engine = "CYCLES"
-    return bpy.data.images.load(path)
 
 
 def board_material(print_image):
@@ -393,7 +259,7 @@ def density(paint, face):
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 run.set_up_cycles()
-PRINT = panel_print()
+PRINT = materials.print_image(run.arguments[2])
 MATERIAL = board_material(PRINT)
 frame()
 board = geometry.finish("sign")

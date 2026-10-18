@@ -77,6 +77,7 @@ await test(`the mesh library and scripts hold at most ${String(maxMeshLines)} li
 const printedKinds: Record<string, string> = {
   clock: "train-station/clock.py",
   "departure-board": "train-station/departure-board.py",
+  sign: "train-station/sign.py",
 };
 
 for (const [kind, script] of Object.entries(printedKinds)) {
