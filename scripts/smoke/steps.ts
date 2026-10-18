@@ -25,6 +25,7 @@ import { probeBlockingModel, probeCheckMap } from "./check.ts";
 import { probeCaptureZones } from "./capture.ts";
 import { probeNpcCapabilities } from "./npc-probe.ts";
 import { probeBuildMapNpcs } from "./npcs.ts";
+import { probeInsertImages } from "./images.ts";
 import { probeMeasureCapture } from "../smoke-vision.ts";
 
 /** Every smoke step name in run order; `--help` prints them and `--only` checks its terms against them. */
@@ -42,6 +43,7 @@ export const stepName = {
   idle: "build_map idle animation",
   npcProbe: "npc probe",
   npcs: "build_map npcs",
+  images: "insert_images",
   check: "check_map",
   blocking: "check_map names a model blocking a walk",
   capture: "capture_zones",
@@ -181,6 +183,7 @@ export async function probeMapTools(
       [stepName.idle, () => probeIdleAnimation(connection)],
       [stepName.npcProbe, () => probeNpcCapabilities(connection)],
       [stepName.npcs, () => probeBuildMapNpcs(connection)],
+      [stepName.images, () => probeInsertImages(connection)],
       [stepName.check, () => probeCheckMap(connection)],
       [stepName.blocking, () => probeBlockingModel(connection)],
       [stepName.capture, () => probeCaptureZones(connection)],
