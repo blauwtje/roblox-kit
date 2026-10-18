@@ -89,3 +89,18 @@ for (const skill of skills) {
     }
   });
 }
+
+const maxStepLength = 700;
+
+for (const skill of skills) {
+  await test(`skill ${skill.name} keeps each numbered step within ${String(maxStepLength)} characters`, () => {
+    const source = readFileSync(new URL(`${skill.name}/SKILL.md`, skillsUrl), "utf8");
+    for (const line of source.split("\n")) {
+      if (!/^\d+\. /.test(line)) continue;
+      assert.ok(
+        line.length <= maxStepLength,
+        `${String(line.length)} characters: ${line.slice(0, 60)}`,
+      );
+    }
+  });
+}

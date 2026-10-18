@@ -133,10 +133,6 @@ async function qualityReviews(spec: RelationMapSpec, captures: string[]): Promis
   return reviews;
 }
 
-/**
- * The blind place check (skills/visual-judge SKILL.md step 5) of each typed room of a styled benchmark, from
- * the room zone's saved view a and view b images; a benchmark without a style has no typed rooms.
- */
 async function placeChecks(spec: RelationMapSpec, captures: string[]): Promise<PlaceCheckResult[]> {
   if (spec.style === undefined) {
     return [];
