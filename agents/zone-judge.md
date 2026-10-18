@@ -1,6 +1,7 @@
 ---
 name: zone-judge
-description: Captures the given zones of a built Roblox map and judges the images against the stated intent. Dispatched by the visual-judge skill (steps 3 and 9) with a mapId, intent lines, rubric, check_map JSON and zones.
+description: Captures the given zones of a built Roblox map and judges the images against the stated intent. Input: a mapId, intent lines, a rubric, the check_map JSON and the zones to judge.
+model: inherit
 tools: Read, mcp__plugin_roblox-kit_roblox-kit__capture_zones
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: quality-reviewer
-description: Scores one built Roblox room on six axes against reference screenshots. Dispatched by the visual-judge skill (step 6), three times per room, with the text of quality-prompt.md.
+description: Scores one built Roblox room on six axes against reference screenshots. Input: the text of quality-prompt.md with the reference and capture image paths.
+model: inherit
 tools: Read
 ---
 

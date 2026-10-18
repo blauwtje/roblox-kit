@@ -50,3 +50,14 @@ for (const agent of expectedAgents) {
     }
   });
 }
+
+for (const agent of expectedAgents) {
+  await test(`agent ${agent} describes its job and input without skill step numbers, and inherits the model`, () => {
+    const source = readFileSync(new URL(`${agent}.md`, agentsUrl), "utf8");
+    const frontmatter = /^---\n([\s\S]*?)\n---/.exec(source)?.[1] ?? "";
+    const description = /^description:\s*(.+)$/m.exec(frontmatter)?.[1] ?? "";
+    assert.match(description, /Input:/);
+    assert.doesNotMatch(description, /\bsteps?\s+\d/i);
+    assert.match(frontmatter, /^model: inherit$/m);
+  });
+}

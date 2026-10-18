@@ -1,6 +1,7 @@
 ---
 name: place-check
-description: Names the genre and room of a Roblox map zone from its screenshots alone, with no intent or spec. Dispatched by the visual-judge skill (step 5) with the text of place-check-prompt.md.
+description: Names the genre and room of a Roblox map zone from its screenshots alone, with no intent or spec. Input: the text of place-check-prompt.md.
+model: inherit
 tools: Read, mcp__plugin_roblox-kit_roblox-kit__capture_zones
 ---
 
