@@ -84,3 +84,35 @@ await test("the ticket machine screen is an image on a hit and text on a miss; o
     warnings: [],
   });
 });
+
+const sign = { size: { x: 8 }, attributes: { Label: "Platform 3" } };
+const counter = { size: { x: 8 }, attributes: {} };
+const numberRecords = Object.fromEntries(
+  ["1", "2"].map((text) => [
+    signageImageHash({ name: "n", text, prefix: "Number" }),
+    { name: `ticket-window-${text}`, kind: "signage", assetId: `1${text}` },
+  ]),
+);
+
+await test("a sign label is an image on a hit; a miss keeps the text label and names the image", () => {
+  const records = {
+    [signageImageHash({ name: "l", text: "Platform 3", prefix: "Label" })]: {
+      name: "sign-label-Platform 3",
+      kind: "signage",
+      assetId: "7",
+    },
+  };
+  const hit = signageAttributes("sign", 1, input(withPlatform, records), sign);
+  assert.deepEqual(hit, { attributes: { LabelImage: "rbxassetid://7" }, warnings: [] });
+  const miss = signageAttributes("sign", 1, input(withPlatform), sign);
+  assert.deepEqual(miss.attributes, {});
+  assert.match(miss.warnings.join(), /sign-label-Platform 3/);
+});
+
+await test("ticket counter window numbers are images only when every number is cached", () => {
+  const hit = signageAttributes("ticket-counter", 1, input(withPlatform, numberRecords), counter);
+  assert.equal(hit.attributes.NumberImages, "rbxassetid://11,rbxassetid://12");
+  const miss = signageAttributes("ticket-counter", 1, input(withPlatform), counter);
+  assert.deepEqual(miss.attributes, {});
+  assert.match(miss.warnings.join(), /ticket-window-1/);
+});

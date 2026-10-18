@@ -9,7 +9,7 @@ import type { Preset } from "../style/preset-schema.ts";
 export interface SignageImage {
   name: string;
   text: string;
-  prefix: "Header" | "Screen";
+  prefix: "Header" | "Screen" | "Label" | "Number";
 }
 
 export const departureHeaderImage: SignageImage = {
@@ -59,9 +59,7 @@ function fixedWord(
   }
   return {
     attributes: { [`${image.prefix}Text`]: image.text },
-    warnings: [
-      `No cached image for "${image.text}"; the ${image.name} image (white "${image.text}", Inter Bold) is not uploaded, so the sign draws text.`,
-    ],
+    warnings: [missWarning(image)],
   };
 }
 
@@ -95,6 +93,55 @@ export function departureRows(seed: number, destinations: string[], platforms: n
   });
 }
 
+const windowMinWidth = 4;
+
+function wordImage(prefix: "Label" | "Number", text: string): SignageImage {
+  return {
+    name: prefix === "Label" ? `sign-label-${text}` : `ticket-window-${text}`,
+    text,
+    prefix,
+  };
+}
+
+function missWarning(image: SignageImage): string {
+  return `No cached image for "${image.text}"; the ${image.name} image (white "${image.text}", Inter Bold) is not uploaded, so the sign draws text.`;
+}
+
+function labelImage(
+  label: string,
+  records: Record<string, ImageAsset>,
+): { attributes: Record<string, string>; warnings: string[] } {
+  const image = wordImage("Label", label);
+  const record = label === "" ? undefined : records[signageImageHash(image)];
+  if (record !== undefined) {
+    return { attributes: { LabelImage: `rbxassetid://${record.assetId}` }, warnings: [] };
+  }
+  return { attributes: {}, warnings: label === "" ? [] : [missWarning(image)] };
+}
+
+function numberImages(
+  length: number,
+  records: Record<string, ImageAsset>,
+): { attributes: Record<string, string>; warnings: string[] } {
+  const count = Math.max(1, Math.floor(length / windowMinWidth));
+  const images = Array.from({ length: count }, (_, index) =>
+    wordImage("Number", String(index + 1)),
+  );
+  const found = images.map((image) => records[signageImageHash(image)]);
+  const warnings = images.filter((_, index) => found[index] === undefined).map(missWarning);
+  if (warnings.length > 0) {
+    return { attributes: {}, warnings };
+  }
+  const ids = found.map((record) => `rbxassetid://${record?.assetId ?? ""}`);
+  return { attributes: { NumberImages: ids.join(",") }, warnings: [] };
+}
+
+/** The piece a sign or counter label belongs to: its generator length and attributes. */
+export interface SignagePiece {
+  size: { x: number };
+  attributes: Record<string, string>;
+}
+
 export interface SignageInput {
   spec: MapSpec;
   roomTypes: Preset["roomTypes"];
@@ -103,14 +150,21 @@ export interface SignageInput {
 }
 
 /**
- * The generator attributes of a departure board or ticket machine (others get none): the fixed word as an
+ * The generator attributes of a departure board, ticket machine, sign or ticket counter (others get none): the fixed word as an
  * image or text, and for a board `Rows` (newline-joined, flipped at run time) when the map has platforms.
  */
 export function signageAttributes(
   kind: string,
   seed: number,
   input: SignageInput,
+  piece?: SignagePiece,
 ): { attributes: Record<string, string>; warnings: string[] } {
+  if (kind === "sign" && piece !== undefined) {
+    return labelImage(piece.attributes.Label ?? "", input.records);
+  }
+  if (kind === "ticket-counter" && piece !== undefined) {
+    return numberImages(piece.size.x, input.records);
+  }
   if (kind === "ticket-machine") {
     return fixedWord(ticketScreenImage, input.records);
   }

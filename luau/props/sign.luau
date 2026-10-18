@@ -25,7 +25,8 @@ local DEFAULT_MATERIAL = "Plastic"
 
 local TEXT_FONT = Enum.Font.GothamBold
 
-local function addLabel(board: Part, face: Enum.NormalId, text: string, color: Color3)
+-- An ImageLabel tinted by `color` when `imageId` is set, else a TextLabel of `text` in a built-in font.
+local function addLabel(board: Part, face: Enum.NormalId, text: string, imageId: string, color: Color3)
 	local surface = Instance.new("SurfaceGui")
 	surface.Name = `LabelSurface{face.Name}`
 	surface.Face = face
@@ -34,11 +35,22 @@ local function addLabel(board: Part, face: Enum.NormalId, text: string, color: C
 	surface.CanvasSize = Vector2.new(board.Size.X * 50, board.Size.Y * 50)
 	surface.Parent = board
 
+	if imageId ~= "" then
+		local image = Instance.new("ImageLabel")
+		image.Name = "Label"
+		image.BackgroundTransparency = 1
+		image.Size = UDim2.fromScale(1, 1)
+		image.Image = imageId
+		image.ImageColor3 = color
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Parent = surface
+		return
+	end
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = TEXT_FONT
+	label.FontFace = Font.fromEnum(TEXT_FONT)
 	label.Text = text
 	label.TextColor3 = color
 	label.TextScaled = true
@@ -49,6 +61,7 @@ local Generator = {}
 Generator.Attributes = {
 	Seed = 0,
 	Label = "",
+	LabelImage = "",
 	AccentColor = DEFAULT_COLOR,
 	SignageColor = DEFAULT_COLOR,
 	SignageMaterial = DEFAULT_MATERIAL,
@@ -59,6 +72,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 	local signage = slotLook(params.Attributes, "Signage")
 	local accent: Color3 = params.Attributes.AccentColor
 	local label: string = params.Attributes.Label
+	local labelImageId: string = params.Attributes.LabelImage
 	local frameLook: Look = { Color = accent, Material = signage.Material }
 	local frameThickness = size.Z * FRAME_THICKNESS_RATIO
 
@@ -101,8 +115,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		)
 	end
 	if label ~= "" then
-		addLabel(board, Enum.NormalId.Front, label, accent)
-		addLabel(board, Enum.NormalId.Back, label, accent)
+		addLabel(board, Enum.NormalId.Front, label, labelImageId, accent)
+		addLabel(board, Enum.NormalId.Back, label, labelImageId, accent)
 	end
 	params:Pause()
 end

@@ -36,7 +36,8 @@ local GLASS_TRANSPARENCY = 0.55
 local TEXT_FONT = Enum.Font.GothamBold
 
 -- The window numbers on the header's customer face, one per window, evenly across its length.
-local function addWindowNumbers(header: Part, windowCount: number, numberColor: Color3)
+-- With `numberImages` (one id per window) each is an ImageLabel tinted by `numberColor`, else a TextLabel.
+local function addWindowNumbers(header: Part, windowCount: number, numberColor: Color3, numberImages: { string })
 	local surface = Instance.new("SurfaceGui")
 	surface.Name = "WindowNumbers"
 	surface.Face = Enum.NormalId.Front
@@ -45,12 +46,25 @@ local function addWindowNumbers(header: Part, windowCount: number, numberColor: 
 	surface.CanvasSize = Vector2.new(header.Size.X * PIXELS_PER_STUD, header.Size.Y * PIXELS_PER_STUD)
 	surface.Parent = header
 	for window = 1, windowCount do
+		local imageId = numberImages[window]
+		if imageId ~= nil and imageId ~= "" then
+			local image = Instance.new("ImageLabel")
+			image.Name = `Window{window}`
+			image.BackgroundTransparency = 1
+			image.Position = UDim2.fromScale((window - 1) / windowCount, 0)
+			image.Size = UDim2.fromScale(1 / windowCount, 1)
+			image.Image = imageId
+			image.ImageColor3 = numberColor
+			image.ScaleType = Enum.ScaleType.Fit
+			image.Parent = surface
+			continue
+		end
 		local number = Instance.new("TextLabel")
 		number.Name = `Window{window}`
 		number.BackgroundTransparency = 1
 		number.Position = UDim2.fromScale((window - 1) / windowCount, 0)
 		number.Size = UDim2.fromScale(1 / windowCount, 1)
-		number.Font = TEXT_FONT
+		number.FontFace = Font.fromEnum(TEXT_FONT)
 		number.Text = tostring(window)
 		number.TextColor3 = numberColor
 		number.TextScaled = true
@@ -61,6 +75,7 @@ end
 local Generator = {}
 Generator.Attributes = {
 	Seed = 0,
+	NumberImages = "",
 	FrameColor = DEFAULT_COLOR,
 	FrameMaterial = DEFAULT_MATERIAL,
 	SignageColor = DEFAULT_COLOR,
@@ -158,7 +173,8 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		Vector3.new(0, size.Y / 2 - HEADER_HEIGHT / 2, screenZ),
 		signage
 	)
-	addWindowNumbers(header, windowCount, screenLook.Color)
+	local numberImages = string.split(params.Attributes.NumberImages, ",")
+	addWindowNumbers(header, windowCount, screenLook.Color, numberImages)
 	params:Pause()
 end
 
