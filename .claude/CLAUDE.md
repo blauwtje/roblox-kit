@@ -24,7 +24,7 @@ TypeScript runs directly on Node (>= 22.18, native type stripping); there is no 
 - `npm run smoke:networking`: inserts the `networking` skill's generated Blink modules and templates into the open place, runs the bad-data checks in a solo playtest and removes them. Rerun it before bumping Blink: the raw-buffer checks depend on the 0.18.9 wire format.
 - `npm run check:blink`: regenerates the `networking` template's Blink output with the `blink` pinned in `rokit.toml` and fails when it differs from the committed files (`blink <file> --yes`, since Blink waits on a prompt without a TTY).
 - `npm run eval:studio`: builds each benchmark in `eval/benchmarks/`, runs visual review and appends to `eval/results.jsonl`. Needs `node scripts/fetch-references.ts` first; `node scripts/calibrate-review.ts` checks the reviewer against `eval/anchors/bad/`.
-- `npm run hero-props -- <preset> <kind>` and `npm run hero-props:upload -- <preset>`: generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see the README's Development section.
+- `npm run hero-props -- <preset> <kind>` and `npm run hero-props:upload -- <preset>`: generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see CONTRIBUTING.md.
 
 Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. Studio-dependent checks live only in `scripts/`.
 
