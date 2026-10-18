@@ -27,8 +27,9 @@ local addPart = propKit.addPart
 local DEFAULT_COLOR = propKit.DEFAULT_COLOR
 local DEFAULT_MATERIAL = "Plastic"
 
-local TEXT_FONT = Enum.Font.Code
+local TEXT_FONT = Font.fromEnum(Enum.Font.Code)
 local HEADER = "DEPARTURES"
+local ROW_SEPARATOR = "\n"
 local DESTINATIONS = { "CENTRAL", "HARBOUR", "NORTH PARK", "AIRPORT" }
 local FIRST_HOUR = 8
 local LAST_HOUR = 20
@@ -40,7 +41,7 @@ local function addRow(surface: SurfaceGui, order: number, text: string, color: C
 	row.LayoutOrder = order
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.fromScale(1, 1 / rowCount)
-	row.Font = TEXT_FONT
+	row.FontFace = TEXT_FONT
 	row.Text = text
 	row.TextColor3 = color
 	row.TextScaled = true
@@ -61,7 +62,33 @@ local function departureRows(random: Random): { string }
 	return rows
 end
 
-local function addBoardFace(board: Part, face: Enum.NormalId, rows: { string }, headerColor: Color3, textColor: Color3)
+-- The header is an ImageLabel tinted by `color` when `HeaderImage` is set, else a TextLabel of `HeaderText`.
+local function addHeader(surface: SurfaceGui, attributes: { [string]: any }, color: Color3, rowCount: number)
+	local imageId = attributes.HeaderImage
+	if type(imageId) ~= "string" or imageId == "" then
+		local text = attributes.HeaderText
+		addRow(surface, 0, if type(text) == "string" and text ~= "" then text else HEADER, color, rowCount)
+		return
+	end
+	local header = Instance.new("ImageLabel")
+	header.Name = "Row0"
+	header.LayoutOrder = 0
+	header.BackgroundTransparency = 1
+	header.Size = UDim2.fromScale(1, 1 / rowCount)
+	header.Image = imageId
+	header.ImageColor3 = color
+	header.ScaleType = Enum.ScaleType.Fit
+	header.Parent = surface
+end
+
+local function addBoardFace(
+	board: Part,
+	face: Enum.NormalId,
+	rows: { string },
+	attributes: { [string]: any },
+	headerColor: Color3,
+	textColor: Color3
+)
 	local surface = Instance.new("SurfaceGui")
 	surface.Name = `DepartureSurface{face.Name}`
 	surface.Face = face
@@ -75,7 +102,7 @@ local function addBoardFace(board: Part, face: Enum.NormalId, rows: { string }, 
 	layout.Parent = surface
 
 	local rowCount = #rows + 1
-	addRow(surface, 0, HEADER, headerColor, rowCount)
+	addHeader(surface, attributes, headerColor, rowCount)
 	for index, text in rows do
 		addRow(surface, index, text, textColor, rowCount)
 	end
@@ -84,6 +111,9 @@ end
 local Generator = {}
 Generator.Attributes = {
 	Seed = 0,
+	Rows = "",
+	HeaderImage = "",
+	HeaderText = "",
 	FrameColor = DEFAULT_COLOR,
 	FrameMaterial = DEFAULT_MATERIAL,
 	SignageColor = DEFAULT_COLOR,
@@ -129,9 +159,13 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		Vector3.new(0, size.Y / 2 - CAP_HEIGHT / 2, 0),
 		frame
 	)
-	local rows = departureRows(random)
-	addBoardFace(board, Enum.NormalId.Front, rows, panel.Color, screenLook.Color)
-	addBoardFace(board, Enum.NormalId.Back, rows, panel.Color, screenLook.Color)
+	-- `Rows` (planned from the map's platforms) replaces the generator's own list.
+	local plannedRows = params.Attributes.Rows
+	local rows = if type(plannedRows) == "string" and plannedRows ~= ""
+		then string.split(plannedRows, ROW_SEPARATOR)
+		else departureRows(random)
+	addBoardFace(board, Enum.NormalId.Front, rows, params.Attributes, panel.Color, screenLook.Color)
+	addBoardFace(board, Enum.NormalId.Back, rows, params.Attributes, panel.Color, screenLook.Color)
 	params:Pause()
 end
 

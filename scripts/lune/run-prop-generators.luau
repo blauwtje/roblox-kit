@@ -249,6 +249,11 @@ local environment = {
 	CFrame = CFrame,
 	Color3 = Color3,
 	Enum = Enum,
+	Font = {
+		fromEnum = function(item)
+			return { Name = item.Name }
+		end,
+	},
 	Random = Random,
 	UDim2 = UDim2,
 	Vector2 = Vector2,

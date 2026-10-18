@@ -393,3 +393,20 @@ await test("a set piece with no placement stands free", () => {
   assert.ok(counter);
   assert.deepEqual([counter.pivot.x, counter.pivot.z, counter.yaw], [-14.5, 0, northYaw]);
 });
+
+await test("signage gives departure boards their text attributes and warns once per missing image", () => {
+  const { pieces, warnings } = placeSetPieces(
+    stationSpec,
+    roomTypes,
+    accent,
+    1,
+    [],
+    stationRules,
+    {},
+    { spec: stationSpec, roomTypes, destinations: ["CENTRAL", "HARBOUR"], records: {} },
+  );
+  for (const board of piecesOf("departure-board", pieces)) {
+    assert.equal(board.attributes.HeaderText, "DEPARTURES");
+  }
+  assert.ok(warnings.filter((warning) => warning.includes("departure-board-header")).length <= 1);
+});

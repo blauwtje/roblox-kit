@@ -16,6 +16,8 @@ import type { Preset, setPiecePlacements } from "../style/preset-schema.ts";
 import type { DoorwayClearanceBox } from "./size-rules.ts";
 
 import { createSeededRandom } from "../shared/seeded-random.ts";
+import { signageAttributes } from "./signage-text.ts";
+import type { SignageInput } from "./signage-text.ts";
 
 type Door = RoomSpec["doors"][number];
 
@@ -462,6 +464,8 @@ function setPiecesOfRoom(
  * that piece stands from the wall in place of the generator's own depth. `heroProps` (the preset's) gives the
  * depth of the hero recipe that replaces the departure board, which sets how far the board stands off the wall.
  * A piece its room has no space for is skipped with a warning; a piece with no generator throws.
+ * With `signage` (the map's cached images and the preset's destinations) departure boards and ticket machines
+ * get their text attributes, and each missing image adds one warning.
  */
 export function placeSetPieces(
   spec: MapSpec,
@@ -471,6 +475,7 @@ export function placeSetPieces(
   clearances: DoorwayClearanceBox[] = [],
   propRules: Preset["propRules"] = {},
   heroProps: Preset["heroProps"] = {},
+  signage?: SignageInput,
 ): SetPiecePlacement {
   if (roomTypes === undefined) {
     return { pieces: [], warnings: [] };
@@ -488,8 +493,16 @@ export function placeSetPieces(
       heroProps,
     ),
   );
-  return {
-    pieces: placements.flatMap((placement) => placement.pieces),
-    warnings: placements.flatMap((placement) => placement.warnings),
-  };
+  const pieces = placements.flatMap((placement) => placement.pieces);
+  const warnings = placements.flatMap((placement) => placement.warnings);
+  if (signage === undefined) {
+    return { pieces, warnings };
+  }
+  const signageWarnings = new Set<string>();
+  const texted = pieces.map((piece) => {
+    const text = signageAttributes(piece.kind, piece.seed, signage);
+    text.warnings.forEach((warning) => signageWarnings.add(warning));
+    return { ...piece, attributes: { ...piece.attributes, ...text.attributes } };
+  });
+  return { pieces: texted, warnings: [...warnings, ...signageWarnings] };
 }

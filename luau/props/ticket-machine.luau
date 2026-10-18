@@ -37,9 +37,41 @@ local addPart = propKit.addPart
 local DEFAULT_COLOR = propKit.DEFAULT_COLOR
 local DEFAULT_MATERIAL = "Plastic"
 
+local SCREEN_TEXT = "BUY TICKET"
+
+-- The screen's words: an ImageLabel tinted by `color` when `ScreenImage` is set, else a TextLabel of `ScreenText`.
+local function addScreenText(screen: Part, attributes: { [string]: any }, color: Color3)
+	local surface = Instance.new("SurfaceGui")
+	surface.Name = "ScreenSurface"
+	surface.Face = Enum.NormalId.Front
+	surface.Parent = screen
+	local imageId = attributes.ScreenImage
+	if type(imageId) == "string" and imageId ~= "" then
+		local image = Instance.new("ImageLabel")
+		image.BackgroundTransparency = 1
+		image.Size = UDim2.fromScale(1, 1)
+		image.Image = imageId
+		image.ImageColor3 = color
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Parent = surface
+		return
+	end
+	local text = attributes.ScreenText
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.FontFace = Font.fromEnum(Enum.Font.Code)
+	label.Text = if type(text) == "string" and text ~= "" then text else SCREEN_TEXT
+	label.TextColor3 = color
+	label.TextScaled = true
+	label.Parent = surface
+end
+
 local Generator = {}
 Generator.Attributes = {
 	Seed = 0,
+	ScreenImage = "",
+	ScreenText = "",
 	FrameColor = DEFAULT_COLOR,
 	FrameMaterial = DEFAULT_MATERIAL,
 	PanelColor = DEFAULT_COLOR,
@@ -100,6 +132,7 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 		screenLook
 	)
 	screen.Reflectance = 0.1
+	addScreenText(screen, params.Attributes, light.Color)
 
 	local keypadWidth = faceWidth * SCREEN_WIDTH_RATIO
 	local keypadCenter = Vector3.new(0, bodyBottom + bodyHeight * KEYPAD_CENTER_RATIO, faceZ)
