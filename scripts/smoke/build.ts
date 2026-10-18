@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { config } from "../../src/config.ts";
 import { buildMapTool, propsOf } from "../../src/map/build-map-tool.ts";
+import { planMap } from "../../src/map/build-plan.ts";
+import { fillMapSpec } from "../../src/map/spec-fill.ts";
 import { removeMapTool } from "../../src/map/remove-map-tool.ts";
 import { placeLights } from "../../src/lighting/light-placement.ts";
 import { layoutMap } from "../../src/map/map-layout.ts";
@@ -232,14 +234,18 @@ export function fixtureLightPlacements() {
 }
 
 export async function probeBuildMap(connection: StudioConnection): Promise<string> {
-  const { layout, details, trim } = await styledSmokeMap();
-  // A trim run replaced by its profile mesh stands as a Model, which build_map's part count leaves out.
+  const { layout, details } = await styledSmokeMap();
+  // The plan build_map runs sizes the phases after its trim meshes replaced their boxes; props, lights and effects
+  // stand as Models or are counted by their own placements, so the parts counted are the four geometry phases plus the light parts.
+  const { spec } = fillMapSpec(buildMapTool.inputSchema.parse(recordedSmokeSpec), presets);
+  const plan = await planMap(spec, {});
+  const geometryPhases = new Set(["shell", "floors and ceilings", "openings", "surfaces"]);
+  const geometryPartCount = plan.phaseSizes
+    .filter((phase) => geometryPhases.has(phase.name))
+    .reduce((sum, phase) => sum + phase.partCount, 0);
   const zonedPartCount = layout.parts.length + details.length;
   const expectedPartCount =
-    zonedPartCount +
-    ceilingLightPlacements().length +
-    fixtureLightPlacements().length -
-    trim.trimMeshes.length;
+    geometryPartCount + ceilingLightPlacements().length + fixtureLightPlacements().length;
   const { output } = await callRealTool(buildMapTool, recordedSmokeSpec, connection);
   expectEqual("build_map mapId", output.mapId, smokeMapSpec.mapId);
   expectEqual("build_map partCount", output.partCount, expectedPartCount);

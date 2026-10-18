@@ -28,7 +28,7 @@ TypeScript runs directly on Node (>= 22.18, native type stripping); there is no 
 - `npm test` also runs the prop generators in Lune (pinned in `rokit.toml`), so it needs `lune`. Every script in `scripts/` prints its usage with `--help`; their shared parsing and Studio setup is in `scripts/lib/`, and the `smoke:studio` steps are in `scripts/smoke/`.
 - `npm run eval:studio`: builds each benchmark in `eval/benchmarks/`, runs visual review and appends to `eval/results.jsonl`. Needs `node scripts/fetch-references.ts` first; `node scripts/calibrate-review.ts` checks the reviewer against `eval/anchors/bad/`.
 - `node scripts/eval-depth.ts`: scores depth sources against raycast truth on the fixtures under eval/depth; its `install` step puts onnxruntime and the depth model into the git-ignored `.roblox-kit/cache/depth/`.
-- `npm run hero-props -- <subcommand>` (`generate`, `parity`, `record`, `upload`, `sprites`, `materials`, `prune`; `--help` lists them): generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`; `ROBLOX_KIT_BLENDER_DEVICE` picks the render device; the mesh scripts are in `src/hero-props/meshes/lib/`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see CONTRIBUTING.md.
+- `npm run hero-props -- <subcommand>` (`generate`, `parity`, `record`, `upload`, `sprites`, `materials`, `prune`; `--help` lists them): generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `heroConfig.blenderFallbackPaths` in `src/hero-props/hero-config.ts`; `ROBLOX_KIT_BLENDER_DEVICE` picks the render device; the mesh scripts are in `src/hero-props/meshes/<preset>/`, on the library in `src/hero-props/meshes/lib/`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see CONTRIBUTING.md.
 
 Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. Studio-dependent checks live only in `scripts/`.
 
@@ -44,7 +44,7 @@ Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. S
 
 **Props.** Each prop kind is a ProceduralModel generator in `luau/props/<kind>.luau`, read at build time; shared helpers are in `luau/shared/prop-kit.luau`, pulled in by an inlined relative require. A preset can bias kinds with `propWeights` and set where a kind goes with `propRules[kind].placement`; a new kind also needs its name in `propKinds` in `src/map/prop-placement.ts`. Hero props are Blender-generated meshes (`src/hero-props/`) uploaded through Open Cloud; asset ids are recorded by recipe hash in `src/hero-props/hero-assets.json`, and `build_map` falls back to the set piece with a warning when no asset exists.
 
-**Visual review.** `src/eval/` and `src/shared/ask-headless-reviewer.ts` score captured images with fresh headless reviewers, using prompts in `skills/visual-judge/`. Thresholds and the current wave's room types live in `src/config.ts`.
+**Visual review.** `src/eval/` and `src/shared/ask-headless-reviewer.ts` score captured images with fresh headless reviewers, using prompts in `skills/visual-judge/`. Thresholds and the current wave's room types live in `evalConfig` in `src/eval/eval-config.ts`.
 
 **Config.** Tunables (timeouts, naming conventions such as `RobloxKitMaps` and `RobloxKitCeiling`, check limits, image sizes) are centralized in the frozen `config` object in `src/config.ts`; reuse it rather than adding literals.
 
