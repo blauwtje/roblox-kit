@@ -4,6 +4,7 @@ import { applyLighting } from "../lighting/apply-lighting.ts";
 import { inlineRequires } from "../luau/inline-requires.ts";
 import { runLuauFile } from "../luau/run-luau-file.ts";
 import type { ToolContext } from "../server/tool-definition.ts";
+import { buildNpcs } from "../npc/build-npcs.ts";
 import { selectStudio } from "../studio/studio-connection.ts";
 import type { BuildPhase, BuildPhaseName } from "./build-phases.ts";
 import type { BuildPlan, LightRecord } from "./build-plan.ts";
@@ -187,6 +188,18 @@ export async function runBuildPlan(
       );
     }
     await context.reportProgress?.(index + 1, plan.phases.length, phase.name);
+  }
+  if (plan.npcs !== undefined) {
+    const { roster, graph, preset } = plan.npcs;
+    const built = await buildNpcs({
+      connection: context.studio,
+      studioId,
+      mapId: plan.mapId,
+      roster,
+      graph,
+      preset,
+    });
+    warnings.push(...built.warnings);
   }
   return { partCount, warnings };
 }

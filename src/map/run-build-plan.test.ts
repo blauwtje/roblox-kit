@@ -134,3 +134,27 @@ await test("heroLoadWarning names the kit trim for a failed trim mesh", () => {
     "Trim mesh baseboard (asset 9) failed to load: HTTP 404; its kit trim is built instead.",
   );
 });
+
+await test("npc: runBuildPlan builds the roster after the phases and adds its warnings", async () => {
+  const sent: string[] = [];
+  const studio = new FakeStudioConnection(studios, {
+    execute_luau: (request) => {
+      const code = String(request.arguments["code"]);
+      sent.push(code);
+      const results = [
+        ['"phase":"', '{"partCount":1}'],
+        ["npcs", '{"built":0,"characterPath":"rig","warnings":["no avatar"]}'],
+      ];
+      const text =
+        results.find(([marker]) => code.includes(marker ?? ""))?.[1] ?? '{"snapshotTaken":false}';
+      return { content: [{ type: "text", text }] };
+    },
+  });
+  const npcPlan = {
+    ...plan,
+    npcs: { roster: [], graph: { nodes: [], edges: [] }, preset: { npcRoles: {} } },
+  } as unknown as BuildPlan;
+  const result = await runBuildPlan(npcPlan, { studio });
+  assert.deepEqual(result.warnings, ["no avatar"]);
+  assert.equal(studio.requests.length, 9);
+});

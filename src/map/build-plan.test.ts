@@ -255,3 +255,40 @@ for (const heroCase of heroCases) {
     );
   });
 }
+
+const stationInput = (extra: object = {}) =>
+  inputOf({ ...benchmarkSpec, mapId: "switch-map", ...extra });
+
+await test("switch: with every switch off a station plan has no npcs, clutter, motion or signage text", async () => {
+  const plan = await planMap(stationInput(), {});
+  assert.equal("npcs" in plan, false);
+  const props = propsOfPlan(plan) as { attributes?: Record<string, string> }[];
+  assert.equal(
+    props.some((prop) =>
+      Object.keys(prop.attributes ?? {}).some((name) => name.startsWith("Motion")),
+    ),
+    false,
+  );
+  assert.equal(
+    props.some((prop) => "Rows" in (prop.attributes ?? {})),
+    false,
+  );
+  assert.ok(plan.build.idle !== undefined);
+});
+
+await test("switch: clutter and motion add props and attributes only when on", async () => {
+  const off = await planMap(stationInput(), {});
+  const on = await planMap(stationInput({ clutter: true, motion: true }), {});
+  assert.ok(propsOfPlan(on).length > propsOfPlan(off).length);
+  const attributes = (propsOfPlan(on) as { attributes?: Record<string, string> }[]).flatMap(
+    (prop) => prop.attributes?.["MotionKind"] ?? [],
+  );
+  assert.ok(attributes.length > 0);
+});
+
+await test("npc: a plan with npcs carries a roster and route graph, and one without carries none", async () => {
+  const plan = await planMap(stationInput({ npcs: { density: 1 } }), {});
+  assert.ok(plan.npcs !== undefined);
+  assert.ok(plan.npcs.roster.length > 0);
+  assert.ok(plan.npcs.graph.nodes.length > 0);
+});

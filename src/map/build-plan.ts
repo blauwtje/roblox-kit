@@ -5,6 +5,9 @@ import { heroAssetsFile } from "../hero-props/hero-asset-store.ts";
 import { recordedSprites, spriteSizePixels } from "../lighting/ambient-sprites.ts";
 import { placeLights } from "../lighting/light-placement.ts";
 import type { FixtureBox, FixtureGlow } from "../lighting/light-placement.ts";
+import { readImageAssets } from "../images/image-asset-store.ts";
+import { planNpcs, type NpcRecord } from "../npc/plan-npcs.ts";
+import { bakeRouteGraph, type RouteGraph } from "../npc/route-graph.ts";
 import { loadPresets } from "../style/load-preset.ts";
 import { lintPalette, type PaletteIssue } from "../style/palette-lint.ts";
 import { materialMapSize, type IdleAnimation, type Preset } from "../style/preset-schema.ts";
@@ -14,7 +17,9 @@ import {
   missingSpriteWarnings,
   type AmbientEffectRecord,
 } from "./ambient-effects.ts";
+import { motionAttributesByKind } from "./ambient-motion.ts";
 import { placeArrangements } from "./arrangement-placement.ts";
+import { placeClutter } from "./clutter-placement.ts";
 import { groupBuildPhases, type BuildPhase } from "./build-phases.ts";
 import { buildFacades } from "./facade-grammar.ts";
 import {
@@ -32,6 +37,7 @@ import { placeProps, type PropKind, type PropRecord } from "./prop-placement.ts"
 import { resolveRelations } from "./relation-solver.ts";
 import { buildRoomDetails, type DetailPart } from "./room-details.ts";
 import { placeSetPieces } from "./set-piece-placement.ts";
+import type { SignageInput } from "./signage-text.ts";
 import { doorwayClearanceBoxes } from "./size-rules.ts";
 import { terrainChunks, type TerrainChunk } from "./terrain-heightmap.ts";
 
@@ -111,6 +117,7 @@ export interface BuildPlan {
   bounds: Bounds;
   zones: Zone[];
   texturePixels: number;
+  npcs?: { roster: NpcRecord[]; graph: RouteGraph; preset: Preset };
 }
 
 function boundsOfBox(center: Vector, size: Vector): Bounds {
@@ -319,9 +326,26 @@ function withSlots(prop: StyledPropRecord, style: Preset): StyledPropRecord {
   return { ...prop, attributes };
 }
 
+export interface PropPasses {
+  clutter?: boolean;
+  motion?: boolean;
+  signage?: Pick<SignageInput, "records">;
+}
+
+function withMotion(prop: StyledPropRecord, style: Preset): StyledPropRecord {
+  const motion = motionAttributesByKind(style.idleAnimations ?? {})[prop.kind];
+  if (motion === undefined) return prop;
+  const attributes = {
+    ...prop.attributes,
+    ...Object.fromEntries(Object.entries(motion).map(([name, value]) => [name, String(value)])),
+  };
+  return { ...prop, attributes };
+}
+
 export function propsOf(
   spec: MapSpec,
   style: Preset,
+  passes: PropPasses = {},
 ): { props: StyledPropRecord[]; warnings: string[] } {
   const seed = spec.seed ?? config.defaultSeed;
   const plainSpec = { ...spec, rooms: spec.rooms.filter((room) => room.roomType === undefined) };
@@ -334,14 +358,25 @@ export function propsOf(
     doorwayClearanceBoxes(spec, agent),
     style.propRules,
     style.heroProps,
+    passes.signage && {
+      spec,
+      roomTypes: style.roomTypes,
+      destinations: style.signage?.destinations ?? [],
+      records: passes.signage.records,
+    },
   );
   const arrangements = placeArrangements(spec, style.roomTypes, setPieces.pieces, seed);
+  const placed = [
+    ...placeProps(plainSpec, style.propKit, { seed, weights: style.propWeights }),
+    ...setPieces.pieces,
+    ...arrangements.pieces,
+  ];
+  const clutter = passes.clutter ? placeClutter(spec, style.roomTypes ?? {}, { seed, placed }) : [];
   return {
-    props: [
-      ...placeProps(plainSpec, style.propKit, { seed, weights: style.propWeights }),
-      ...setPieces.pieces,
-      ...arrangements.pieces,
-    ].map((prop) => withSlots(prop, style)),
+    props: [...placed, ...clutter].map((prop) => {
+      const styled = withSlots(prop, style);
+      return passes.motion ? withMotion(styled, style) : styled;
+    }),
     warnings: [...setPieces.warnings, ...arrangements.warnings],
   };
 }
@@ -366,6 +401,15 @@ async function trimMeshesWithDeclared(
   };
 }
 
+function npcPlanOf(
+  spec: MapSpec,
+  preset: Preset,
+  props: PropRecord[],
+): NonNullable<BuildPlan["npcs"]> {
+  const graph = bakeRouteGraph(spec, props);
+  return { roster: planNpcs({ spec, preset, props, graph }), graph, preset };
+}
+
 export async function planMap(input: PlanInput, heroSources: HeroPropSources): Promise<BuildPlan> {
   const recorded = input.useRecordedAssets;
   const spec = resolveRelations(input);
@@ -380,7 +424,11 @@ export async function planMap(input: PlanInput, heroSources: HeroPropSources): P
       ? []
       : buildRoomDetails(spec, layout.parts, style.surfaces, style.patternSurfaces ?? ["floor"]);
   const facades = style === undefined ? [] : buildFacades(spec, layout.parts, style.surfaces);
-  const placed = style === undefined ? { props: [], warnings: [] } : propsOf(spec, style);
+  const signage = spec.signage ? { records: await readImageAssets() } : undefined;
+  const placed =
+    style === undefined
+      ? { props: [], warnings: [] }
+      : propsOf(spec, style, { clutter: spec.clutter, motion: spec.motion, signage });
   const heroes =
     style === undefined || spec.style === undefined || !recorded
       ? { props: placed.props, heroProps: [], warnings: [] }
@@ -470,7 +518,12 @@ export async function planMap(input: PlanInput, heroSources: HeroPropSources): P
     lights,
     effects,
   });
+  const npcs =
+    style === undefined || spec.npcs === undefined
+      ? {}
+      : { npcs: npcPlanOf(spec, style, [...props, ...fallbacks]) };
   return {
+    ...npcs,
     mapId: input.mapId,
     studioId: input.studioId,
     recorded,
