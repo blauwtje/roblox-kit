@@ -2,6 +2,8 @@
 -- ProceduralModel generator source for a station clock: a large round two-faced clock on a post.
 -- Params.Size is (diameter, height, depth); a dial with hour marks and hands is on both the -Z and +Z faces,
 -- so the clock reads from either side, and the output stays inside Size.
+-- Each face also has a thin `SecondHand<Face>` that idle-animation.luau steps when the clock is set to tick; it
+-- starts at twelve and stands still otherwise.
 -- The time shown varies per Seed so repeated clocks do not look stamped.
 -- Colors and materials come from the `frame`, `panel` and `signage` slots, read as `<Slot>Color` and
 -- `<Slot>Material` attributes; a missing attribute leaves a new Part's own look.
@@ -22,6 +24,8 @@ local MARK_INSET = 0.2
 local HOUR_HAND_RATIO = 0.5
 local MINUTE_HAND_RATIO = 0.8
 local HAND_WIDTH = 0.2
+local SECOND_HAND_RATIO = 0.9
+local SECOND_HAND_WIDTH = 0.08
 local POST_WIDTH = 0.4
 local BASE_HEIGHT = 0.3
 local BASE_WIDTH = 1.5
@@ -167,6 +171,17 @@ function Generator.OnGenerate(params: GeneratorParams, targetContainer: Instance
 			0,
 			dialRadius * MINUTE_HAND_RATIO,
 			HAND_WIDTH,
+			signage
+		)
+		addRadialBar(
+			targetContainer,
+			`SecondHand{faceName}`,
+			markCenter,
+			facing,
+			0,
+			0,
+			dialRadius * SECOND_HAND_RATIO,
+			SECOND_HAND_WIDTH,
 			signage
 		)
 	end
