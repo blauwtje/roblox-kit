@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="4096" height="226" viewBox="-6.88 -0.38 13.76 0.76">
+  <rect x="-6.88" y="-0.38" width="13.76" height="0.76" fill="#1c2a44"/>
+  <g fill="#c9a253">
+    <rect x="-6.67" y="-0.31" width="13.34" height="0.03"/>
+    <rect x="-6.67" y="0.28" width="13.34" height="0.03"/>
+    <rect x="-6.81" y="-0.17" width="0.03" height="0.34"/>
+    <rect x="6.78" y="-0.17" width="0.03" height="0.34"/>
+    <rect x="-6.73" y="-0.23" width="13.46" height="0.012"/>
+    <rect x="-6.73" y="0.218" width="13.46" height="0.012"/>
+    <rect x="-6.73" y="-0.23" width="0.012" height="0.46"/>
+    <rect x="6.718" y="-0.23" width="0.012" height="0.46"/>
+    <polygon points="-1.9,0 -1.71,-0.11 -1.52,0 -1.71,0.11"/>
+    <polygon points="1.52,0 1.71,-0.11 1.9,0 1.71,0.11"/>
+    <polygon points="-2.0,0 -1.93,-0.05 -1.86,0 -1.93,0.05"/>
+    <polygon points="1.86,0 1.93,-0.05 2.0,0 1.93,0.05"/>
+    <rect x="-6.18" y="-0.012" width="4.07" height="0.024"/>
+    <rect x="2.11" y="-0.012" width="4.07" height="0.024"/>
+    <polygon points="-6.46,0 -6.33,-0.08 -6.2,0 -6.33,0.08"/>
+    <polygon points="6.2,0 6.33,-0.08 6.46,0 6.33,0.08"/>
+  </g>
+  <g fill="none" stroke="#c9a253" stroke-width="0.03">
+    <path d="M 6.67 -0.295 A 0.125 0.125 0 0 0 6.795 -0.17"/>
+    <path d="M -6.795 -0.17 A 0.125 0.125 0 0 0 -6.67 -0.295"/>
+    <path d="M 6.795 0.17 A 0.125 0.125 0 0 0 6.67 0.295"/>
+    <path d="M -6.67 0.295 A 0.125 0.125 0 0 0 -6.795 0.17"/>
+  </g>
+  <text y="0.21" fill="#c9a253" font-family="Liberation Serif" font-weight="bold" font-size="0.634" text-anchor="middle">TICKETS</text>
+</svg>

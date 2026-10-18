@@ -103,9 +103,9 @@ await test("a build reports progress after each phase and returns the plan's num
 await test("a committed hero mesh that fails to load becomes a warning and its set piece is built instead", async () => {
   const trainStation = (await loadPresets()).get("train-station");
   assert.ok(trainStation !== undefined);
-  const { assetId } = await recordedHeroAsset(trainStation, "ticket-counter");
-  assert.ok(assetId !== undefined, "hero-assets.json records the ticket counter");
-  const failures = JSON.stringify([{ kind: "ticket-counter", assetId, error: "HTTP 403" }]);
+  const { assetId } = await recordedHeroAsset(trainStation, "bench");
+  assert.ok(assetId !== undefined, "hero-assets.json records the bench");
+  const failures = JSON.stringify([{ kind: "bench", assetId, error: "HTTP 403" }]);
   const studio = studioAnswering((code) =>
     code.includes('"phase":"props"')
       ? `{"partCount":14,"heroLoadFailures":${failures}}`
@@ -120,7 +120,7 @@ await test("a committed hero mesh that fails to load becomes a warning and its s
   assert.equal(failure.length, 1);
   assert.match(
     failure[0] ?? "",
-    new RegExp(`ticket-counter \\(asset ${assetId}\\) failed to load: HTTP 403`),
+    new RegExp(`bench \\(asset ${assetId}\\) failed to load: HTTP 403`),
   );
-  assert.match(failure[0] ?? "", /its ticket-counter set piece is built instead\.$/);
+  assert.match(failure[0] ?? "", /its bench set piece is built instead\.$/);
 });

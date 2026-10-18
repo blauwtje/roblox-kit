@@ -7,9 +7,9 @@ and the bounds match the kit counter's 14 x 9.87 x 3, so the recorded-mesh stret
 A green matchboarded counter carries a cream marble ledge with a brass nosing on carved brackets. Above it a green
 glazed screen of three round-headed windows (the kit's window count for 14 studs) stands between capped pilasters;
 each window has a brass arch bead, a brass ticket grille over its lower glass and an arched brass pass-through with
-a brass change plate on the ledge. A navy enamel fascia in a bronze frame carries "TICKETS" in gilt Times bold with
+a brass change plate on the ledge. A navy enamel fascia in a bronze frame carries "TICKETS" in gilt Liberation Serif bold with
 gilt lining and lozenges, the preset's sign style (the accepted CONCOURSE sign), under a flat stepped cornice. The
-fascia print is rendered flat in Workbench first and sampled by the fascia face. Each look is a small procedural
+fascia print is drawn in `ticket-counter.print.svg`, rendered to a png by the generator and sampled by the fascia face. Each look is a small procedural
 material; the objects are joined into one mesh, unwrapped (fascia face enlarged) and baked to color, roughness,
 metalness and tangent normal maps by `lib`, which swaps in one baked material.
 """
@@ -43,11 +43,6 @@ SPRING_Z, RISE = 7.75, 0.55  # the window arch's springing line and rise
 SCREEN_Y0, SCREEN_Y1 = 0.15, 0.45  # the screen's frame members
 GLASS_Y0, GLASS_Y1 = 0.28, 0.32
 PRINT_X, PRINT_Z0, PRINT_Z1 = 6.88, 8.67, 9.43  # the fascia print area
-PRINT_SIZE = 4096
-FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
-CAP_RATIO = 0.662  # Times New Roman cap height per unit font size
-NAVY, GOLD = "#1c2a44", "#c9a253"
-LABEL = "TICKETS"
 FASCIA_UV = 4.0  # how much the fascia face's UV island is grown, so the lettering keeps its texels
 HIDDEN_UV = 0.2  # downward faces nobody sees
 
@@ -144,119 +139,6 @@ def glass_material():
     return material
 
 
-def fascia_print():
-    """Renders the fascia print (navy enamel, gilt lining with notched corners, TICKETS and lozenges) flat in
-    Workbench and returns it as an image covering x -PRINT_X..PRINT_X, z PRINT_Z0..PRINT_Z1."""
-    scene = bpy.context.scene
-    made = []
-    flats = {}
-    half_w, half_h = PRINT_X, (PRINT_Z1 - PRINT_Z0) / 2
-
-    def flat(hex_color):
-        if hex_color not in flats:
-            material = bpy.data.materials.new(f"print-{hex_color}")
-            material.diffuse_color = materials.linear(hex_color)
-            flats[hex_color] = material
-        return flats[hex_color]
-
-    def polygon(points, hex_color, z=0.0):
-        mesh = bpy.data.meshes.new("print-shape")
-        mesh.from_pydata([(x, y, z) for x, y in points], [], [tuple(range(len(points)))])
-        obj = bpy.data.objects.new("print-shape", mesh)
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    def rect(x0, x1, y0, y1, hex_color, z=0.0):
-        polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], hex_color, z)
-
-    def arc(cx, cy, radius, thickness, a0, a1, hex_color):
-        bm = bmesh.new()
-        inner, outer = [], []
-        for i in range(11):
-            angle = a0 + (a1 - a0) * i / 10
-            for ring, r in ((inner, radius - thickness / 2), (outer, radius + thickness / 2)):
-                ring.append(bm.verts.new((cx + r * math.cos(angle), cy + r * math.sin(angle), 0.0)))
-        for i in range(10):
-            bm.faces.new((inner[i], inner[i + 1], outer[i + 1], outer[i]))
-        mesh = bpy.data.meshes.new("print-arc")
-        bm.to_mesh(mesh)
-        bm.free()
-        obj = bpy.data.objects.new("print-arc", mesh)
-        obj.data.materials.append(flat(hex_color))
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    def lozenge(x, radius, hex_color):
-        polygon([(x - radius * 1.35, 0.0), (x, radius), (x + radius * 1.35, 0.0), (x, -radius)], hex_color)
-
-    rect(-half_w - 0.1, half_w + 0.1, -half_h - 0.1, half_h + 0.1, NAVY, -0.01)
-    # A gilt double lining: the outer line with notched (re-entrant quarter-circle) corners, a fine line inside it.
-    lx, ly, line, notch = half_w - 0.07, half_h - 0.07, 0.03, 0.14
-    rect(-lx + notch, lx - notch, ly - line, ly, GOLD)
-    rect(-lx + notch, lx - notch, -ly, -ly + line, GOLD)
-    rect(-lx, -lx + line, -ly + notch, ly - notch, GOLD)
-    rect(lx - line, lx, -ly + notch, ly - notch, GOLD)
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            base = {(1, 1): math.pi, (-1, 1): 1.5 * math.pi, (-1, -1): 0.0, (1, -1): 0.5 * math.pi}[(sx, sy)]
-            arc(sx * (lx - line / 2), sy * (ly - line / 2), notch - line / 2, line, base, base + math.pi / 2, GOLD)
-    ix, iy, fine = lx - 0.08, ly - 0.08, 0.012
-    rect(-ix, ix, iy - fine, iy, GOLD)
-    rect(-ix, ix, -iy, -iy + fine, GOLD)
-    rect(-ix, -ix + fine, -iy, iy, GOLD)
-    rect(ix - fine, ix, -iy, iy, GOLD)
-
-    cap = 0.42
-    curve = bpy.data.curves.new("print-text", "FONT")
-    curve.body = LABEL
-    curve.font = bpy.data.fonts.load(FONT, check_existing=True)
-    curve.size = cap / CAP_RATIO
-    curve.space_character = 1.15
-    curve.align_x = "CENTER"
-    curve.align_y = "BOTTOM_BASELINE"
-    curve.resolution_u = 5
-    text = bpy.data.objects.new("print-text", curve)
-    text.location = (0.0, -cap / 2, 0.0)
-    text.data.materials.append(flat(GOLD))
-    scene.collection.objects.link(text)
-    made.append(text)
-    bpy.context.view_layer.update()
-    xs = [(text.matrix_world @ Vector(corner)).x for corner in text.bound_box]
-    width = max(xs) - min(xs)
-    # Lozenges either side of the word, then a gilt rule running out to a lozenge near each end.
-    for sign in (-1.0, 1.0):
-        lozenge(sign * (width / 2 + 0.3), 0.11, GOLD)
-        lozenge(sign * (width / 2 + 0.52), 0.05, GOLD)
-        near, far = width / 2 + 0.7, ix - 0.55
-        rect(min(sign * near, sign * far), max(sign * near, sign * far), -0.012, 0.012, GOLD)
-        lozenge(sign * (ix - 0.4), 0.08, GOLD)
-    camera_data = bpy.data.cameras.new("print-camera")
-    camera_data.type = "ORTHO"
-    camera_data.ortho_scale = 2 * half_w
-    camera = bpy.data.objects.new("print-camera", camera_data)
-    camera.location = (0.0, 0.0, 5.0)
-    scene.collection.objects.link(camera)
-    scene.camera = camera
-    scene.render.engine = "BLENDER_WORKBENCH"
-    scene.display.shading.light = "FLAT"
-    scene.display.shading.color_type = "MATERIAL"
-    scene.display.shading.show_object_outline = False
-    scene.display.render_aa = "16"
-    scene.view_settings.view_transform = "Standard"
-    scene.render.resolution_x = PRINT_SIZE
-    scene.render.resolution_y = round(PRINT_SIZE * half_h / half_w)
-    scene.render.resolution_percentage = 100
-    path = f"{run.OUTPUT}-fascia-print.png"
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    for obj in made + [camera]:
-        bpy.data.objects.remove(obj, do_unlink=True)
-    scene.camera = None
-    scene.render.engine = "CYCLES"
-    return bpy.data.images.load(path)
-
-
 def fascia_material(print_image):
     """The navy enamel fascia: the print mapped by object x and z, glossy, with a faint ripple in the enamel."""
     material = bpy.data.materials.new("fascia")
@@ -296,7 +178,7 @@ def make_materials():
     MATERIALS["bronze"] = painted_material("bronze", "#2e2419", "#4a3b2a", 0.4, metallic=0.85)
     MATERIALS["glass"] = glass_material()
     MATERIALS["black"] = materials.flat_material("black", "#0b0a09", 0.7)
-    MATERIALS["fascia"] = fascia_material(fascia_print())
+    MATERIALS["fascia"] = fascia_material(materials.print_image(run.arguments[2]))
 
 
 def surface(role):
