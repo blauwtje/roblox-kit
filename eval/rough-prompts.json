@@ -1,0 +1,22 @@
+[
+  {
+    "prompt": "make me a small train station",
+    "names": ["train-station"],
+    "switches": []
+  },
+  {
+    "prompt": "a cozy town with a Lobby and a Market, with people walking around",
+    "names": ["Lobby", "Market"],
+    "switches": ["npcs"]
+  },
+  {
+    "prompt": "horror facility with a Reactor Room, flickering lights and warning signs",
+    "names": ["Reactor Room", "horror-facility"],
+    "switches": ["motion", "signage"]
+  },
+  {
+    "prompt": "sci-fi station with a Hangar, lived in and messy",
+    "names": ["Hangar", "sci-fi-station"],
+    "switches": ["clutter"]
+  }
+]
