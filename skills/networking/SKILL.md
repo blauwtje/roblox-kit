@@ -21,19 +21,10 @@ A remote that works with the game's own client can still be abused by any exploi
    # The networking raw-buffer checks depend on the 0.18.9 wire format: before bumping Blink, rerun the playtest checks that send raw buffers.
    blink = "1Axen/blink@0.18.9"
    ```
-   Never use a `1.0.0-pre` release or anything older: 0.18.9 fixes NaN bypassing range validation. Keep the comment; bumping Blink means rerunning the raw-buffer checks (step 12) first.
+   Never use a `1.0.0-pre` release or anything older: 0.18.9 fixes NaN bypassing range validation. Keep the comment.
 2. **Define every remote in `network/game.blink`.** Set `option ServerOutput = "generated/Server.luau"` and `option ClientOutput = "generated/Client.luau"`, and leave `RemoteScope` at its default. Never write a bare `RemoteEvent` for new game code. Start from `${CLAUDE_SKILL_DIR}/templates/network/game.blink` and replace its events.
-3. **Type every field as tightly as the game allows.** Blink rejects data outside its type before any game code runs, so the type is the first check.
-   - Numbers: give every integer a range (`u8(1..8)`, not bare `u8`) and every `f32`/`f64` a range. NaN fails a range check only from 0.18.9 on, which is why step 1 pins it.
-   - Strings: give a length range (`string(1..32)`); an unbounded string is unbounded memory. Blink 0.18.9 generates a `#Value.Name` length check from it.
-   - Arrays: give a size range on the element type (`Item[0..16]`, where `Item` is a named `struct Item { ... }`); Blink 0.18.9 generates a length check from it. Maps have no size range in 0.18.9 (`map[0..4]` does not parse), so bound a map's key and value types (`map {[string(1..8)]: u8(0..9)}`) and prefer an array when the count matters. Never leave an array open-ended.
-   - Instances: name the class (`Instance(Model)`). That checks the class only, so a client can still name any Model in the place; step 6 covers the rest.
-   - `vector` has no range, so a client can send NaN or infinity in a position; step 6 covers that too.
-   - Prefer a struct of intent fields over one generic payload.
-4. **Choose the call mode and event type.**
-   - Default to `SingleAsync` or `ManyAsync`. Use `SingleSync` or `ManySync` only with a stated performance reason: Blink's events documentation says that yielding or erroring in a sync event "can cause undefined and sometimes game-breaking behaviour". With `SyncValidation`, a Sync listener that yields also gets its handler thread closed by whichever player's packet arrives next.
-   - Use `Type: Reliable` by default. Use `Unreliable` only for frequent, loss-tolerant data (an effect, a position update) that stays under 1000 bytes, the limit both Blink's events documentation and Roblox's `UnreliableRemoteEvent` reference state. An event a player must not miss is `Reliable`.
-   - Use a `function` with `Yield: Coroutine` only when the client needs a reply; the client waits on it, so a server handler for it must return quickly and may return `nil`.
+3. **Type every field as tightly as the game allows.** Blink rejects data outside its type before any game code runs, so the type is the first check. Give every number a range (NaN fails a range check only from 0.18.9 on), every string a length range and every array a size range; name the class of every Instance (a class check only; step 6 covers the rest); `vector` has no range (step 6). Read when: writing a `.blink` type or choosing a call mode or event type: `${CLAUDE_SKILL_DIR}/reference/blink-types.md`.
+4. **Choose the call mode and event type.** Default to `SingleAsync` or `ManyAsync` and `Type: Reliable`; use `Sync` or `Unreliable` only with a stated reason; use a `function` only when the client needs a reply (details in the same reference).
 5. **Let the client send intent only.** The payload says what the player wants (which item, which slot, where to drop), never the outcome (an amount to grant, a damage number, a new state, a price). The server decides every outcome from its own state: whose item it is, how far the character is, what the slot holds. Never read a stat, cooldown or permission from the payload. A value the server needs, such as the character's position, comes from the server's own `player.Character`.
 6. **Check what Blink cannot, in every `From: Client` listener, before any state changes.** Every client-to-server event gets all of these that apply, in this order, and a failed check records a reason and returns:
    - Rate limit with `RateLimit.consume(player, "<Event>")`, so a flood stops at the first line.
@@ -51,20 +42,9 @@ A remote that works with the game's own client can still be abused by any exploi
    "ReplicatedStorage": { "Network": { "$path": "network/generated/Client.luau" } }
    ```
    Never map the server file into `ReplicatedStorage`, and never put a game-code module there that holds server secrets.
-10. **Treat generated Blink output as generated.** Run `blink network/game.blink --yes` (Blink 0.18.9 waits on a terminal prompt without `--yes`) and then:
-    - Commit `network/generated/Server.luau` and `network/generated/Client.luau`, and mark them in `.gitattributes`: `network/generated/** linguist-generated=true`.
-    - Exclude them from linting and formatting: add `"network/generated/*"` to `exclude` in `selene.toml` and `network/generated/` to `.styluaignore`.
-    - Never edit them by hand. Change `game.blink`, regenerate, and run `git diff network/generated` to confirm the diff is only what the change should cause, before calling work done.
-11. **Copy the templates** from `${CLAUDE_SKILL_DIR}/templates/` into the game and adapt only what they mark:
-    - `network/game.blink` and its `generated/` output: replace the sample events, regenerate (step 10), never copy the sample output over your own.
-    - `Validate.luau`, `RateLimit.luau`, `Rejections.luau`: into `ServerScriptService`, next to each other and unchanged.
-    - `Pickups.luau`: the sample server-authoritative handlers (pickup range, `Pickups` folder, slot count). Replace them with the game's handlers using the same check order, and keep `SLOT_COUNT` equal to the range in `game.blink`.
-    - `Main.server.luau`: starts the modules, configures one rate limit per `From: Client` event and connects each listener once (step 8).
-    - `NetworkChecks.luau` (server) and `NetworkClientChecks.luau` (client, into `ReplicatedStorage`): the playtest checks used in step 12. Adapt their fixtures and sends to the game's own events.
-12. **Prove it with `run_playtest`.** Put `NetworkChecks` in `ServerScriptService` and `NetworkClientChecks` in `ReplicatedStorage`, and run both in one multiplayer or play-mode playtest with the server checks body `require(game.ServerScriptService.NetworkChecks)(check, expectedClients)` and the client checks body `require(game.ReplicatedStorage.NetworkClientChecks)(check, player)`; the playtest skill covers the call. The client sends bad data and the server checks prove each rejection left server state unchanged:
-    - Out-of-range values, NaN, wrong Instance classes and floods go through Blink's generated client, which does not validate on write because `WriteValidations` defaults to `false`.
-    - Wrong primitive types and truncated payloads go raw to `ReplicatedStorage.BLINK_RELIABLE_REMOTE`, which the generated server reads as `(buffer, {Instance})`. These raw checks tie to the 0.18.9 wire format: rerun them before bumping Blink.
-    - Game-code rejections are also asserted through `Rejections.count`. Run `selene` and `stylua --check` when the project has them.
+10. **Treat generated Blink output as generated.** Run `blink network/game.blink --yes` (Blink 0.18.9 waits on a terminal prompt without `--yes`) and then follow the commit, lint-exclusion and diff rules in the reference (Read when: regenerating Blink output): `${CLAUDE_SKILL_DIR}/reference/blink-types.md`.
+11. **Copy the templates** from `${CLAUDE_SKILL_DIR}/templates/` into the game and adapt only what they mark: `game.blink` and its output, `Validate`, `RateLimit`, `Rejections`, `Pickups`, `Main.server` and the two check modules. Read when: copying them, for what each adapts: `${CLAUDE_SKILL_DIR}/reference/blink-types.md`.
+12. **Prove it with `run_playtest`.** Put `NetworkChecks` in `ServerScriptService` and `NetworkClientChecks` in `ReplicatedStorage`, and run both in one multiplayer or play-mode playtest; the playtest skill covers the call. Read when: writing or running the checks, with their exact bodies: `${CLAUDE_SKILL_DIR}/reference/playtest-proof.md`.
 13. **Say what is not covered.** The playtest proves rejection and unchanged state for the sends it makes, not that every event is covered: each new `From: Client` event needs its own bad-data sends. It does not prove behaviour at real network latency, loss or packet reordering.
 
 ## Judgment

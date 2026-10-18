@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { tools } from "./main.ts";
 
@@ -68,6 +68,24 @@ for (const skill of skills) {
     assert.ok(phrases, `${skill.name} has rough phrases in the table`);
     for (const phrase of phrases) {
       assert.ok(description.toLowerCase().includes(phrase), `missing "${phrase}"`);
+    }
+  });
+}
+
+for (const skill of skills) {
+  await test(`skill ${skill.name} stays within 8,000 bytes and its relative links resolve`, () => {
+    const url = new URL(`${skill.name}/SKILL.md`, skillsUrl);
+    const source = readFileSync(url, "utf8");
+    assert.ok(Buffer.byteLength(source) <= 8000, "SKILL.md is over 8,000 bytes");
+    const links = [
+      ...source.matchAll(/`\$\{CLAUDE_SKILL_DIR\}\/([^`]+)`|\]\((?!https?:|#)([^)#]+)/g),
+    ];
+    for (const match of links) {
+      const target = match[1] ?? match[2] ?? "";
+      assert.ok(
+        existsSync(new URL(target, new URL(`${skill.name}/`, skillsUrl))),
+        `${target} exists`,
+      );
     }
   });
 }
