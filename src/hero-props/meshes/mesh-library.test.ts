@@ -79,6 +79,7 @@ const printedKinds: Record<string, string> = {
   "departure-board": "train-station/departure-board.py",
   sign: "train-station/sign.py",
   "ticket-counter": "train-station/ticket-counter.py",
+  "ticket-machine": "train-station/ticket-machine.py",
 };
 
 for (const [kind, script] of Object.entries(printedKinds)) {

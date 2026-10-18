@@ -5,8 +5,8 @@ customer face toward +Y. The GLB exporter turns Blender +Y into glTF -Z and Robl
 so the face lands on the mesh's local -Z, the customer side of the kit machine (luau/props/ticket-machine.luau),
 and the bounds match the kit machine's 3 x 5.87 x 2, so the recorded-mesh stretch leaves it unscaled.
 Cream painted cabinet (the wall role's color family) framed in dark bronze pilasters, plinth, sign band and
-cornice (the trim role's family), with brass fittings, gilt "TICKETS" letters and an arched screen window.
-Every part is one material switched by a "paint" attribute, joined into one mesh, unwrapped and baked to
+cornice (the trim role's family), with brass fittings, a gilt "TICKETS" print plate and an arched screen window.
+The sign band print is drawn in `ticket-machine.print.svg`, rendered to a png by the generator and sampled by a flat plate on the band. Every part is one material switched by a "paint" attribute, joined into one mesh, unwrapped and baked to
 color (with occlusion grime), roughness, metalness and tangent normal maps by `lib`.
 """
 
@@ -27,8 +27,8 @@ uv = importlib.import_module("lib.uv")
 
 WIDTH, HEIGHT, BACK, FRONT = 3.0, 5.87, -1.0, 1.0
 FACE = 0.7  # the cabinet's front face
-FONT = "/System/Library/Fonts/Supplemental/Georgia Bold.ttf"
-CREAM, BRONZE, BRASS, SCREEN, BLACK, GLASS = range(6)
+CREAM, BRONZE, BRASS, SCREEN, BLACK, GLASS, PRINT = range(7)
+PRINT_X, PRINT_Z0, PRINT_Z1, PRINT_Y = 1.365, 5.035, 5.365, 0.845
 # The screen: a rectangle under a fanlight arch, its image mapped by object x and z.
 SCREEN_X, SCREEN_BOTTOM, SPRING = 0.8, 2.92, 3.9
 CREAM_PAINT = ([(0.3, "#cdc2a8"), (0.7, "#e3dbc6")], "#4f4a43")
@@ -74,7 +74,7 @@ def screen_image():
     return image
 
 
-def machine_material():
+def machine_material(print_image):
     material, paint = materials.paint_stack([CREAM_PAINT, BRONZE_PAINT], wear=0.015)
     tree = material.node_tree
     nodes, links = tree.nodes, tree.links
@@ -84,7 +84,7 @@ def machine_material():
     height = separate.outputs["Z"]
     normal_z = nodes.new("ShaderNodeSeparateXYZ")
     links.new(paint["geometry"].outputs["Normal"], normal_z.inputs["Vector"])
-    mask = {kind: materials.math_node(tree, "COMPARE", (paint["dark_amount"], float(kind), 0.5)) for kind in range(6)}
+    mask = {kind: materials.math_node(tree, "COMPARE", (paint["dark_amount"], float(kind), 0.5)) for kind in range(7)}
     painted_mask = materials.math_node(tree, "ADD", (mask[CREAM], mask[BRONZE]))
     paint_wear = materials.math_node(tree, "MULTIPLY", (paint["wear"], painted_mask))
     worn = paint["worn"]
@@ -108,6 +108,9 @@ def machine_material():
     links.new(patch, black.inputs["Fac"])
     blacked = materials.mix_color(tree, "MIX", (mask[BLACK], screened, black.outputs["Color"]))
     glassed = materials.mix_color(tree, "MIX", (mask[GLASS], blacked, materials.linear("#1a2224")))
+    printed = materials.printed_face(tree, coords, print_image, (PRINT_Z0 + PRINT_Z1) / 2, PRINT_X, (PRINT_Z1 - PRINT_Z0) / 2)
+    ink = materials.math_node(tree, "MULTIPLY", (mask[PRINT], printed.node.outputs["Alpha"]))
+    glassed = materials.mix_color(tree, "MIX", (ink, glassed, printed))
     # Rust only on the plinth, where feet and mop buckets chip the paint.
     rust_ramp = materials.ramp_node(nodes, [(0.62, "#000000"), (0.72, "#ffffff")])
     links.new(materials.noise(tree, coords, (4.0, 10.0)), rust_ramp.inputs["Fac"])
@@ -287,31 +290,6 @@ def cylinder_y(name, radius, x, z, y0, y1, paint, vertices=16):
     return prism_y(name, outline, y0, y1, paint)
 
 
-def letters(text, size, z, y, paint):
-    """Extruded serif letters on the +Y face, centered on x 0 and z, converted to a mesh."""
-    curve = bpy.data.curves.new("letters", "FONT")
-    curve.body = text
-    curve.font = bpy.data.fonts.load(FONT)
-    curve.size = size
-    curve.extrude = 0.008
-    curve.resolution_u = 3
-    curve.align_x = "CENTER"
-    curve.align_y = "CENTER"
-    curve.space_character = 1.08
-    obj = bpy.data.objects.new("letters", curve)
-    bpy.context.collection.objects.link(obj)
-    obj.location = (0.0, y + 0.008, z)
-    obj.rotation_euler = (math.radians(90), 0.0, math.radians(180))
-    bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.convert(target="MESH")
-    obj = bpy.context.active_object
-    obj.data.materials.append(MATERIAL)
-    materials.mark_paint(obj, paint)
-    return obj
-
-
 def plinth_and_cornice():
     plinth = [(BACK, 0.0), (0.85, 0.0), (0.85, 0.22), (0.83, 0.25), (0.8, 0.27)]
     plinth += [(0.8 - 0.07 * math.sin(math.pi / 2 * i / 4), 0.27 + 0.09 * (1 - math.cos(math.pi / 2 * i / 4))) for i in range(1, 5)]
@@ -336,7 +314,7 @@ def cabinet():
         cylinder_y(f"pilaster-boss-{side}", 0.045, middle, 4.865, 0.84, 0.87, BRASS, 12)
     block("sign", (-WIDTH / 2, WIDTH / 2, 0.58, 0.84, 4.95, 5.45), (BRONZE, 0.015))
     rect_ring("sign-frame", -1.4, 1.4, 5.0, 5.4, 0.035, 0.84, 0.86, BRASS)
-    letters("TICKETS", 0.36, 5.2, 0.84, BRASS)
+    plane_y("print", rectangle(-PRINT_X, PRINT_X, PRINT_Z0, PRINT_Z1), PRINT_Y, PRINT)
 
 
 def window():
@@ -430,7 +408,7 @@ def density(paint, face):
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 run.set_up_cycles()
-MATERIAL = machine_material()
+MATERIAL = machine_material(materials.print_image(run.arguments[2]))
 build_machine()
 machine = geometry.finish("ticket-machine", 50)
 corners = [Vector(corner) for corner in machine.bound_box]
