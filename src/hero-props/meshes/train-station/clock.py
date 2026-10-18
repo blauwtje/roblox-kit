@@ -7,7 +7,8 @@ ticket machine's Blender +Y face on its local +Z) puts it on the MeshPart's loca
 Drum centre at z 8.37 (kit 8.365) so the 5-wide bezel tops out at exactly 10.87; no finial or side bosses. Visible
 enamel is 4.52 across, at least the kit's 4.5, with print and hands scaled up to read across a concourse.
 Dark bronze column and case, gilt rings and hand bosses, cream enamel dials whose print (minute track, Roman
-numerals) is rendered flat in Workbench first and sampled by the dial faces, black spade hands at 10:10 on both
+numerals) is drawn in `clock.print.svg` (Liberation Serif Bold), rendered to a png by the generator and sampled by the
+dial faces, black spade hands at 10:10 on both
 faces. Every part is one material switched by a "paint" attribute, joined into one mesh, unwrapped (dials
 enlarged) and baked to color (with occlusion grime), roughness, metalness and tangent normal maps by `shared.py`.
 """
@@ -29,120 +30,11 @@ run = importlib.import_module("lib.run")
 
 CENTER_Z = 8.37  # drum centre; + bezel radius 2.5 = 10.87
 DIAL_Y, DIAL_R = 0.46, 2.31
-PRINT_S = 1.12  # print radii relative to the first design's 2.02 sight ring
 HAND_S, HAND_W = 1.12, 1.3  # hand length and width factors
 PRINT_R = 2.3  # half the width the dial print image covers
 DIAL_UV = 1.8  # dial islands' texel density relative to the rest
-PRINT_SIZE = 2048
-FONT = "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"
-ENAMEL, INK = "#f3ecd8", "#141210"
 BRONZE, GILT, DIAL, BLACK = range(4)
 HOUR_ANGLE, MINUTE_ANGLE = math.radians(305), math.radians(60)  # 10:10, clockwise from 12
-
-
-def dial_print():
-    """Renders the enamel print flat in Workbench, seen from +Z with 12 o'clock toward +Y, and loads it."""
-    scene = bpy.context.scene
-    made = []
-
-    def flat(name, hex_color):
-        material = bpy.data.materials.new(name)
-        material.diffuse_color = materials.linear(hex_color)
-        return material
-
-    enamel, ink = flat("enamel", ENAMEL), flat("ink", INK)
-
-    def add(name, bm, material, z):
-        mesh = bpy.data.meshes.new(name)
-        bm.to_mesh(mesh)
-        bm.free()
-        obj = bpy.data.objects.new(name, mesh)
-        obj.location.z = z
-        obj.data.materials.append(material)
-        scene.collection.objects.link(obj)
-        made.append(obj)
-
-    bm = bmesh.new()
-    bmesh.ops.create_circle(bm, cap_ends=True, segments=64, radius=3.2)
-    add("enamel", bm, enamel, -0.01)
-    bm = bmesh.new()
-
-    def annulus(inner, outer, segments=256):
-        rows = [
-            [bm.verts.new((r * math.sin(2 * math.pi * i / segments), r * math.cos(2 * math.pi * i / segments), 0.0)) for i in range(segments)]
-            for r in (inner, outer)
-        ]
-        for i in range(segments):
-            j = (i + 1) % segments
-            bm.faces.new((rows[0][i], rows[0][j], rows[1][j], rows[1][i]))
-
-    def bar(theta, r0, r1, width):
-        d = Vector((math.sin(theta), math.cos(theta), 0.0))
-        p = Vector((math.cos(theta), -math.sin(theta), 0.0)) * (width / 2)
-        bm.faces.new([bm.verts.new(v) for v in (d * r0 - p, d * r0 + p, d * r1 + p, d * r1 - p)])
-
-    k = PRINT_S
-    annulus(1.972 * k, 1.995 * k)
-    annulus(1.835 * k, 1.85 * k)
-    annulus(1.255 * k, 1.268 * k)
-    for minute in range(60):
-        bold = minute % 5 == 0
-        bar(minute * math.pi / 30, (1.845 if bold else 1.848) * k, 1.975 * k, 0.07 if bold else 0.026)
-    add("print", bm, ink, 0.0)
-
-    def text(body, height, location, theta, condense, spacing=1.0):
-        curve = bpy.data.curves.new("numeral", "FONT")
-        curve.body = body
-        curve.font = bpy.data.fonts.load(FONT, check_existing=True)
-        curve.size = 1.0
-        curve.space_character = spacing
-        curve.resolution_u = 4
-        obj = bpy.data.objects.new("numeral", curve)
-        scene.collection.objects.link(obj)
-        bpy.ops.object.select_all(action="DESELECT")
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.convert(target="MESH")
-        obj = bpy.context.active_object
-        xs = [v.co.x for v in obj.data.vertices]
-        ys = [v.co.y for v in obj.data.vertices]
-        cx, cy, scale = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, height / (max(ys) - min(ys))
-        for vertex in obj.data.vertices:
-            vertex.co = Vector(((vertex.co.x - cx) * scale * condense, (vertex.co.y - cy) * scale, 0.0))
-        obj.location = location
-        obj.rotation_euler.z = -theta
-        obj.data.materials.append(ink)
-        made.append(obj)
-
-    numerals = ["XII", "I", "II", "III", "IIII", "V", "VI", "VII", "VIII", "IX", "X", "XI"]
-    for hour, body in enumerate(numerals):
-        theta = hour * math.pi / 6
-        text(body, 0.5, (1.55 * k * math.sin(theta), 1.55 * k * math.cos(theta), 0.0), theta, 0.6)
-    text("LONDON", 0.13, (0.0, -0.85, 0.0), 0.0, 1.0, 1.25)
-
-    camera_data = bpy.data.cameras.new("print-camera")
-    camera_data.type = "ORTHO"
-    camera_data.ortho_scale = 2 * PRINT_R
-    camera = bpy.data.objects.new("print-camera", camera_data)
-    camera.location = (0.0, 0.0, 5.0)
-    scene.collection.objects.link(camera)
-    scene.camera = camera
-    scene.render.engine = "BLENDER_WORKBENCH"
-    scene.display.shading.light = "FLAT"
-    scene.display.shading.color_type = "MATERIAL"
-    scene.display.shading.show_object_outline = False
-    scene.display.render_aa = "16"
-    scene.view_settings.view_transform = "Standard"
-    scene.render.resolution_x = scene.render.resolution_y = PRINT_SIZE
-    scene.render.resolution_percentage = 100
-    path = f"{run.OUTPUT}-dial-print.png"
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    for obj in made + [camera]:
-        bpy.data.objects.remove(obj, do_unlink=True)
-    scene.camera = None
-    scene.render.engine = "CYCLES"
-    return bpy.data.images.load(path)
 
 
 def clock_material(print_image):
@@ -458,7 +350,7 @@ def unwrap_clock(clock):
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 run.set_up_cycles()
-PRINT = dial_print()
+PRINT = materials.print_image(run.arguments[2])
 MATERIAL = clock_material(PRINT)
 column()
 drum()

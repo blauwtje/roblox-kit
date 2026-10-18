@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="-2.3 -2.3 4.6 4.6">
+  <rect x="-2.3" y="-2.3" width="4.6" height="4.6" fill="#f3ecd8"/>
+  <g fill="none" stroke="#141210">
+    <circle r="2.2215" stroke-width="0.0258"/>
+    <circle r="2.0636" stroke-width="0.0168"/>
+    <circle r="1.4129" stroke-width="0.0146"/>
+  </g>
+  <g fill="#141210">
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(0)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(6)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(12)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(18)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(24)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(30)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(36)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(42)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(48)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(54)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(60)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(66)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(72)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(78)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(84)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(90)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(96)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(102)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(108)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(114)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(120)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(126)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(132)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(138)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(144)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(150)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(156)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(162)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(168)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(174)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(180)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(186)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(192)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(198)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(204)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(210)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(216)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(222)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(228)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(234)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(240)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(246)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(252)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(258)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(264)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(270)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(276)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(282)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(288)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(294)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(300)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(306)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(312)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(318)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(324)"/>
+    <rect x="-0.035" y="-2.2120" width="0.07" height="0.1456" transform="rotate(330)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(336)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(342)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(348)"/>
+    <rect x="-0.013" y="-2.2120" width="0.026" height="0.1422" transform="rotate(354)"/>
+  </g>
+  <g fill="#141210" font-family="Liberation Serif" font-weight="bold" font-size="0.76" text-anchor="middle">
+    <text transform="translate(0.0000 -1.7360) rotate(0) scale(0.6 1)" y="0.25">XII</text>
+    <text transform="translate(0.8680 -1.5034) rotate(30) scale(0.6 1)" y="0.25">I</text>
+    <text transform="translate(1.5034 -0.8680) rotate(60) scale(0.6 1)" y="0.25">II</text>
+    <text transform="translate(1.7360 -0.0000) rotate(90) scale(0.6 1)" y="0.25">III</text>
+    <text transform="translate(1.5034 0.8680) rotate(120) scale(0.6 1)" y="0.25">IIII</text>
+    <text transform="translate(0.8680 1.5034) rotate(150) scale(0.6 1)" y="0.25">V</text>
+    <text transform="translate(0.0000 1.7360) rotate(180) scale(0.6 1)" y="0.25">VI</text>
+    <text transform="translate(-0.8680 1.5034) rotate(210) scale(0.6 1)" y="0.25">VII</text>
+    <text transform="translate(-1.5034 0.8680) rotate(240) scale(0.6 1)" y="0.25">VIII</text>
+    <text transform="translate(-1.7360 0.0000) rotate(270) scale(0.6 1)" y="0.25">IX</text>
+    <text transform="translate(-1.5034 -0.8680) rotate(300) scale(0.6 1)" y="0.25">X</text>
+    <text transform="translate(-0.8680 -1.5034) rotate(330) scale(0.6 1)" y="0.25">XI</text>
+    <text y="0.915" font-size="0.2" letter-spacing="0.04">LONDON</text>
+  </g>
+</svg>
