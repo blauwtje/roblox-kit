@@ -7,6 +7,10 @@ description: Runs a Roblox game in a Studio playtest with checks that prove serv
 
 A playtest proves something only when a check states a fact and a report says which facts held. The enemy is a session started by hand, glanced at in the console and called tested. The overcorrection is a multiplayer run for every small edit, when a server-only run answers it in seconds.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Pick solo or multiplayer from the claim; ask only if the fact to prove is unclear.
+
 ## When to use
 
 - Proving behavior in a running game: spawns, doors, scripts, replication, what each player sees.

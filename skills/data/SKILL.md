@@ -7,6 +7,10 @@ description: Player data saving with ProfileStore, schema migrations, developer 
 
 A save that works for one player in Studio can still lose or duplicate data at high CCU: two servers holding one profile, a receipt granted twice, a purchase acknowledged before it was saved. The enemy is hand-rolled `DataStore` or `ProcessReceipt` code that passes a solo test and fails under load, shutdown or a rolling update. The overcorrection is rewriting a working save system the user did not ask you to touch, or adding layers (own session locks, own `BindToClose` loops, hand compression) that ProfileStore already handles.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Ask only if saving to ProfileStore or to a plain DataStore would differ materially.
+
 ## When to use
 
 - Saving or loading player data in the user's game, changing its schema, or reviewing code that calls `DataStoreService` directly.

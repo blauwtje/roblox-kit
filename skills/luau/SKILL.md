@@ -7,6 +7,10 @@ description: Modern, non-deprecated Luau for Roblox, including code sent to Stud
 
 Roblox's docs mark many old APIs deprecated, and the model still writes them from habit. The enemy is a deprecated call or an unchecked Studio assumption that runs fine today and rots later. The overcorrection is rewriting working code the user did not ask you to touch.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Match the surrounding code's style; ask only if the target script is unclear.
+
 ## When to use
 
 - Writing or changing a `.luau` file, a script's source, or code for `execute_luau`.

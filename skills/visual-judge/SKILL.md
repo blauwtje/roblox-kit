@@ -7,6 +7,10 @@ description: Judges how a built Roblox map looks from captured screenshots, usin
 
 An author who built a map reads its screenshots as the map they meant, not the map they got. The enemy is judging your own build: the intent fills every gap the image leaves. The overcorrection is an endless polish loop over taste, when only a mismatch with the stated intent is a defect.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Judge the latest build against the stated intent; ask only if no intent or build exists.
+
 ## When to use
 
 - A map passed `check_map` and the user wants to know if it looks right.

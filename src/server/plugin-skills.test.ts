@@ -104,3 +104,14 @@ for (const skill of skills) {
     }
   });
 }
+
+const maxRoughBytes = 600;
+
+for (const skill of skills) {
+  await test(`skill ${skill.name} has a Rough requests section within ${String(maxRoughBytes)} bytes`, () => {
+    const source = readFileSync(new URL(`${skill.name}/SKILL.md`, skillsUrl), "utf8");
+    const section = /^## Rough requests\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(source)?.[0];
+    assert.ok(section, "missing ## Rough requests");
+    assert.ok(Buffer.byteLength(section.trim()) <= maxRoughBytes, "section is over budget");
+  });
+}

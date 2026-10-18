@@ -7,6 +7,10 @@ description: Turns Blender keyframes into an R15 Roblox animation (FBX export, i
 
 Roblox has no scripted path from keyframes to a published animation. The enemy is a pipeline claimed end to end when only the Blender half runs headless, or a Blender 5 script that still reads `action.fcurves`. The overcorrection is refusing the export because the last steps are manual.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Ask only if the motion or the rig (R15 or R6) is unclear.
+
 ## When to use
 
 - Turning a keyframe list (a wave, a nod, an idle) into an R15 animation FBX.

@@ -7,6 +7,10 @@ description: Recreates a place from a reference image as a Roblox map and compar
 
 A recreation matches the numbers in the reference, not your memory of it. The enemy is building from the impression "a cozy cabin" and calling it close. The overcorrection is chasing every pixel, when the three largest gaps decide whether it reads as the same place.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Take unstated scale and style from the reference; ask only if two readings of it differ materially.
+
 ## When to use
 
 - The user supplies a reference image and wants a map built to match it.

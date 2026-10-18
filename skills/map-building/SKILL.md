@@ -7,6 +7,10 @@ description: Builds and edits styled Roblox maps (genre preset, rooms, walls, do
 
 Studio's built-in tools can place parts one at a time, but a hand-placed map arrives with overlaps, floating walls and rooms nobody can walk into. The enemy is a map made from loose `execute_luau` part calls, or a bare-box spec, called done unseen. The overcorrection is running every tool on every edit and pulling images nobody reads.
 
+## Rough requests
+
+Keep every ask, name and limit the user stated. Fill only what the work needs from preset or code defaults, and add nothing unasked. Ask only when two readings give materially different results: the fewest questions, each short and plain. Do not wait for plan approval; act at once. Take sizes, theme and style from the preset defaults; add no npcs, clutter, signage, motion or recorded assets unless asked.
+
 ## When to use
 
 - Building a map from a preset, rooms, doors, spawns and terrain fills, or rebuilding one after a change.

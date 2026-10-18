@@ -1,5 +1,21 @@
 # Blink types and call modes
 
+## Pin (step 1)
+
+The `rokit.toml` lines:
+
+```toml
+# The networking raw-buffer checks depend on the 0.18.9 wire format: before bumping Blink, rerun the playtest checks that send raw buffers.
+blink = "1Axen/blink@0.18.9"
+```
+
+## Rojo entries (step 9)
+
+```json
+"ServerScriptService": { "Network": { "$path": "network/generated/Server.luau" } },
+"ReplicatedStorage": { "Network": { "$path": "network/generated/Client.luau" } }
+```
+
 ## Typing fields (step 3)
 
 - Numbers: give every integer a range (`u8(1..8)`, not bare `u8`) and every `f32`/`f64` a range. NaN fails a range check only from 0.18.9 on, which is why step 1 pins it.
