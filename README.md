@@ -1,6 +1,6 @@
 # roblox-kit
 
-A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds seven skills for Luau, map building, playtests, visual review, animation, player data and networking.
+A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds nine skills for Luau, map building, playtests, visual review, recreating a screenshot, animation, player data, networking and UI images.
 
 ## Quick start
 
@@ -19,7 +19,7 @@ Studio's quick connect for Claude Code is not needed. The plugin already starts 
 
 ## Tool reference
 
-The server `roblox-kit` has seven tools. Each tool's input and output fields are in its schema, which your client shows from `tools/list`; the sections below describe behavior only. Every tool takes an optional `studioId`, which is required only when more than one Studio is connected. All distances are in studs. North is -Z, south is +Z, east is +X and west is -X.
+The server `roblox-kit` has eleven tools. Each tool's input and output fields are in its schema, which your client shows from `tools/list`; the sections below describe behavior only. Every tool takes an optional `studioId`, which is required only when more than one Studio is connected. All distances are in studs. North is -Z, south is +Z, east is +X and west is -X.
 
 ### build_map
 
@@ -27,15 +27,15 @@ Builds a map in the open place. Each room gets an anchored floor, walls with doo
 
 Building is not one undo step. `execute_luau` cannot record undo, so Studio may offer no single step that reverts a build.
 
-The build runs in six phases: shell, floors and ceilings, openings, surfaces, props and lighting. A phase that fails stops the build with an error that names it, and the Model may be partial. Building again with the same `mapId` replaces it.
+The build runs in seven phases: shell, floors and ceilings, openings, surfaces, props, lighting and ambient effects. A phase that fails stops the build with an error that names it, and the Model may be partial. Building again with the same `mapId` replaces it.
 
-`style.preset` names a genre preset: `cozy-town`, `horror-facility`, `sci-fi-station` or `train-station`. `style.overrides` is optional and holds any subset of that preset (palette, surfaces, lighting, light roles, prop kit, size rules); arrays are replaced whole. An unknown preset or a bad override is an error before Studio is asked. The style paints parts in the preset's colors and materials, hangs point lights under each room's floor and applies the lighting recipe to `Lighting`. It stores the previous `Lighting` values on the map Model, and a build without a `style` restores them.
+`style.preset` names a genre preset: `cozy-town`, `horror-facility`, `sci-fi-station` or `train-station`. All four presets have light fixtures, idle animations and ambient effects. `cozy-town` and `train-station` weight their prop kinds (`propWeights`). Only `train-station` has hero props, trim meshes, npc roles, signage and flat or patterned surfaces. `style.overrides` is optional and holds any subset of that preset (palette, surfaces, lighting, light roles, prop kit, size rules); arrays are replaced whole. An unknown preset or a bad override is an error before Studio is asked. A style alone is enough: `build_map` fills the rooms, lists each fill in `fills`, and builds nothing from the opt-in inputs `npcs`, `clutter`, `signage`, `motion` and `useRecordedAssets` unless they are set. `npcs` is `{ density, seed?, maxTotal? }` and adds walking and seated people. The style paints parts in the preset's colors and materials, hangs point lights under each room's floor and applies the lighting recipe to `Lighting`. It stores the previous `Lighting` values on the map Model, and a build without a `style` restores them.
 
 Terrain fills are either `{ shape: "block", center, size, material }` or `{ shape: "ball", center, radius, material }`. `center` and `size` are `{ x, y, z }` objects.
 
 A room placed by `relation` gets a hallway room named `<to>-<room>-hallway`, which is one more zone. The solver adds doors to both rooms and to both ends of the hallway. A room gives either `x` and `z` or a `relation`, never both.
 
-Returns `{ mapId, partCount, phases, bounds, zones, warnings }`. `phases` lists the six phases in the order they ran, each with `name` and `partCount`. `bounds` is `{ min, max }` for the whole map, and each entry of `zones` has `name`, `partCount` and its own `bounds`. `warnings` has one line per set piece skipped because its room has no space for it, per hero prop not built and why, and per hero asset that failed to load. A hero prop with a recorded asset builds as a non-colliding Model in place of the set piece it replaces; `build_map` never uploads.
+Returns `{ mapId, partCount, phases, bounds, zones, warnings }`. `phases` lists the seven phases in the order they ran, each with `name` and `partCount`. `bounds` is `{ min, max }` for the whole map, and each entry of `zones` has `name`, `partCount` and its own `bounds`. `warnings` has one line per set piece skipped because its room has no space for it, per hero prop not built and why, and per hero asset that failed to load. Recorded assets (hero props, trim meshes, sprites) are used only with `useRecordedAssets`; `build_map` never uploads. The skill `map-building` has the detail.
 
 ### check_map
 
@@ -88,6 +88,22 @@ Decides one round of the visual-judge loop from what its agents returned. It dro
 
 Returns `{ round, date, mapId, zones, scores, findings, rejected, stopReason, logFile }`. `stopReason` is `pass`, `round-limit`, `repeat` or null while the loop goes on.
 
+### analyze_image
+
+Measures one to four PNG or JPEG files in TypeScript, without Studio: palette, value structure, edge grid, numbered regions, horizon row and a heuristic depth grid, written as text tables and a marked-up image under `.roblox-kit/vision/<analysisId>/`.
+
+### measure_capture
+
+Shoots a grid of rays from the `capture_zones` cameras into a built map and writes the distance, material, color and kind of the first part hit per cell to `truth.json`. Read-only; the Studio camera is restored.
+
+### compare_images
+
+Compares a capture with a reference image (a path or an `analysisId`, optionally with a `measure_capture` truth) and returns ranked palette, value, depth and layout deltas and a suggested camera pitch change. No Studio needed.
+
+### insert_images
+
+Renders SVG to PNG, uploads it through Open Cloud and inserts it as a ScreenGui label or button, a SurfaceGui image or a flipbook ParticleEmitter. Use it only when the user asks for images; it fails before rendering without Open Cloud credentials.
+
 ## Limits
 
 - `execute_luau` (a built-in Studio tool) returns at most 100,000 characters of output and ends a longer result with `... (truncated)`. `build_map`, `check_map` and `capture_zones` report a cut result as an error.
@@ -98,15 +114,17 @@ Returns `{ round, date, mapId, zones, scores, findings, rejected, stopReason, lo
 
 ## Skills
 
-| Skill          | Use it for                                                                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `luau`         | Writing and reviewing Luau, including code sent through `execute_luau`.                                                                      |
-| `map-building` | Building, checking and screenshotting maps with the tools above.                                                                             |
-| `playtest`     | Proving server and client behavior with `run_playtest`.                                                                                      |
-| `visual-judge` | Judging a built map by its screenshots with the plugin agents `visual-judge`, `place-check` and `quality-reviewer`, fixing it and repeating. |
-| `animation`    | Making a character animation from keyframes in Blender and exporting an FBX for R15.                                                         |
-| `data`         | Saving player data with ProfileStore and handling developer products and game passes in a Rojo + Wally game.                                 |
-| `networking`   | Writing client-server communication with Blink 0.18.9 in a Rojo + Rokit game, rejecting bad data and proving it with a playtest.             |
+| Skill                      | Use it for                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `luau`                     | Writing and reviewing Luau, including code sent through `execute_luau`.                                                                    |
+| `map-building`             | Building, checking and screenshotting maps with the tools above.                                                                           |
+| `playtest`                 | Proving server and client behavior with `run_playtest`.                                                                                    |
+| `visual-judge`             | Judging a built map by its screenshots with the plugin agents `zone-judge`, `place-check` and `quality-reviewer`, fixing it and repeating. |
+| `recreate-from-screenshot` | Matching a build to a reference screenshot with `analyze_image` and `compare_images`.                                                      |
+| `ui-images`                | Drawing buttons, panels, fixed words and effects as SVG for `insert_images`.                                                               |
+| `animation`                | Making a character animation from keyframes in Blender and exporting an FBX for R15.                                                       |
+| `data`                     | Saving player data with ProfileStore and handling developer products and game passes in a Rojo + Wally game.                               |
+| `networking`               | Writing client-server communication with Blink 0.18.9 in a Rojo + Rokit game, rejecting bad data and proving it with a playtest.           |
 
 ## Troubleshooting
 

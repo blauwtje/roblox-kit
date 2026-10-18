@@ -28,6 +28,8 @@ The first capture is the eye view: a camera at player eye height inside the room
 
 Ignore any logo, UI text or character laid over a reference. Do not rate the size, turn or position of single pieces: code checks those.
 
+Where people appear, look at three things. Posed people: seated, standing or walking people face what they do and are not stuck in a T-pose or in a wall. Signs of use: open doors, items on tables, worn or scattered pieces show that someone lives or works here. Motion cues: swaying props, drifting dust or steam and moving lights show the room is alive. Count each only in the axis it belongs to (negativeSpace and readability for people, atmosphere for use and motion).
+
 Rate six axes, each from 1 to 10, against these anchors. A score between two anchors is allowed.
 
 - **palette**: palette coherence, against the references.

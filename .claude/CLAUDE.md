@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and seven skills (`skills/`):
+A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and nine skills (`skills/`: `luau`, `map-building`, `playtest`, `visual-judge`, `recreate-from-screenshot`, `animation`, `data`, `networking`, `ui-images`), three subagents (`agents/`) and a hook (`hooks/`):
 
-- `roblox-kit` (`src/server/main.ts`): this repo's own server with seven tools, `build_map`, `check_map`, `capture_zones`, `run_playtest`, `remove_map`, `run_in_playtest` and `judge_round`.
+- `roblox-kit` (`src/server/main.ts`): this repo's own server with eleven tools, `build_map`, `check_map`, `capture_zones`, `run_playtest`, `remove_map`, `run_in_playtest`, `judge_round`, `analyze_image`, `measure_capture`, `compare_images` and `insert_images`.
 - `studio` (`src/studio/launch-studio-mcp.ts`): a thin launcher that execs Roblox's built-in Studio MCP server with inherited stdio.
+
+`agents/` holds the `zone-judge`, `place-check` and `quality-reviewer` subagents that the `visual-judge` skill dispatches. `hooks/` holds the PostToolUse hook that lints Luau after a Write or Edit.
 
 `.mcp.json` mirrors the plugin's server config for local development (`${CLAUDE_PLUGIN_ROOT:-.}`). Keep the two in sync.
 
@@ -23,8 +25,10 @@ TypeScript runs directly on Node (>= 22.18, native type stripping); there is no 
 - `npm run smoke:data`: inserts the `data` skill templates and ProfileStore into the open place, runs their checks in a solo playtest and removes them. The pinned ProfileStore is downloaded from Wally once into `.roblox-kit/cache/` (git-ignored, by `scripts/profilestore-cache.ts`), also when `npm run typecheck:luau` type-checks `skills/data/templates/`.
 - `npm run smoke:networking`: inserts the `networking` skill's generated Blink modules and templates into the open place, runs the bad-data checks in a solo playtest and removes them. Rerun it before bumping Blink: the raw-buffer checks depend on the 0.18.9 wire format.
 - `npm run check:blink`: regenerates the `networking` template's Blink output with the `blink` pinned in `rokit.toml` and fails when it differs from the committed files (`blink <file> --yes`, since Blink waits on a prompt without a TTY).
+- `npm test` also runs the prop generators in Lune (pinned in `rokit.toml`), so it needs `lune`. Every script in `scripts/` prints its usage with `--help`; their shared parsing and Studio setup is in `scripts/lib/`, and the `smoke:studio` steps are in `scripts/smoke/`.
 - `npm run eval:studio`: builds each benchmark in `eval/benchmarks/`, runs visual review and appends to `eval/results.jsonl`. Needs `node scripts/fetch-references.ts` first; `node scripts/calibrate-review.ts` checks the reviewer against `eval/anchors/bad/`.
-- `npm run hero-props -- <preset> <kind>` and `npm run hero-props:upload -- <preset>`: generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see CONTRIBUTING.md.
+- `node scripts/eval-depth.ts`: scores depth sources against raycast truth on the fixtures under eval/depth; its `install` step puts onnxruntime and the depth model into the git-ignored `.roblox-kit/cache/depth/`.
+- `npm run hero-props -- <subcommand>` (`generate`, `parity`, `record`, `upload`, `sprites`, `materials`, `prune`; `--help` lists them): generate (headless Blender, found by `blenderPath()` from `BLENDER_PATH` or `config.blenderFallbackPaths`; `ROBLOX_KIT_BLENDER_DEVICE` picks the render device; the mesh scripts are in `src/hero-props/meshes/lib/`), review and upload hero-prop models. Uploads need an Open Cloud key and creator; see CONTRIBUTING.md.
 
 Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. Studio-dependent checks live only in `scripts/`.
 
@@ -36,9 +40,9 @@ Unit tests never need Studio: they use `src/studio/fake-studio-connection.ts`. S
 
 **Tool registry.** Each tool is a `ToolDefinition` (zod input and output schemas, annotations, handler) listed in the `tools` array in `src/server/main.ts`; array order is `tools/list` order. Handlers may throw; the registry turns throws into `isError` results. `check_map` stores full reports in memory (`CheckReportStore`), served as the `roblox-kit://check-reports/{reportId}` resource.
 
-**build_map pipeline** (`src/map/`): `map-spec.ts` validates the input spec; `map-layout.ts` turns rooms into parts; with a `style`, `src/style/` resolves a preset from `presets/*.json` (schema in `preset-schema.ts`) and the map is furnished by `room-details.ts`, `prop-placement.ts` / `arrangement-placement.ts` / `set-piece-placement.ts` (with `relation-solver.ts` and `prop-rules.ts`), `hero-prop-placement.ts` and `src/lighting/`. `build-phases.ts` groups everything into six ordered phases that `luau/build-map.luau` builds. Randomness goes through `src/shared/seeded-random.ts` so a seed reproduces a map.
+**build_map pipeline** (`src/map/`): `map-spec.ts` validates the input spec; `map-layout.ts` turns rooms into parts; with a `style`, `src/style/` resolves a preset from `presets/*.json` (schema in `preset-schema.ts`) and the map is furnished by `room-details.ts`, `prop-placement.ts` / `arrangement-placement.ts` / `set-piece-placement.ts` (with `relation-solver.ts` and `prop-rules.ts`), `hero-prop-placement.ts` and `src/lighting/`. `build-phases.ts` groups everything into seven ordered phases, built by the files in `luau/build/`; `src/luau/inline-requires.ts` inlines each relative `local x = require("./y")` line into the file sent to Studio. `src/npc/` plans the opt-in `npcs` (seats, routes, schedules) and `src/vision/` backs `analyze_image`, `measure_capture` and `compare_images`. The smoke steps `npcs` and `npc-probe` cover npcs. Randomness goes through `src/shared/seeded-random.ts` so a seed reproduces a map.
 
-**Props.** Each prop kind is a ProceduralModel generator in `luau/props/<kind>.luau`, read at build time; a new kind also needs its name in `propKinds` in `src/map/prop-placement.ts`. Hero props are Blender-generated meshes (`src/hero-props/`) uploaded through Open Cloud; asset ids are recorded by recipe hash in `src/hero-props/hero-assets.json`, and `build_map` falls back to the set piece with a warning when no asset exists.
+**Props.** Each prop kind is a ProceduralModel generator in `luau/props/<kind>.luau`, read at build time; shared helpers are in `luau/shared/prop-kit.luau`, pulled in by an inlined relative require. A preset can bias kinds with `propWeights` and set where a kind goes with `propRules[kind].placement`; a new kind also needs its name in `propKinds` in `src/map/prop-placement.ts`. Hero props are Blender-generated meshes (`src/hero-props/`) uploaded through Open Cloud; asset ids are recorded by recipe hash in `src/hero-props/hero-assets.json`, and `build_map` falls back to the set piece with a warning when no asset exists.
 
 **Visual review.** `src/eval/` and `src/shared/ask-headless-reviewer.ts` score captured images with fresh headless reviewers, using prompts in `skills/visual-judge/`. Thresholds and the current wave's room types live in `src/config.ts`.
 

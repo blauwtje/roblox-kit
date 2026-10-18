@@ -1,0 +1,6 @@
+# Recorded hero-prop assets
+
+3. **Ask before any upload, and upload only from a clone of the roblox-kit repo.** The installed plugin is read-only for hero props: no MCP tool uploads, and `build_map` only reads recorded assets. In the clone, `npm run hero-props -- upload --preset <preset>` uploads every hero prop of the preset whose review passed and whose recipe hash has no recorded asset, through Open Cloud with a key (Assets Read and Write) and a creator, a user or a group.
+   - It reads `ROBLOX_OPEN_CLOUD_API_KEY` with `ROBLOX_CREATOR_USER_ID` or `ROBLOX_CREATOR_GROUP_ID` from the environment, else `.roblox-kit/open-cloud-key` and `.roblox-kit/open-cloud-creator.json` (`{"userId":"..."}` or `{"groupId":"..."}`).
+   - It records the asset id by recipe hash in the committed `src/hero-props/hero-assets.json`, so an unchanged recipe never uploads again.
+4. **Set `useRecordedAssets` (off by default) only when asked, and read the fallback in `warnings`.** With it on, `build_map` loads a recorded asset as a non-colliding Model `<kind>-hero-<n>`; without one it keeps the set piece and its warning says to generate and upload it from a clone of the roblox-kit repo. If `InsertService:LoadAsset` fails, it builds the set piece instead and the warning names the asset id and the error.
