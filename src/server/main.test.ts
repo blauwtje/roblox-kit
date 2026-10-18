@@ -249,3 +249,8 @@ await test("createTools registers compare_images after measure_capture", () => {
   const names = createTools({ projectDir: undefined }).tools.map((tool) => tool.name);
   assert.equal(names.indexOf("compare_images"), names.indexOf("measure_capture") + 1);
 });
+
+await test("createTools registers insert_images after compare_images", () => {
+  const names = createTools({ projectDir: undefined }).tools.map((tool) => tool.name);
+  assert.equal(names.indexOf("insert_images"), names.indexOf("compare_images") + 1);
+});

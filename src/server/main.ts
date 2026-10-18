@@ -12,6 +12,7 @@ import { buildMapTool } from "../map/build-map-tool.ts";
 import { captureZonesTool } from "../map/capture-zones-tool.ts";
 import { checkReportResource, createCheckMapTool } from "../map/check-map-tool.ts";
 import { CheckReportStore } from "../map/check-report-store.ts";
+import { createInsertImagesTool } from "../images/insert-images-tool.ts";
 import { createJudgeRoundTool } from "../eval/judge-round-tool.ts";
 import { createAnalyzeImageTool } from "../vision/analyze-image-tool.ts";
 import { createCompareImagesTool } from "../vision/compare-images-tool.ts";
@@ -53,6 +54,7 @@ export function createTools(deps: ToolDependencies): {
       createAnalyzeImageTool(deps.projectDir),
       createMeasureCaptureTool(deps.projectDir),
       createCompareImagesTool(deps.projectDir),
+      createInsertImagesTool({ projectDir: deps.projectDir }),
     ],
     resources: [checkReportResource(checkReports)],
   };

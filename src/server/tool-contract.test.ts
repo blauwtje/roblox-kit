@@ -92,3 +92,13 @@ await test("compare_images is served after measure_capture and is not read-only"
   assert.equal(served?.annotations.readOnlyHint, false);
   await client.close();
 });
+
+await test("insert_images is served last, writes and reaches Open Cloud", async () => {
+  const client = await connect([]);
+  const listed = (await client.listTools()).tools.map((tool) => tool.name);
+  assert.equal(listed.at(-1), "insert_images");
+  const served = tools.find((tool) => tool.name === "insert_images");
+  assert.equal(served?.annotations.readOnlyHint, false);
+  assert.equal(served.annotations.openWorldHint, true);
+  await client.close();
+});
