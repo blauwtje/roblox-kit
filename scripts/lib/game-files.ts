@@ -50,3 +50,21 @@ function place(
   if (name === "") throw new Error(`A script file needs a name before its suffix.`);
   return { name, className, parent: parents[container], container };
 }
+
+/**
+ * Wraps a `Checks.luau` body for a `run_in_playtest` run on the server of a fresh play session, where the
+ * playtest harness's `check` does not exist. The body runs as an inner function, so its `error()` still
+ * propagates, and the code returns a string. Running it leaves the populated world
+ * (eggs, conveyor, rival base, Shots) that the checks build as their last step.
+ */
+export function repopulateChecksBody(body: string): string {
+  return `local function check(name: string, passed: boolean, detail: any)
+	if not passed then
+		error("check failed: " .. name .. " " .. tostring(detail), 0)
+	end
+end
+local _ = (function(): any
+${body}
+end)()
+return "populated"`;
+}

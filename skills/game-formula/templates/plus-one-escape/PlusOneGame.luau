@@ -58,7 +58,24 @@ local CONFIG = {
 	killBrickRespawnSeconds = 1,
 	padSize = 14,
 	voidDepth = 60,
-	scenerySpacing = 35,
+	signPixelsPerStud = 40,
+
+	-- Scenery follows the track: grass strips beside the walls, then trees, bushes, fences and flags on them.
+	sceneSeed = 11,
+	grassWidth = 44,
+	grassThickness = 2,
+	grassColor = Color3.fromRGB(110, 215, 85),
+	trunkColor = Color3.fromRGB(150, 100, 60),
+	fenceColor = Color3.fromRGB(255, 250, 235),
+	fenceSpacing = 6,
+	fenceOffset = 4,
+	treeOffset = { 8, 22 },
+	treeHeight = { 8, 14 },
+	treesPerStage = 3,
+	bushOffset = { 4, 14 },
+	bushesPerStage = 3,
+	bushSize = { 3, 5.5 },
+	flagHeight = 22,
 	shotGateStage = 5,
 
 	bandColors = { Color3.fromRGB(70, 220, 90), Color3.fromRGB(150, 70, 235), Color3.fromRGB(255, 200, 30) },
@@ -438,6 +455,44 @@ function Game.tryGate(player: Player, stage: number): GateResult
 	return result(true, "opened")
 end
 
+-- A board sign readable from the given face: bright rounded panel in the stage colour, big stroked text.
+local function newSurfaceSign(board: BasePart, face: Enum.NormalId, text: string, color: Color3): TextLabel
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = CONFIG.signPixelsPerStud
+	gui.LightInfluence = 0
+	gui.Brightness = 1.2
+	gui.Parent = board
+	local panel = Instance.new("Frame")
+	panel.Size = UDim2.fromScale(1, 1)
+	panel.BackgroundColor3 = color:Lerp(Color3.new(1, 1, 1), 0.3)
+	panel.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.2, 0)
+	corner.Parent = panel
+	local border = Instance.new("UIStroke")
+	border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	border.Thickness = CONFIG.signPixelsPerStud * 0.3
+	border.Color = Color3.fromRGB(255, 252, 240)
+	border.Parent = panel
+	local label = Instance.new("TextLabel")
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromScale(0.95, 0.85)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = text
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.Parent = panel
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = CONFIG.signPixelsPerStud * 0.1
+	stroke.Color = Color3.fromRGB(40, 30, 60)
+	stroke.Parent = label
+	return label
+end
+
 local function onGateTouched(stage: number, hit: BasePart)
 	local player = playerFromHit(hit)
 	local state = if player ~= nil then states[player] else nil
@@ -499,17 +554,23 @@ function Game.buildGate(stage: number)
 		"Sign",
 		Vector3.new(CONFIG.trackWidth, 9, 1),
 		CFrame.new(0, CONFIG.gateHeight + 5, z),
-		Color3.fromRGB(30, 30, 45),
+		gate.color,
 		Enum.Material.SmoothPlastic
 	)
 	sign.CanCollide = false
-	newBillboard(sign, formatNumber(gateThreshold(stage)), 26, 8, gate.color)
+	-- Players approach from the south (+Z), which is the Back face of an unrotated part.
+	newSurfaceSign(sign, Enum.NormalId.Back, formatNumber(gateThreshold(stage)), gate.color)
 end
 
 -- World ------------------------------------------------------------------------------------------------------
 
 local function buildLighting()
 	for _, child in Lighting:GetChildren() do
+		if child.Name:sub(1, #CONFIG.folderName) == CONFIG.folderName then
+			child:Destroy()
+		end
+	end
+	for _, child in workspace.Terrain:GetChildren() do
 		if child.Name:sub(1, #CONFIG.folderName) == CONFIG.folderName then
 			child:Destroy()
 		end
@@ -527,8 +588,23 @@ local function buildLighting()
 	atmosphere.Color = Color3.fromRGB(190, 225, 255)
 	atmosphere.Decay = Color3.fromRGB(255, 220, 190)
 	atmosphere.Glare = 0.2
-	atmosphere.Haze = 1
+	atmosphere.Haze = 0.6
 	atmosphere.Parent = Lighting
+	local sky = Instance.new("Sky")
+	sky.Name = `{CONFIG.folderName}Sky`
+	sky.SunAngularSize = 14
+	sky.Parent = Lighting
+	local sunRays = Instance.new("SunRaysEffect")
+	sunRays.Name = `{CONFIG.folderName}SunRays`
+	sunRays.Intensity = 0.06
+	sunRays.Spread = 0.6
+	sunRays.Parent = Lighting
+	local clouds = Instance.new("Clouds")
+	clouds.Name = `{CONFIG.folderName}Clouds`
+	clouds.Cover = 0.55
+	clouds.Density = 0.6
+	clouds.Color = Color3.new(1, 1, 1)
+	clouds.Parent = workspace.Terrain
 	local correction = Instance.new("ColorCorrectionEffect")
 	correction.Name = `{CONFIG.folderName}Color`
 	correction.Saturation = 0.4
@@ -665,30 +741,142 @@ local function buildSegment(stage: number)
 	end
 end
 
+local function newBall(parent: Instance, name: string, size: number, position: Vector3, color: Color3)
+	local ball = newPart(parent, name, Vector3.new(size, size, size), CFrame.new(position), color, nil)
+	ball.Shape = Enum.PartType.Ball
+	return ball
+end
+
+local function buildTree(parent: Instance, random: Random, position: Vector3)
+	local height = random:NextNumber(CONFIG.treeHeight[1], CONFIG.treeHeight[2])
+	local trunk = newPart(
+		parent,
+		"Trunk",
+		Vector3.new(height, height * 0.22, height * 0.22),
+		CFrame.new(position + Vector3.new(0, height / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		CONFIG.trunkColor,
+		Enum.Material.Wood
+	)
+	trunk.Shape = Enum.PartType.Cylinder
+	local hue = random:NextNumber(0.24, 0.36)
+	local crown = height * 1.1
+	newBall(parent, "Crown", crown, position + Vector3.new(0, height + crown * 0.2, 0), Color3.fromHSV(hue, 0.75, 0.8))
+	newBall(
+		parent,
+		"CrownTop",
+		crown * 0.7,
+		position + Vector3.new(crown * 0.12, height + crown * 0.65, -crown * 0.1),
+		Color3.fromHSV(hue - 0.03, 0.65, 0.95)
+	)
+end
+
+local function buildBush(parent: Instance, random: Random, position: Vector3)
+	local size = random:NextNumber(CONFIG.bushSize[1], CONFIG.bushSize[2])
+	local hue = random:NextNumber(0.26, 0.38)
+	newBall(parent, "Bush", size, position + Vector3.new(0, size * 0.3, 0), Color3.fromHSV(hue, 0.7, 0.75))
+	newBall(
+		parent,
+		"BushTop",
+		size * 0.65,
+		position + Vector3.new(size * 0.25, size * 0.6, 0),
+		Color3.fromHSV(hue - 0.02, 0.6, 0.95)
+	)
+end
+
+local function buildFlag(parent: Instance, position: Vector3, color: Color3)
+	local height = CONFIG.flagHeight
+	newPart(
+		parent,
+		"FlagPole",
+		Vector3.new(0.6, height, 0.6),
+		CFrame.new(position + Vector3.new(0, height / 2, 0)),
+		CONFIG.fenceColor,
+		nil
+	)
+	newPart(
+		parent,
+		"Flag",
+		Vector3.new(0.3, 4, 7),
+		CFrame.new(position + Vector3.new(0, height - 2.2, -3.8)),
+		color,
+		nil
+	)
+	newBall(parent, "FlagKnob", 1.4, position + Vector3.new(0, height + 0.4, 0), color)
+end
+
+-- Grass strips beside the track walls with trees, bushes, a picket fence and a flag per stage in the stage
+-- colour. Everything follows the track layout (lobby, stages, finish) and is placed from CONFIG; the void stays
+-- under the track.
 local function buildScenery(random: Random)
 	local folder = Instance.new("Folder")
 	folder.Name = "Scenery"
 	folder.Parent = worldFolder
-	local totalLength = CONFIG.lobbySize + CONFIG.stageCount * CONFIG.stageLength + CONFIG.finishLength
-	for offset = 0, totalLength, CONFIG.scenerySpacing do
-		local stage = math.clamp(math.ceil((offset - CONFIG.lobbySize / 2) / CONFIG.stageLength), 1, CONFIG.stageCount)
-		for _, side in { -1, 1 } do
-			local height = random:NextNumber(30, 70)
-			local x = side * (CONFIG.trackWidth / 2 + random:NextNumber(14, 30))
-			local pillar = newPart(
+	local half = CONFIG.trackWidth / 2
+	local lobbyEnd = -CONFIG.lobbySize / 2
+	local trackEnd = segmentStartZ(CONFIG.stageCount + 1) - CONFIG.finishLength
+	local thickness = CONFIG.grassThickness
+	local function strip(side: number, innerX: number, fromZ: number, toZ: number)
+		newPart(
+			folder,
+			"Grass",
+			Vector3.new(CONFIG.grassWidth, thickness, fromZ - toZ),
+			CFrame.new(side * (innerX + CONFIG.grassWidth / 2), -thickness / 2 - 1, (fromZ + toZ) / 2),
+			CONFIG.grassColor,
+			Enum.Material.Grass
+		)
+	end
+	local lobbyHalf = CONFIG.lobbySize / 2 + 2
+	for _, side in { -1, 1 } do
+		strip(side, lobbyHalf, CONFIG.lobbySize / 2, lobbyEnd)
+		strip(side, half + 2, lobbyEnd, trackEnd)
+		-- Picket fence along the track, a fence offset in from the wall.
+		local fenceX = side * (half + 2 + CONFIG.fenceOffset)
+		local count = math.floor((lobbyEnd - trackEnd) / CONFIG.fenceSpacing)
+		for step = 0, count do
+			local z = lobbyEnd - step * CONFIG.fenceSpacing
+			newPart(
 				folder,
-				"Pillar",
-				Vector3.new(random:NextNumber(8, 14), height, random:NextNumber(8, 14)),
-				CFrame.new(x, height / 2 - CONFIG.voidDepth / 3, CONFIG.lobbySize / 2 - offset),
-				stageColor(stage),
+				"FencePost",
+				Vector3.new(0.8, 3.6, 0.8),
+				CFrame.new(fenceX, 0.8, z),
+				CONFIG.fenceColor,
 				Enum.Material.SmoothPlastic
 			)
-			pillar.Shape = if random:NextInteger(0, 1) == 0 then Enum.PartType.Cylinder else Enum.PartType.Block
-			if pillar.Shape == Enum.PartType.Cylinder then
-				pillar.CFrame = pillar.CFrame * CFrame.Angles(0, 0, math.rad(90))
-				pillar.Size = Vector3.new(height, pillar.Size.Z, pillar.Size.Z)
+			if step < count then
+				for _, height in { 0, 1.4 } do
+					newPart(
+						folder,
+						"FenceRail",
+						Vector3.new(0.3, 0.45, CONFIG.fenceSpacing),
+						CFrame.new(fenceX, 0.2 + height, z - CONFIG.fenceSpacing / 2),
+						CONFIG.fenceColor,
+						Enum.Material.SmoothPlastic
+					)
+				end
 			end
 		end
+	end
+	for stage = 1, CONFIG.stageCount do
+		local startZ = segmentStartZ(stage)
+		local color = stageColor(stage)
+		for _, side in { -1, 1 } do
+			for _ = 1, CONFIG.treesPerStage do
+				local x = side
+					* (half + 2 + CONFIG.fenceOffset + random:NextNumber(CONFIG.treeOffset[1], CONFIG.treeOffset[2]))
+				buildTree(folder, random, Vector3.new(x, -1, startZ - random:NextNumber(0, CONFIG.stageLength)))
+			end
+			for _ = 1, CONFIG.bushesPerStage do
+				local x = side * (half + 2 + random:NextNumber(CONFIG.bushOffset[1], CONFIG.bushOffset[2]))
+				buildBush(folder, random, Vector3.new(x, -1, startZ - random:NextNumber(0, CONFIG.stageLength)))
+			end
+		end
+		-- One flag per stage in the stage colour, alternating sides.
+		local flagSide = if stage % 2 == 0 then -1 else 1
+		buildFlag(
+			folder,
+			Vector3.new(flagSide * (half + 2 + CONFIG.fenceOffset / 2), -1, startZ - CONFIG.stageLength / 2),
+			color
+		)
 	end
 end
 
@@ -854,7 +1042,7 @@ local function buildWorld()
 		Game.buildGate(stage)
 	end
 	buildFinish()
-	buildScenery(Random.new(CONFIG.seed))
+	buildScenery(Random.new(CONFIG.sceneSeed))
 	local voidPlane = newPart(
 		worldFolder,
 		"VoidPlane",

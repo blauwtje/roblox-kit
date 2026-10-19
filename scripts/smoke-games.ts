@@ -3,17 +3,23 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { config } from "../src/config.ts";
+import { createRunInPlaytestTool } from "../src/playtest/run-in-playtest-tool.ts";
 import { awaitEditMode } from "../src/studio/await-edit-mode.ts";
 import type { StudioConnection } from "../src/studio/studio-connection.ts";
 import { runScript, withStudio } from "./lib/run-script.ts";
-import { checksFileName, classifyGameFile, type GameFilePlacement } from "./lib/game-files.ts";
+import {
+  checksFileName,
+  classifyGameFile,
+  repopulateChecksBody,
+  type GameFilePlacement,
+} from "./lib/game-files.ts";
 import { executeLuau, insertScript, runSmokePlaytest, textOf } from "./studio-insert.ts";
 
 /**
  * End-to-end check of the `game-formula` templates in the open place. For each game it inserts
  * `templates/juice/*` and the game's files (class and parent by file suffix, see `scripts/lib/game-files.ts`),
  * runs the game's `Checks.luau` as the serverChecks body of a solo `play` playtest, then starts a second solo
- * play session and takes the three `Shot1..3` views of `Workspace.GameFormula*.Shots` with Studio's
+ * play session, reruns the same `Checks.luau` body there so the world is populated, and takes the three `Shot1..3` views of `Workspace.GameFormula*.Shots` with Studio's
  * `screen_capture` (it moves the camera itself from camera_position and look_at_position). Images are saved
  * to `.roblox-kit/game-shots/<game>/shot-N.<ext>`. Everything inserted is removed in a finally block, also
  * after a failure. Run `--help` for usage.
@@ -27,6 +33,11 @@ const shotWaitSeconds = 45;
 const shotNames = ["Shot1", "Shot2", "Shot3"] as const;
 /** How far ahead of a Shot's CFrame the camera looks, in studs. */
 const shotLookDistance = 40;
+/**
+ * How long the screen fades the rerun Checks start (steal-egg's rebirth fades for 1.2 s) get to finish before the
+ * first capture, in ms; without it Shot1 comes out black.
+ */
+const effectsSettleMs = 2500;
 
 async function luauFiles(folder: string): Promise<string[]> {
   const names = await readdir(new URL(`${folder}/`, templatesFolder));
@@ -39,7 +50,9 @@ interface Insertion {
   placement: GameFilePlacement;
 }
 
-async function plan(game: string): Promise<{ insertions: Insertion[]; checks: string }> {
+async function plan(
+  game: string,
+): Promise<{ insertions: Insertion[]; checks: string; repopulate: string }> {
   const insertions: Insertion[] = [];
   for (const folder of ["juice", game]) {
     for (const fileName of await luauFiles(folder)) {
@@ -48,7 +61,7 @@ async function plan(game: string): Promise<{ insertions: Insertion[]; checks: st
     }
   }
   const body = await readFile(new URL(`${game}/${checksFileName}`, templatesFolder), "utf8");
-  return { insertions, checks: checksHarnessBody(body) };
+  return { insertions, checks: checksHarnessBody(body), repopulate: repopulateChecksBody(body) };
 }
 
 /**
@@ -176,15 +189,32 @@ async function captureShots(
   connection: StudioConnection,
   studioId: string,
   game: string,
+  repopulate: string,
 ): Promise<string[]> {
   await setPlay(connection, studioId, true);
   try {
+    // The fresh session starts with an empty world; rerun the checks to leave the populated state they build.
+    // run_in_playtest runs them in a Script, so require returns the live game modules; execute_luau would get
+    // its own unstarted module copies.
+    const tool = createRunInPlaytestTool();
+    const populated = await tool.handler(
+      tool.inputSchema.parse({
+        code: repopulate,
+        timeoutSeconds: config.maxRunInPlaytestTimeoutSeconds,
+        studioId,
+      }),
+      { studio: connection },
+    );
+    if (populated.isError === true) {
+      throw new Error(`Rerunning Checks.luau for the shots failed: ${textOf(populated)}`);
+    }
     const result = await connection.callTool({
       name: "execute_luau",
       studioId,
       arguments: { code: readShotsLuau, datamodel_type: "Server" },
     });
     if (result.isError === true) throw new Error(`Reading the shots failed: ${textOf(result)}`);
+    await new Promise((resolve) => setTimeout(resolve, effectsSettleMs));
     const views = z
       .array(shotSchema)
       .length(shotNames.length)
@@ -225,7 +255,7 @@ async function runGame(
   studioId: string,
   game: string,
 ): Promise<void> {
-  const { insertions, checks } = await plan(game);
+  const { insertions, checks, repopulate } = await plan(game);
   const taken = await executeLuau(
     connection,
     studioId,
@@ -254,7 +284,7 @@ async function runGame(
     });
     console.log(`[${game}] ${summary}`);
     await awaitEditMode(connection, { studioId });
-    for (const path of await captureShots(connection, studioId, game)) {
+    for (const path of await captureShots(connection, studioId, game, repopulate)) {
       console.log(`[${game}] saved ${path}`);
     }
   } finally {

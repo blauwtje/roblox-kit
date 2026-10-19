@@ -84,6 +84,21 @@ local Config = {
 	cutsceneSeconds = 9,
 	cutsceneDelay = 3,
 	juiceWaitSeconds = 10,
+
+	-- Scenery around the bases, in studs. The yard is the fenced rectangle holding the plots and the conveyor.
+	sceneSeed = 7,
+	groundSize = Vector2.new(520, 420),
+	yardMargin = 12, -- grass between the outer plot edges and the yard fence
+	pathWidth = 8,
+	fenceSpacing = 8,
+	treeCount = 46,
+	treeBand = 70, -- depth of the tree belt outside the fence
+	bushCount = 40,
+	flowerCount = 70,
+	signPixelsPerStud = 40,
+	grassColor = Color3.fromRGB(105, 205, 80),
+	pathColor = Color3.fromRGB(245, 215, 150),
+	fenceColor = Color3.fromRGB(255, 255, 255),
 }
 
 type PlacedEgg = { rarity: number, part: Part, prompt: ProximityPrompt }
@@ -199,6 +214,44 @@ local function newLabel(parent: Instance, text: string, studsSize: Vector2, colo
 	label.TextColor3 = color
 	label.TextStrokeTransparency = 0
 	label.Parent = billboard
+	return label
+end
+
+-- A board sign readable from the given face: bright rounded panel, coloured border and stroked text.
+local function newSurfaceSign(board: BasePart, face: Enum.NormalId, text: string, color: Color3): TextLabel
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = Config.signPixelsPerStud
+	gui.LightInfluence = 0
+	gui.Brightness = 1.2
+	gui.Parent = board
+	local panel = Instance.new("Frame")
+	panel.Size = UDim2.fromScale(1, 1)
+	panel.BackgroundColor3 = Color3.fromRGB(255, 252, 240)
+	panel.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.2, 0)
+	corner.Parent = panel
+	local border = Instance.new("UIStroke")
+	border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	border.Thickness = Config.signPixelsPerStud * 0.3
+	border.Color = color
+	border.Parent = panel
+	local label = Instance.new("TextLabel")
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromScale(0.9, 0.8)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = text
+	label.TextColor3 = color
+	label.Parent = panel
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = Config.signPixelsPerStud * 0.08
+	stroke.Color = Color3.fromRGB(40, 30, 60)
+	stroke.Parent = label
 	return label
 end
 
@@ -950,13 +1003,15 @@ local function buildPlot(parent: Instance, index: number): Plot
 	local signBoard = newPart(
 		model,
 		"SignBoard",
-		Vector3.new(14, 3, 0.6),
+		Vector3.new(16, 4, 0.6),
 		CFrame.new(center + Vector3.new(0, 10, away * (size.Z / 2 - 1))),
-		Color3.fromRGB(30, 30, 50),
+		color,
 		Enum.Material.SmoothPlastic,
 		nil
 	)
-	local signLabel = newLabel(signBoard, "Free Base", Vector2.new(14, 3), color, 0)
+	-- The sign faces the lane: an unrotated part's Front face points -Z.
+	local signLabel =
+		newSurfaceSign(signBoard, if away < 0 then Enum.NormalId.Back else Enum.NormalId.Front, "Free Base", color)
 
 	-- Barrier walls around the plot, off until the base is locked.
 	local barrier: { Part } = {}
@@ -1084,44 +1139,238 @@ local function buildConveyor(parent: Instance)
 	end
 end
 
+local function yardHalfSize(): Vector2
+	local halfX = Config.plotSpacingX + Config.plotSize.X / 2 + Config.yardMargin
+	local halfZ = Config.plotOffsetZ + Config.plotSize.Z / 2 + Config.yardMargin
+	return Vector2.new(halfX, halfZ)
+end
+
+local function flatStrip(parent: Instance, name: string, from: Vector2, to: Vector2, width: number, color: Color3)
+	local delta = to - from
+	local middle = (from + to) / 2
+	local part = newPart(
+		parent,
+		name,
+		Vector3.new(width, 0.2, delta.Magnitude + width),
+		CFrame.lookAt(Vector3.new(middle.X, 0.08, middle.Y), Vector3.new(to.X, 0.08, to.Y)),
+		color,
+		Enum.Material.Sand,
+		nil
+	)
+	part.CanCollide = false
+end
+
+local function buildTree(parent: Instance, random: Random, position: Vector3, scale: number)
+	local height = 8 * scale
+	newPart(
+		parent,
+		"Trunk",
+		Vector3.new(height, 1.8 * scale, 1.8 * scale),
+		CFrame.new(position + Vector3.new(0, height / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2),
+		Color3.fromRGB(150, 100, 60),
+		Enum.Material.Wood,
+		Enum.PartType.Cylinder
+	)
+	local hue = random:NextNumber(0.24, 0.36)
+	local crown = 8 * scale
+	newPart(
+		parent,
+		"Crown",
+		Vector3.new(crown, crown, crown),
+		CFrame.new(position + Vector3.new(0, height + crown * 0.25, 0)),
+		Color3.fromHSV(hue, 0.75, 0.8),
+		Enum.Material.SmoothPlastic,
+		Enum.PartType.Ball
+	)
+	newPart(
+		parent,
+		"CrownTop",
+		Vector3.new(crown * 0.7, crown * 0.7, crown * 0.7),
+		CFrame.new(position + Vector3.new(crown * 0.15, height + crown * 0.7, -crown * 0.1)),
+		Color3.fromHSV(hue - 0.03, 0.65, 0.95),
+		Enum.Material.SmoothPlastic,
+		Enum.PartType.Ball
+	)
+end
+
+-- A random point on the ground outside the yard fence, within the tree belt.
+local function outsidePoint(random: Random, half: Vector2, band: number): Vector3
+	local ground = Config.groundSize / 2
+	for _ = 1, 20 do
+		local x = random:NextNumber(-math.min(ground.X, half.X + band), math.min(ground.X, half.X + band))
+		local z = random:NextNumber(-math.min(ground.Y, half.Y + band), math.min(ground.Y, half.Y + band))
+		if math.abs(x) > half.X + 4 or math.abs(z) > half.Y + 4 then
+			return Vector3.new(x, 0, z)
+		end
+	end
+	return Vector3.new(half.X + band / 2, 0, 0)
+end
+
+-- Grass, a fenced yard with sand paths around the bases, arches over the conveyor ends and a belt of trees,
+-- bushes and flowers outside the fence. Everything is placed from Config, so it follows the plot layout.
 local function buildScenery(parent: Instance)
 	newPart(
 		parent,
 		"Ground",
-		Vector3.new(260, 1, 190),
+		Vector3.new(Config.groundSize.X, 1, Config.groundSize.Y),
 		CFrame.new(0, -0.5, 0),
-		Color3.fromRGB(110, 210, 90),
-		Enum.Material.SmoothPlastic,
+		Config.grassColor,
+		Enum.Material.Grass,
 		nil
 	)
 	local scenery = Instance.new("Folder")
 	scenery.Name = "Scenery"
 	scenery.Parent = parent
-	local treeRandom = Random.new(7)
-	for index = 1, 22 do
-		local side = if index % 2 == 0 then 1 else -1
-		local x = treeRandom:NextNumber(-115, 115)
-		local z = side * treeRandom:NextNumber(52, 85)
-		local height = treeRandom:NextNumber(7, 11)
-		newPart(
+	local random = Random.new(Config.sceneSeed)
+	local half = yardHalfSize()
+	local ring = half - Vector2.new(Config.pathWidth / 2 + 2, Config.pathWidth / 2 + 2)
+
+	-- Ring path inside the fence, lanes between plot columns, and paths from the conveyor ends to the gates.
+	local corners = {
+		Vector2.new(-ring.X, -ring.Y),
+		Vector2.new(ring.X, -ring.Y),
+		Vector2.new(ring.X, ring.Y),
+		Vector2.new(-ring.X, ring.Y),
+	}
+	for index, corner in corners do
+		flatStrip(scenery, "Path", corner, corners[index % 4 + 1], Config.pathWidth, Config.pathColor)
+	end
+	local laneWidth = math.max(2, Config.plotSpacingX - Config.plotSize.X - 2)
+	for column = 1, 2 do
+		local x = (column - 1.5) * Config.plotSpacingX
+		for _, side in { -1, 1 } do
+			flatStrip(
+				scenery,
+				"Lane",
+				Vector2.new(x, side * (Config.conveyorWidth / 2 + 1)),
+				Vector2.new(x, side * ring.Y),
+				laneWidth,
+				Config.pathColor
+			)
+		end
+	end
+	for _, side in { -1, 1 } do
+		flatStrip(
 			scenery,
-			"Trunk",
-			Vector3.new(height, 1.6, 1.6),
-			CFrame.new(x, height / 2, z) * CFrame.Angles(0, 0, math.pi / 2),
-			Color3.fromRGB(140, 95, 60),
-			Enum.Material.SmoothPlastic,
-			Enum.PartType.Cylinder
+			"GatePath",
+			Vector2.new(side * (Config.conveyorLength / 2 + 2), 0),
+			Vector2.new(side * (Config.groundSize.X / 2), 0),
+			Config.pathWidth,
+			Config.pathColor
 		)
-		local crown = height * 0.9
+	end
+
+	-- Picket fence around the yard, open where the gate paths leave.
+	local gateHalf = Config.pathWidth / 2 + 2
+	local function fenceLine(from: Vector2, to: Vector2)
+		local delta = to - from
+		local count = math.max(1, math.floor(delta.Magnitude / Config.fenceSpacing))
+		for step = 0, count do
+			local point = from + delta * (step / count)
+			if math.abs(point.Y) > gateHalf or math.abs(point.X) < half.X - 1 then
+				newPart(
+					scenery,
+					"FencePost",
+					Vector3.new(0.8, 3.6, 0.8),
+					CFrame.new(point.X, 1.8, point.Y),
+					Config.fenceColor,
+					Enum.Material.SmoothPlastic,
+					nil
+				)
+			end
+			if step < count then
+				local next = from + delta * ((step + 1) / count)
+				local middle = (point + next) / 2
+				if math.abs(middle.Y) > gateHalf or math.abs(middle.X) < half.X - 1 then
+					for _, height in { 1.2, 2.6 } do
+						newPart(
+							scenery,
+							"FenceRail",
+							Vector3.new(0.3, 0.45, (next - point).Magnitude),
+							CFrame.lookAt(Vector3.new(middle.X, height, middle.Y), Vector3.new(next.X, height, next.Y)),
+							Config.fenceColor,
+							Enum.Material.SmoothPlastic,
+							nil
+						)
+					end
+				end
+			end
+		end
+	end
+	local fenceCorners = {
+		Vector2.new(-half.X, -half.Y),
+		Vector2.new(half.X, -half.Y),
+		Vector2.new(half.X, half.Y),
+		Vector2.new(-half.X, half.Y),
+	}
+	for index, corner in fenceCorners do
+		fenceLine(corner, fenceCorners[index % 4 + 1])
+	end
+
+	-- Striped arches over both conveyor ends: where the eggs come from and where they leave.
+	for _, side in { -1, 1 } do
+		local x = side * (Config.conveyorLength / 2 + 1)
+		for _, edge in { -1, 1 } do
+			newPart(
+				scenery,
+				"ArchPost",
+				Vector3.new(1.6, 11, 1.6),
+				CFrame.new(x, 5.5, edge * (Config.conveyorWidth / 2 + 1.5)),
+				Color3.fromRGB(255, 90, 150),
+				Enum.Material.SmoothPlastic,
+				nil
+			)
+		end
 		newPart(
 			scenery,
-			"Crown",
-			Vector3.new(crown, crown, crown),
-			CFrame.new(x, height + crown * 0.3, z),
-			Color3.fromHSV(treeRandom:NextNumber(0.25, 0.4), 0.7, 0.95),
+			"ArchBeam",
+			Vector3.new(2.4, 2.4, Config.conveyorWidth + 5),
+			CFrame.new(x, 11, 0),
+			Color3.fromRGB(255, 210, 60),
+			Enum.Material.SmoothPlastic,
+			nil
+		)
+	end
+
+	-- Tree belt, bushes along the fence and flower clumps on the open grass.
+	for _ = 1, Config.treeCount do
+		buildTree(scenery, random, outsidePoint(random, half, Config.treeBand), random:NextNumber(0.9, 1.5))
+	end
+	for _ = 1, Config.bushCount do
+		local position = outsidePoint(random, half, 10)
+		local size = random:NextNumber(3, 5)
+		newPart(
+			scenery,
+			"Bush",
+			Vector3.new(size * 1.4, size, size * 1.4),
+			CFrame.new(position + Vector3.new(0, size * 0.3, 0)),
+			Color3.fromHSV(random:NextNumber(0.26, 0.34), 0.7, 0.75),
 			Enum.Material.SmoothPlastic,
 			Enum.PartType.Ball
 		)
+	end
+	local petals = {
+		Color3.fromRGB(255, 120, 170),
+		Color3.fromRGB(255, 230, 80),
+		Color3.fromRGB(255, 255, 255),
+		Color3.fromRGB(170, 120, 255),
+	}
+	for _ = 1, Config.flowerCount do
+		local position = outsidePoint(random, half, Config.treeBand)
+		local color = petals[random:NextInteger(1, #petals)]
+		for _ = 1, 3 do
+			local offset = Vector3.new(random:NextNumber(-1.5, 1.5), 0.5, random:NextNumber(-1.5, 1.5))
+			newPart(
+				scenery,
+				"Flower",
+				Vector3.new(1, 1, 1),
+				CFrame.new(position + offset),
+				color,
+				Enum.Material.SmoothPlastic,
+				Enum.PartType.Ball
+			).CanCollide =
+				false
+		end
 	end
 end
 
@@ -1162,13 +1411,28 @@ local function setupLighting()
 	Lighting.EnvironmentSpecularScale = 0.3
 	local atmosphere = Instance.new("Atmosphere")
 	atmosphere.Name = "GameFormulaStealEggAtmosphere"
-	atmosphere.Density = 0.25
-	atmosphere.Offset = 0.1
-	atmosphere.Color = Color3.fromRGB(200, 225, 255)
-	atmosphere.Decay = Color3.fromRGB(255, 220, 190)
-	atmosphere.Glare = 0
-	atmosphere.Haze = 0.6
+	atmosphere.Density = 0.3
+	atmosphere.Offset = 0.25
+	atmosphere.Color = Color3.fromRGB(190, 225, 255)
+	atmosphere.Decay = Color3.fromRGB(150, 200, 255)
+	atmosphere.Glare = 0.3
+	atmosphere.Haze = 0.8
 	atmosphere.Parent = Lighting
+	local sky = Instance.new("Sky")
+	sky.Name = "GameFormulaStealEggSky"
+	sky.SunAngularSize = 14
+	sky.Parent = Lighting
+	local sunRays = Instance.new("SunRaysEffect")
+	sunRays.Name = "GameFormulaStealEggSunRays"
+	sunRays.Intensity = 0.06
+	sunRays.Spread = 0.6
+	sunRays.Parent = Lighting
+	local clouds = Instance.new("Clouds")
+	clouds.Name = "GameFormulaStealEggClouds"
+	clouds.Cover = 0.55
+	clouds.Density = 0.6
+	clouds.Color = Color3.new(1, 1, 1)
+	clouds.Parent = workspace.Terrain
 	local correction = Instance.new("ColorCorrectionEffect")
 	correction.Name = "GameFormulaStealEggColor"
 	correction.Saturation = 0.3
@@ -1181,7 +1445,7 @@ local function setupLighting()
 	bloom.Size = 24
 	bloom.Threshold = 1.6
 	bloom.Parent = Lighting
-	lightingObjects = { atmosphere, correction, bloom }
+	lightingObjects = { atmosphere, correction, bloom, sky, sunRays, clouds }
 end
 
 local function buildWorld()

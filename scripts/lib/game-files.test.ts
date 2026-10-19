@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classifyGameFile } from "./game-files.ts";
+import { classifyGameFile, repopulateChecksBody } from "./game-files.ts";
 
 await test("client, server, shared and plain module files get their class and parent", () => {
   assert.deepEqual(classifyGameFile("GameFormulaFxClient.client.luau"), {
@@ -24,4 +24,11 @@ await test("Checks.luau is not inserted and non-luau files are rejected", () => 
   assert.equal(classifyGameFile("Checks.luau"), undefined);
   assert.throws(() => classifyGameFile("README.md"), /not a .luau/);
   assert.throws(() => classifyGameFile(".client.luau"), /needs a name/);
+});
+
+await test("repopulateChecksBody runs the body as an inner function and returns a string", () => {
+  const wrapped = repopulateChecksBody("return { ok = true }");
+  assert.match(wrapped, /^local function check\(/);
+  assert.match(wrapped, /\(function\(\): any\nreturn \{ ok = true \}\nend\)\(\)/);
+  assert.match(wrapped, /return "populated"$/);
 });
