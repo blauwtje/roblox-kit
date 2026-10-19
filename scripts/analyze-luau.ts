@@ -11,6 +11,7 @@ import { profileStorePath } from "./profilestore-cache.ts";
  * It then type-checks `skills/data/templates/` against the pinned ProfileStore through a generated sourcemap, so a wrong ProfileStore API name in a template fails.
  * Last, it type-checks `skills/networking/templates/` through a sourcemap placing the generated Blink files at
  * `ServerScriptService.Network` and `ReplicatedStorage.Network`, where the game's Rojo project maps them.
+ * It also type-checks all of `skills/game-formula/templates/` through a sourcemap placing each file where `scripts/smoke-games.ts` inserts it.
  * The definitions come from the luau-lsp tag that `rokit.toml` pins and are cached in the git-ignored
  * `.roblox-kit/cache/`; bumping the pin downloads the definitions for the new tag.
  */
@@ -143,17 +144,81 @@ async function analyzeNetworkingTemplates(definitionsPath: string): Promise<numb
   );
 }
 
+/** Sourcemap entries for one game-formula template folder, placed as `scripts/smoke-games.ts` inserts them. */
+function gameFormulaEntries(directory: string, container: string) {
+  return readdirSync(directory)
+    .filter((fileName) => fileName.endsWith(".luau") && fileName !== "Checks.luau")
+    .map((fileName) => {
+      const isClient = fileName.endsWith(".client.luau");
+      const isServer = fileName.endsWith(".server.luau");
+      const name = fileName.replace(/(\.server|\.client)?\.luau$/, "");
+      const parent = isClient
+        ? "StarterPlayerScripts"
+        : isServer || name !== "GameFormulaJuice"
+          ? "ServerScriptService"
+          : "ReplicatedStorage";
+      return {
+        parent,
+        entry: {
+          name,
+          className: isClient ? "LocalScript" : isServer ? "Script" : "ModuleScript",
+          filePaths: [join(directory, fileName)],
+        },
+      };
+    })
+    .filter(({ parent }) => parent === container)
+    .map(({ entry }) => entry);
+}
+
+async function analyzeGameFormulaTemplates(definitionsPath: string): Promise<number> {
+  const templatesDirectory = join("skills", "game-formula", "templates");
+  const folders = readdirSync(templatesDirectory).map((folder) => join(templatesDirectory, folder));
+  const entriesIn = (container: string) =>
+    folders.flatMap((folder) => gameFormulaEntries(folder, container));
+  const sourcemap = {
+    name: "Game",
+    className: "DataModel",
+    children: [
+      {
+        name: "ReplicatedStorage",
+        className: "ReplicatedStorage",
+        children: entriesIn("ReplicatedStorage"),
+      },
+      {
+        name: "ServerScriptService",
+        className: "ServerScriptService",
+        children: entriesIn("ServerScriptService"),
+      },
+      {
+        name: "StarterPlayer",
+        className: "StarterPlayer",
+        children: [
+          {
+            name: "StarterPlayerScripts",
+            className: "StarterPlayerScripts",
+            children: entriesIn("StarterPlayerScripts"),
+          },
+        ],
+      },
+    ],
+  };
+  const sourcemapPath = join(cacheDirectory, "game-formula-templates-sourcemap.json");
+  await writeFile(sourcemapPath, JSON.stringify(sourcemap, null, 2));
+  return analyze(definitionsPath, [`--sourcemap=${sourcemapPath}`], templatesDirectory);
+}
+
 async function analyzeLuau(): Promise<number> {
   const definitionsPath = await downloadDefinitions();
   const luauStatus = analyze(definitionsPath, [], "luau");
   const templatesStatus = await analyzeDataTemplates(definitionsPath);
   const networkingStatus = await analyzeNetworkingTemplates(definitionsPath);
-  return luauStatus || templatesStatus || networkingStatus;
+  const gameFormulaStatus = await analyzeGameFormulaTemplates(definitionsPath);
+  return luauStatus || templatesStatus || networkingStatus || gameFormulaStatus;
 }
 
 await runScript({
   name: "analyze-luau",
   usage:
-    "Usage: node scripts/analyze-luau.ts\nType-checks luau/ and the data and networking skill templates with luau-lsp.",
+    "Usage: node scripts/analyze-luau.ts\nType-checks luau/ and the data, networking and game-formula skill templates with luau-lsp.",
   run: analyzeLuau,
 });

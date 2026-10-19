@@ -122,13 +122,27 @@ export async function runSmokePlaytest(
   connection: StudioConnection,
   studioId: string,
   label: string,
-  checks: { serverChecks: string; clientChecks?: string; timeoutSeconds: number },
+  checks: {
+    serverChecks: string;
+    clientChecks?: string;
+    timeoutSeconds: number;
+    /** Receives one `name: detail` line per check that ran, passed or not. */
+    onChecks?: (lines: string[]) => void;
+  },
 ): Promise<string> {
+  const { onChecks, ...playtest } = checks;
   const tool = createRunPlaytestTool();
-  const input = tool.inputSchema.parse({ mode: "play", ...checks, studioId });
+  const input = tool.inputSchema.parse({ mode: "play", ...playtest, studioId });
   const result = await tool.handler(input, { studio: connection });
   if (result.isError === true) throw new Error(`run_playtest returned an error: ${textOf(result)}`);
   const output = tool.outputSchema.parse(result.structuredContent);
+  onChecks?.(
+    output.peers.flatMap((peer) =>
+      peer.checks.map(
+        (entry) => `${entry.passed ? "ok  " : "FAIL"} ${entry.name}: ${entry.detail}`,
+      ),
+    ),
+  );
   const failed = output.peers.flatMap((peer) =>
     peer.checks.filter((entry) => !entry.passed).map((entry) => `${entry.name}: ${entry.detail}`),
   );

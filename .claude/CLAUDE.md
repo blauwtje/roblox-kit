@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and nine skills (`skills/`: `luau`, `map-building`, `playtest`, `visual-judge`, `recreate-from-screenshot`, `animation`, `data`, `networking`, `ui-images`), three subagents (`agents/`) and a hook (`hooks/`):
+A Claude Code plugin (`.claude-plugin/plugin.json`) for Roblox Studio. It ships two MCP servers and ten skills (`skills/`: `luau`, `map-building`, `playtest`, `visual-judge`, `recreate-from-screenshot`, `animation`, `data`, `networking`, `ui-images`, `game-formula`), three subagents (`agents/`) and a hook (`hooks/`):
 
 - `roblox-kit` (`src/server/main.ts`): this repo's own server with eleven tools, `build_map`, `check_map`, `capture_zones`, `run_playtest`, `remove_map`, `run_in_playtest`, `judge_round`, `analyze_image`, `measure_capture`, `compare_images` and `insert_images`.
 - `studio` (`src/studio/launch-studio-mcp.ts`): a thin launcher that execs Roblox's built-in Studio MCP server with inherited stdio.
@@ -24,6 +24,8 @@ TypeScript runs directly on Node (>= 22.18, native type stripping); there is no 
 - `npm run smoke:studio [-- [--multiplayer] [--only <terms>]]`: end-to-end build, check, capture and playtest against a running Studio. `--only remove_map,lighting` runs only the steps whose name contains one of the terms, after the build_map step they use, and skips the capability probes.
 - `npm run smoke:data`: inserts the `data` skill templates and ProfileStore into the open place, runs their checks in a solo playtest and removes them. The pinned ProfileStore is downloaded from Wally once into `.roblox-kit/cache/` (git-ignored, by `scripts/profilestore-cache.ts`), also when `npm run typecheck:luau` type-checks `skills/data/templates/`.
 - `npm run smoke:networking`: inserts the `networking` skill's generated Blink modules and templates into the open place, runs the bad-data checks in a solo playtest and removes them. Rerun it before bumping Blink: the raw-buffer checks depend on the 0.18.9 wire format.
+- `npm run smoke:games`: inserts the `game-formula` templates into the open place, runs their scripted playthrough in a solo playtest, captures shots and removes them.
+- `npm run prove:games`: scores those shots beside real images of the matching front-page games with headless reviewers.
 - `npm run check:blink`: regenerates the `networking` template's Blink output with the `blink` pinned in `rokit.toml` and fails when it differs from the committed files (`blink <file> --yes`, since Blink waits on a prompt without a TTY).
 - `npm test` also runs the prop generators in Lune (pinned in `rokit.toml`), so it needs `lune`. Every script in `scripts/` prints its usage with `--help`; their shared parsing and Studio setup is in `scripts/lib/`, and the `smoke:studio` steps are in `scripts/smoke/`.
 - `npm run eval:studio`: builds each benchmark in `eval/benchmarks/`, runs visual review and appends to `eval/results.jsonl`. Needs `node scripts/fetch-references.ts` first; `node scripts/calibrate-review.ts` checks the reviewer against `eval/anchors/bad/`.

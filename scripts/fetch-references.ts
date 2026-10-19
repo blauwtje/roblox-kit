@@ -2,6 +2,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { z } from "zod";
 import { readReferenceSet, referenceImagePath, type Reference } from "../src/eval/reference-set.ts";
+import {
+  completedImageUrls,
+  gameReferenceImagePath,
+  readGameReferences,
+} from "../src/eval/game-references.ts";
 import { runScript } from "./lib/run-script.ts";
 
 /**
@@ -68,6 +73,51 @@ async function download(reference: Reference, imageUrl: string): Promise<string>
   return relative(process.cwd(), imagePath);
 }
 
+/**
+ * Downloads the in-game screenshots `eval/game-references.json` lists into
+ * `eval/references/games/<game>/<universeId>-<n>.png`. A universe with fewer completed screenshots than listed fails the run by name.
+ */
+async function fetchGameReferences(): Promise<number> {
+  const games = await readGameReferences();
+  const universeIds = [
+    ...new Set(games.flatMap((entry) => entry.references.map((reference) => reference.universeId))),
+  ];
+  const query = new URLSearchParams({
+    universeIds: universeIds.join(","),
+    countPerUniverse: "10",
+    size: "768x432",
+    format: "Png",
+    defaultOverlay: "false",
+  });
+  const response = await fetchOk(`${thumbnailsEndpoint}?${query.toString()}`);
+  const parsed = thumbnailResponseSchema.parse(await response.json());
+  const short: string[] = [];
+  let written = 0;
+  for (const entry of games) {
+    for (const reference of entry.references) {
+      const thumbnails =
+        parsed.data.find((universe) => universe.universeId === reference.universeId)?.thumbnails ??
+        [];
+      const urls = completedImageUrls(thumbnails, reference.images);
+      if (urls.length < reference.images) {
+        short.push(
+          `${reference.name} (${String(reference.universeId)}): ${String(urls.length)} of ${String(reference.images)}`,
+        );
+      }
+      for (const [index, imageUrl] of urls.entries()) {
+        const imagePath = gameReferenceImagePath(entry.game, reference, index + 1);
+        await mkdir(dirname(imagePath), { recursive: true });
+        await writeFile(imagePath, Buffer.from(await (await fetchOk(imageUrl)).arrayBuffer()));
+        console.log(`fetched ${relative(process.cwd(), imagePath)}`);
+        written += 1;
+      }
+    }
+  }
+  console.log(`${String(written)} game reference images`);
+  if (short.length > 0) throw new Error(`Too few screenshots:\n${short.join("\n")}`);
+  return 0;
+}
+
 async function fetchReferences(): Promise<number> {
   const references = await readReferenceSet();
   const universeIds = [...new Set(references.map((reference) => reference.universeId))];
@@ -90,6 +140,7 @@ async function fetchReferences(): Promise<number> {
 await runScript({
   name: "fetch-references",
   usage:
-    "Usage: node scripts/fetch-references.ts\nDownloads every image eval/reference-set.json names into eval/references/.",
-  run: fetchReferences,
+    "Usage: node scripts/fetch-references.ts [--games]\nDownloads every image eval/reference-set.json names into eval/references/.\n--games downloads the in-game screenshots eval/game-references.json lists into eval/references/games/ instead.",
+  options: { games: { type: "boolean" } },
+  run: (values) => (values.games === true ? fetchGameReferences() : fetchReferences()),
 });

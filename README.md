@@ -1,6 +1,6 @@
 # roblox-kit
 
-A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds nine skills for Luau, map building, playtests, visual review, recreating a screenshot, animation, player data, networking and UI images.
+A Claude Code plugin for Roblox Studio. Its MCP server builds a map from a data spec, checks it for overlapping, floating and unreachable geometry, screenshots each zone, and runs solo or multiplayer playtests that return structured reports. The plugin also starts Roblox's built-in Studio MCP tools (such as `execute_luau` and `screen_capture`) and adds ten skills for Luau, map building, playtests, visual review, recreating a screenshot, animation, player data, networking, UI images and the front-page game formula.
 
 ## Quick start
 
@@ -125,6 +125,7 @@ Renders SVG to PNG, uploads it through Open Cloud and inserts it as a ScreenGui 
 | `animation`                | Making a character animation from keyframes in Blender and exporting an FBX for R15.                                                       |
 | `data`                     | Saving player data with ProfileStore and handling developer products and game passes in a Rojo + Wally game.                               |
 | `networking`               | Writing client-server communication with Blink 0.18.9 in a Rojo + Rokit game, rejecting bad data and proving it with a playtest.           |
+| `game-formula`             | The front-page design formula with templates for a "Steal a" base game, a "+1 per second" escape obby and shared juice effects.            |
 
 ## Troubleshooting
 

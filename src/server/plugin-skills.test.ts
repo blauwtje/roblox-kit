@@ -49,6 +49,7 @@ await test("the recreate-from-screenshot skill names its pipeline tools", () => 
 const roughPhrases: Record<string, string[]> = {
   animation: ["make an animation", "walk cycle"],
   data: ["save player data", "gamepass"],
+  "game-formula": ["front page game", "rebirth"],
   luau: ["write a script", "fix my code"],
   "map-building": ["make a map", "build a level", "train station"],
   networking: ["remote event", "stop exploiters"],

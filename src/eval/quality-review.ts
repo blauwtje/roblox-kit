@@ -168,8 +168,29 @@ export async function reviewRoomQuality(
   referencePaths: string[],
   capturePaths: string[],
 ): Promise<QualityResult> {
+  let lightingIntent: string;
   try {
-    const lightingIntent = await presetLightingIntent(genre);
+    lightingIntent = await presetLightingIntent(genre);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { room, genre, roomType, error: message, passed: false };
+  }
+  return reviewQuality(room, genre, roomType, lightingIntent, referencePaths, capturePaths);
+}
+
+/**
+ * The scoring of `reviewRoomQuality` for a caller that brings its own lighting intent instead of a preset's,
+ * such as the game-formula proof: the same reviewers, medians and pass rule.
+ */
+export async function reviewQuality(
+  room: string,
+  genre: string,
+  roomType: string,
+  lightingIntent: string,
+  referencePaths: string[],
+  capturePaths: string[],
+): Promise<QualityResult> {
+  try {
     const reviewers = Array.from({ length: evalConfig.qualityReviewersPerRoom }, () =>
       askReviewer(genre, roomType, lightingIntent, referencePaths, capturePaths),
     );

@@ -1,0 +1,56 @@
+[
+  {
+    "game": "steal-egg",
+    "formula": "Steal an Egg: buy eggs from a conveyor, hatch them into pets that earn money in your base, steal other players' eggs.",
+    "references": [
+      {
+        "name": "Steal An Egg",
+        "universeId": 10563114921,
+        "placeId": 107778070777162,
+        "images": 4
+      },
+      {
+        "name": "Break and Steal an Egg",
+        "universeId": 10765288803,
+        "placeId": 114326934417838,
+        "images": 4
+      },
+      {
+        "name": "Don't Steal My Eggs!",
+        "universeId": 10767566226,
+        "placeId": 135675416428111,
+        "images": 4
+      }
+    ]
+  },
+  {
+    "game": "plus-one-escape",
+    "formula": "+1 Escape: a +1 per second counter lets the player run a lane to a bigger multiplier zone, with a themed character and bright arcade colors.",
+    "references": [
+      {
+        "name": "+1 Web Escape",
+        "universeId": 10766109756,
+        "placeId": 134436671430963,
+        "images": 1
+      },
+      {
+        "name": "+1 Hair Escape",
+        "universeId": 10766596513,
+        "placeId": 87537646660064,
+        "images": 1
+      },
+      {
+        "name": "[W2] +1 Tackle Evolution",
+        "universeId": 10767402184,
+        "placeId": 77287300168038,
+        "images": 4
+      },
+      {
+        "name": "[W2] +1 Tongue Escape",
+        "universeId": 10681914462,
+        "placeId": 122245938604556,
+        "images": 2
+      }
+    ]
+  }
+]
